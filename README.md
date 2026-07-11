@@ -102,4 +102,4 @@ PrintHub accepts sequential multipart chunks up to 64 MB and an assembled STL up
 
 Leave all PostHog variables blank for no-op telemetry. Browser telemetry is baked into an image only when `VITE_POSTHOG_PROJECT_TOKEN` is provided at build time; server telemetry uses `POSTHOG_PROJECT_TOKEN` at runtime. Set the corresponding `*_HOST` variables for self-hosted or regional PostHog.
 
-Telemetry uses the internal user ID as its pseudonymous identity and records operational event metadata such as job IDs, quantities, status transitions, file counts, sizes, and errors. It does not intentionally send email addresses, user names, request names, or file names.
+Telemetry uses the internal user ID as its pseudonymous identity and records operational event metadata such as request IDs, quantities, status transitions, file counts, sizes, and errors. It does not intentionally send email addresses, user names, request names, or file names.

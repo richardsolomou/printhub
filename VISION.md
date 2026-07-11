@@ -1,0 +1,71 @@
+# PrintHub Vision
+
+> PrintHub is a hackable, self-hosted intake and queue for 3D print requests. Run it beside your files, choose your authentication and ingress, and adapt the workflow to your workshop.
+
+Three promises:
+
+- **Files stay useful:** models remain ordinary files on storage the operator controls.
+- **Defaults work:** pulling the image and mounting a directory produces a functional print queue.
+- **The harness adapts:** authentication, storage, workflow, and integrations can change without replacing the core application.
+
+The guiding principle: PrintHub should not tunnel into the user's storage. PrintHub should run next to the user's storage. Cloudflare, Tailscale, or a plain LAN are ingress recipes, never application dependencies.
+
+## The appliance
+
+PrintHub installs like a first-class NAS app (TrueNAS, Unraid, any Docker host): one image, two mounts, open the browser.
+
+```yaml
+services:
+  printhub:
+    image: ghcr.io/richardsolomou/printhub
+    ports:
+      - "3010:3000"
+    volumes:
+      - ./data:/data
+      - /mnt/my-print-files:/prints
+```
+
+A fresh instance shows a welcome form and the first visitor claims the operator account — no environment variables, tokens, or restarts required. Everything after that is configured in the app: today the settings modal covers accounts and users; adapter and workflow configuration will live there as it arrives.
+
+What ships by default:
+
+- SQLite metadata under `/data`, ordinary STL files arranged by status under `/prints`.
+- Requester and operator roles with built-in accounts, or trusted-header identity behind an authenticating proxy.
+- A `To Do → In Progress → Done` board with per-copy movement.
+- Quantity, notes, requester, and source URL fields.
+- Chunked uploads to 1 GB, browser-generated thumbnails and previews, SSE live updates.
+- Optional PostHog telemetry, off unless configured.
+
+## Architecture
+
+```text
+React interface
+      |
+PrintHub core (PrintRequest, workflow, services)
+  |-- Repository      (SQLite)
+  |-- AssetStore      (local filesystem)
+  |-- AuthProvider    (built-in accounts | trusted header)
+  |-- EventBus        (in-process SSE fan-out)
+  `-- Telemetry       (no-op | PostHog)
+```
+
+Routes and UI code stay independent of deployment-specific infrastructure. These boundaries are deliberately internal until real extension use cases stabilize them; the current implementations are single-process by design. Supporting interchangeable databases is not a goal — the boundary exists so a future need has somewhere to land, not to promise portability.
+
+## Extensibility sequence
+
+Do not begin with a dynamic plugin system. Introduce extensibility in this order, each step driven by a concrete need:
+
+1. 3MF uploads and previews alongside STL.
+2. Stable lifecycle events (`request.created`, `request.copiesMoved`, …) exposed to server-side extensions — notifications, webhooks, printer integrations, backups.
+3. Configurable workflow statuses and request fields.
+4. UI extension slots, only when a demonstrated use case requires them.
+
+Extensions start as modules compiled into a custom image; installing packages through the admin interface is not required. The goal is source-level approachability: read the code, add a small module, maintain your variation without fighting the architecture.
+
+## Non-goals
+
+- A hosted SaaS control plane, plugin marketplace, or hot-installed server packages.
+- Support for every database, or built-in SMB/NFS/ZFS clients when ordinary mounts solve the problem.
+- Print-farm ERP: payments, invoicing, shipping, CRM.
+- Automatic slicing or printer control in the core.
+- A general-purpose automation engine.
