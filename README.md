@@ -43,6 +43,6 @@ docker buildx build --platform linux/amd64 \
 1. `npx convex deploy`, then `npx convex env set APP_WRITE_SECRET <value>` on the prod deployment.
 2. On the NAS, create the prints folder (`/mnt/HDDs/Applications/print-queue/prints`) — the status folders are created on first upload.
 3. Open the underlying TrueNAS UI (HexOS advanced access), go to **Apps → Discover → ⋮ → Install via YAML**, and paste `deploy/hexos-app.yaml` with the placeholders filled in.
-4. In Cloudflare Zero Trust: point a tunnel public hostname at `http://app:3000` and add an Access application on that hostname with your friends' emails. Don't publish port 3000 — header trust depends on the tunnel being the only way in.
+4. On the NAS's existing cloudflared tunnel, add a public hostname pointing at `http://<NAS-LAN-IP>:3010`, and add a Cloudflare Access application (email allowlist) on that hostname. LAN devices can reach the port directly and spoof the identity header — acceptable on a trusted home network; add Cf-Access JWT verification if that changes.
 
 For a plain Docker host instead, `docker compose up -d` with `.env` (copy `.env.example`) does the same thing.
