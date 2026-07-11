@@ -2,24 +2,21 @@ import fs from 'node:fs'
 import zlib from 'node:zlib'
 import { Readable } from 'node:stream'
 import { createFileRoute } from '@tanstack/react-router'
-import { api } from '../../../convex/_generated/api'
-import type { Id } from '../../../convex/_generated/dataModel'
-import { convex } from '../../server/convexServer'
-import { readUserEmail } from '../../server/identity'
-import { absolutePath } from '../../server/files'
+import { app } from '../../server/app'
 
 export const Route = createFileRoute('/api/files/$jobId')({
   server: {
     handlers: {
       GET: async ({ request, params }) => {
-        readUserEmail()
-        const job = await convex().query(api.jobs.get, { id: params.jobId as Id<'jobs'> })
+        const instance = await app()
+        instance.auth.require()
+        const job = instance.service.getJob(params.jobId)
         if (!job) return new Response('not found', { status: 404 })
 
         const url = new URL(request.url)
         const wantPreview = url.searchParams.get('preview') === '1'
         const relativePath = wantPreview && job.previewPath ? job.previewPath : job.filePath
-        const filePath = absolutePath(relativePath)
+        const filePath = instance.assets.absolute(relativePath)
         let size: number
         try {
           size = (await fs.promises.stat(filePath)).size

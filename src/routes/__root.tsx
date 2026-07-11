@@ -2,7 +2,7 @@ import type { QueryClient } from '@tanstack/react-query'
 import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from '@tanstack/react-router'
 import { PostHogErrorBoundary, PostHogProvider, usePostHog } from '@posthog/react'
 import { useEffect } from 'react'
-import { whoami } from '../server/fns'
+import { sessionInfo } from '../server/fns'
 import appCss from '../styles.css?url'
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
@@ -23,34 +23,38 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: 'stylesheet', href: appCss },
     ],
   }),
-  loader: () => whoami(),
+  loader: () => sessionInfo(),
   component: RootComponent,
 })
 
 function PostHogIdentify() {
-  const { email, name } = Route.useLoaderData()
+  const { identity } = Route.useLoaderData()
   const posthog = usePostHog()
 
   useEffect(() => {
-    posthog.identify(email, { name })
-  }, [posthog, email, name])
+    if (identity) posthog.identify(identity.id)
+  }, [posthog, identity])
 
   return null
 }
 
 function RootComponent() {
+  const token = import.meta.env.VITE_POSTHOG_PROJECT_TOKEN
+  const content = <Outlet />
   return (
     <html lang="en">
       <head>
         <HeadContent />
       </head>
       <body>
-        <PostHogProvider
-          apiKey={import.meta.env.VITE_POSTHOG_PROJECT_TOKEN!}
+        {token ? <PostHogProvider
+          apiKey={token}
           options={{
             api_host: '/ingest',
             ui_host: import.meta.env.VITE_POSTHOG_HOST || 'https://us.posthog.com',
             defaults: '2025-05-24',
+            autocapture: false,
+            disable_session_recording: true,
             capture_exceptions: true,
             debug: import.meta.env.DEV,
           }}
@@ -64,9 +68,9 @@ function RootComponent() {
               </main>
             }
           >
-            <Outlet />
+            {content}
           </PostHogErrorBoundary>
-        </PostHogProvider>
+        </PostHogProvider> : content}
         <Scripts />
       </body>
     </html>

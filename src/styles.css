@@ -95,8 +95,42 @@ select:focus-visible,
   opacity: 0.65;
 }
 
-.header .add-print {
-  margin-left: auto;
+.header-spacer {
+  flex: 1;
+}
+
+.header-actions {
+  display: flex;
+  gap: 16px;
+}
+
+@media (max-width: 600px) {
+  .header {
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    padding: 10px 12px;
+  }
+
+  .header-spacer {
+    display: none;
+  }
+
+  .header-actions {
+    width: 100%;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    padding-bottom: 2px;
+  }
+
+  .header-actions .btn {
+    flex: 0 0 auto;
+    padding: 7px 10px;
+  }
+
+  .header-actions .add-print {
+    margin-left: auto;
+  }
 }
 
 .btn {
@@ -136,7 +170,7 @@ select:focus-visible,
 
 .board {
   display: grid;
-  grid-template-columns: repeat(3, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 14px;
   padding: 16px 20px 20px;
   flex: 1;
@@ -194,6 +228,21 @@ select:focus-visible,
   font-family: 'IBM Plex Mono', monospace;
   font-size: 12px;
   color: var(--dim);
+}
+
+.auth {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.auth-card {
+  width: min(420px, 100%);
+}
+
+.auth-card h1 {
+  margin: 0 0 20px;
 }
 
 .column-body {

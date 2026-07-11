@@ -1,0 +1,53 @@
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+describe('app initialization', () => {
+  let temporary: string | undefined
+
+  afterEach(async () => {
+    delete process.env.DATA_DIR
+    delete process.env.PRINTS_DIR
+    const singleton = globalThis as typeof globalThis & { __printhub?: Promise<{ repository: { close(): void } }> }
+    const running = singleton.__printhub
+    delete singleton.__printhub
+    if (running) (await running.catch(() => undefined))?.repository.close()
+    vi.resetModules()
+    if (temporary) await fs.promises.rm(temporary, { recursive: true, force: true })
+  })
+
+  it('clears a rejected singleton and recovers after transient storage failure', async () => {
+    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-app-'))
+    const invalidPrints = path.join(temporary, 'not-a-directory')
+    await fs.promises.writeFile(invalidPrints, 'blocked')
+    process.env.DATA_DIR = path.join(temporary, 'data')
+    process.env.PRINTS_DIR = invalidPrints
+    const { app } = await import('./app')
+    await expect(app()).rejects.toThrow()
+    process.env.PRINTS_DIR = path.join(temporary, 'prints')
+    await expect(app()).resolves.toMatchObject({ repository: expect.anything(), service: expect.anything() })
+  })
+
+  it('preserves stale-looking parts with live durable sessions and removes expired ones', async () => {
+    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-app-uploads-'))
+    process.env.DATA_DIR = path.join(temporary, 'data')
+    process.env.PRINTS_DIR = path.join(temporary, 'prints')
+    const uploads = path.join(process.env.DATA_DIR, 'uploads')
+    await fs.promises.mkdir(uploads, { recursive: true })
+    const live = path.join(uploads, 'live-upload-id.part')
+    const expired = path.join(uploads, 'expired-upload-id.part')
+    await Promise.all([fs.promises.writeFile(live, 'live'), fs.promises.writeFile(expired, 'expired')])
+    const old = new Date(Date.now() - 2 * 86_400_000)
+    await Promise.all([fs.promises.utimes(live, old, old), fs.promises.utimes(expired, old, old)])
+    const { SqliteRepository } = await import('../adapters/sqlite')
+    const repository = SqliteRepository.open(path.join(process.env.DATA_DIR, 'printhub.sqlite'))
+    repository.createUploadSession('live-upload-id', 'owner', Date.now() + 60_000, 3)
+    repository.createUploadSession('expired-upload-id', 'owner', Date.now() - 1, 3)
+    repository.close()
+    const { app } = await import('./app')
+    await app()
+    expect(await fs.promises.readFile(live, 'utf8')).toBe('live')
+    await expect(fs.promises.stat(expired)).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+})

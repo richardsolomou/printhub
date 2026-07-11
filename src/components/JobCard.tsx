@@ -7,9 +7,8 @@ import {
   type Edge,
 } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { convexQuery } from '@convex-dev/react-query'
-import { api } from '../../convex/_generated/api'
-import type { Status } from '../../convex/statuses'
+import type { StatusId } from '../core/workflow'
+import { peopleQuery } from '../lib/queries'
 import type { Job } from '../lib/jobTypes'
 import { LazyThumb } from './LazyThumb'
 import { requesterColor, requesterLabel } from '../lib/requester'
@@ -22,12 +21,12 @@ export function JobCard({
   onOpen,
 }: {
   job: Job
-  status: Status
+  status: StatusId
   count: number
   canDrag: boolean
   onOpen: () => void
 }) {
-  const { data: users } = useSuspenseQuery(convexQuery(api.users.list, {}))
+  const { data: users } = useSuspenseQuery(peopleQuery())
   const ref = useRef<HTMLButtonElement>(null)
   const [dragging, setDragging] = useState(false)
   const [closestEdge, setClosestEdge] = useState<Edge | null>(null)

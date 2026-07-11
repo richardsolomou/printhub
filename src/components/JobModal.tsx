@@ -1,11 +1,10 @@
 import { Suspense, lazy, useState } from 'react'
-import { useSuspenseQuery } from '@tanstack/react-query'
-import { convexQuery } from '@convex-dev/react-query'
+import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { usePostHog } from '@posthog/react'
-import { api } from '../../convex/_generated/api'
 import type { Job } from '../lib/jobTypes'
-import { STATUSES, STATUS_LABELS } from '../../convex/statuses'
+import type { WorkflowDefinition } from '../core/workflow'
+import { peopleQuery } from '../lib/queries'
 import { requesterColor, requesterLabel } from '../lib/requester'
 import { useEscape } from '../lib/useEscape'
 import { deleteJob, updateJob } from '../server/fns'
@@ -14,22 +13,22 @@ const StlViewer = lazy(() => import('./StlViewer'))
 
 export function JobModal({
   job,
+  workflow,
   isAdmin,
-  userEmail,
   onClose,
 }: {
   job: Job
+  workflow: WorkflowDefinition
   isAdmin: boolean
-  userEmail: string
   onClose: () => void
 }) {
   // Requesters may adjust copies/notes on their own job until any copy starts.
-  const started = job.counts.in_progress > 0 || job.counts.done > 0
-  const canEdit = isAdmin || (job.requesterEmail === userEmail && !started)
+  const canEdit = job.canEdit
   const posthog = usePostHog()
-  const { data: people } = useSuspenseQuery(convexQuery(api.users.list, {}))
+  const { data: people } = useSuspenseQuery(peopleQuery())
   const callUpdate = useServerFn(updateJob)
   const callDelete = useServerFn(deleteJob)
+  const queryClient = useQueryClient()
   const [name, setName] = useState(job.name)
   const [quantity, setQuantity] = useState(String(job.quantity))
   const [forName, setForName] = useState(requesterLabel(job))
@@ -63,6 +62,7 @@ export function JobModal({
           notes: notes.trim(),
         },
       })
+      await queryClient.invalidateQueries({ queryKey: ['jobs'] })
       posthog.capture('print_job_updated', {
         job_id: job._id,
       })
@@ -79,6 +79,7 @@ export function JobModal({
     setBusy(true)
     try {
       await callDelete({ data: { id: job._id } })
+      await queryClient.invalidateQueries({ queryKey: ['jobs'] })
       onClose()
     } catch (error) {
       posthog.captureException(error, { action: 'delete_print_job', job_id: job._id })
@@ -93,14 +94,14 @@ export function JobModal({
         <h2>{job.name}</h2>
 
         <Suspense fallback={<div className="viewer"><div className="viewer-status">loading viewer…</div></div>}>
-          <StlViewer jobId={job._id} hasPreview={!!job.previewPath} />
+          <StlViewer jobId={job._id} hasPreview={job.hasPreview} />
         </Suspense>
 
         <div className="modal-meta">
           <span className="chip qty">×{job.quantity}</span>
-          {STATUSES.filter((status) => job.counts[status] > 0).map((status) => (
-            <span key={status} className="chip">
-              {job.counts[status]} {STATUS_LABELS[status].toLowerCase()}
+          {workflow.statuses.filter((status) => job.counts[status.id] > 0).map((status) => (
+            <span key={status.id} className="chip">
+              {job.counts[status.id]} {status.label.toLowerCase()}
             </span>
           ))}
           <span
@@ -165,7 +166,7 @@ export function JobModal({
                 className="btn"
                 href={`/api/files/${job._id}`}
                 download
-                onClick={() => posthog.capture('stl_downloaded', { job_id: job._id, job_name: job.name })}
+                onClick={() => posthog.capture('stl_downloaded', { job_id: job._id })}
               >
                 Download STL
               </a>
@@ -182,7 +183,7 @@ export function JobModal({
               className="btn"
               href={`/api/files/${job._id}`}
               download
-              onClick={() => posthog.capture('stl_downloaded', { job_id: job._id, job_name: job.name })}
+              onClick={() => posthog.capture('stl_downloaded', { job_id: job._id })}
             >
               Download STL
             </a>

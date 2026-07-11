@@ -1,16 +1,15 @@
 import { useState } from 'react'
-import { STATUS_LABELS, type Status } from '../../convex/statuses'
 import { useEscape } from '../lib/useEscape'
 
 export function MoveDialog({
   jobName,
-  to,
+  toLabel,
   max,
   onConfirm,
   onCancel,
 }: {
   jobName: string
-  to: Status
+  toLabel: string
   max: number
   onConfirm: (count: number) => void
   onCancel: () => void
@@ -29,7 +28,7 @@ export function MoveDialog({
       >
         <h2>Move copies</h2>
         <p className="move-copy">
-          How many copies of “{jobName}” to {STATUS_LABELS[to]}?
+          How many copies of “{jobName}” to {toLabel}?
         </p>
         <div className="field">
           <label htmlFor="move-count">Copies (of {max})</label>

@@ -1,11 +1,11 @@
 import { Suspense, lazy, useEffect, useRef, useState } from 'react'
-import { useSuspenseQuery } from '@tanstack/react-query'
-import { convexQuery } from '@convex-dev/react-query'
+import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { usePostHog } from '@posthog/react'
-import { api } from '../../convex/_generated/api'
+import { peopleQuery } from '../lib/queries'
 import { prepareUploadAssets } from '../lib/uploadAssets'
 import { isIOS, isPhone } from '../lib/device'
 import { useEscape } from '../lib/useEscape'
+import { retryOffset } from '../lib/uploadProtocol'
 
 const StlViewer = lazy(() => import('./StlViewer'))
 
@@ -15,6 +15,7 @@ const CHUNK_BYTES = 32 * 1024 * 1024
 
 type Entry = {
   key: string
+  uploadId: string
   file: File
   name: string
   quantity: string
@@ -37,7 +38,8 @@ export function UploadForm({
   onClose: () => void
 }) {
   const posthog = usePostHog()
-  const { data: people } = useSuspenseQuery(convexQuery(api.users.list, {}))
+  const queryClient = useQueryClient()
+  const { data: people } = useSuspenseQuery(peopleQuery())
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [entries, setEntries] = useState<Entry[]>([])
   const assetPromises = useRef(new Map<string, Promise<{ thumbnail?: string; preview?: File }>>())
@@ -77,6 +79,7 @@ export function UploadForm({
       }
       const entry: Entry = {
         key: `f${nextKey++}`,
+        uploadId: crypto.randomUUID(),
         file,
         name: file.name.replace(/\.stl$/i, '').replace(/[_-]+/g, ' ').trim(),
         quantity: '1',
@@ -101,14 +104,16 @@ export function UploadForm({
     setEntries((prev) => prev.map((entry) => (entry.key === key ? { ...entry, ...patch } : entry)))
 
   const postChunk = (form: FormData, onProgress: (loaded: number) => void) =>
-    new Promise<void>((resolve, reject) => {
+    new Promise<{ acceptedOffset?: number; completed?: boolean }>((resolve, reject) => {
       const xhr = new XMLHttpRequest()
       xhr.open('POST', '/api/upload')
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable) onProgress(event.loaded)
       }
       xhr.onload = () => {
-        if (xhr.status < 300) return resolve()
+        if (xhr.status < 300) {
+          try { return resolve(JSON.parse(xhr.responseText)) } catch { return resolve({}) }
+        }
         let message = `upload failed (${xhr.status})`
         try {
           message = JSON.parse(xhr.responseText).error ?? message
@@ -121,8 +126,14 @@ export function UploadForm({
 
   const uploadOne = async (entry: Entry, base: number, share: number) => {
     const { file } = entry
-    const uploadId = crypto.randomUUID()
-    let offset = 0
+    const uploadId = entry.uploadId
+    const status = new FormData()
+    status.set('uploadId', uploadId)
+    status.set('offset', '0')
+    status.set('status', '1')
+    const uploadStatus = await postChunk(status, () => undefined)
+    if (uploadStatus.completed) return
+    let offset = retryOffset(uploadStatus.acceptedOffset ?? 0, file.size, CHUNK_BYTES)
     while (offset < file.size) {
       const end = Math.min(offset + CHUNK_BYTES, file.size)
       const isFinal = end >= file.size
@@ -143,10 +154,10 @@ export function UploadForm({
         if (assets.preview) form.set('preview', assets.preview)
       }
       const chunkStart = offset
-      await postChunk(form, (loaded) =>
+      const response = await postChunk(form, (loaded) =>
         setProgress(base + (Math.min(chunkStart + loaded, file.size) / file.size) * share),
       )
-      offset = end
+      offset = response.acceptedOffset ?? end
     }
   }
 
@@ -166,6 +177,7 @@ export function UploadForm({
       patchEntry(entry.key, { state: 'uploading' })
       try {
         await uploadOne(entry, index * share, share)
+        await queryClient.invalidateQueries({ queryKey: ['jobs'] })
         patchEntry(entry.key, { state: 'done' })
       } catch (err) {
         failures++
@@ -181,7 +193,6 @@ export function UploadForm({
     if (failures === 0) {
       posthog.capture('print_job_submitted', {
         file_count: pending.length,
-        for_name: forName,
       })
       onClose()
     } else {

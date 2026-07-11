@@ -1,149 +1,116 @@
 # PrintHub
 
-PrintHub is a shared STL upload queue for a small group of people. A realtime Kanban board tracks each requested copy through To Do, In Progress, and Done while the original STL stays on NAS storage.
+PrintHub is a self-hosted STL request board for a small group. It runs as one Node application with SQLite metadata and ordinary files on storage you control.
 
-## What it does
+## Features
 
-- Accepts one or many STL files by picker, dropzone, or a drop anywhere on the board.
-- Uploads files up to 1 GB in 32 MB chunks, avoiding Cloudflare's 100 MB request limit.
-- Tracks copies independently, so part of a multi-copy job can be printing or finished while the rest remains queued.
-- Generates 256 px thumbnails and lightweight viewer STLs in the uploader's browser. Files over 12 MB or meshes over 400,000 triangles are candidates for a preview targeting 100,000 triangles and at most 8 MB.
-- Opens the optimized preview first, with an explicit option to load the original full-detail STL. Phones use thumbnails instead of the live 3D viewer.
-- Streams STL responses from disk with gzip when supported.
-- Identifies users and captures key product actions and application exceptions in PostHog.
+- Chunked STL uploads up to 1 GB, browser-generated thumbnails, and optimized viewer previews.
+- Full-detail downloads while previews keep initial browser downloads small.
+- Copy-level movement through a runtime-defined To Do → In Progress → Done workflow.
+- Built-in first-run operator setup, password login and self-service password changes, with secure HttpOnly sessions.
+- Optional trusted-header identity for Cloudflare Access and other authenticated proxies.
+- Live board refresh across browsers through Server-Sent Events.
+- Optional PostHog telemetry; no external telemetry is enabled by default.
 
-## Architecture
+## Architecture and storage
 
-- **Web app:** TanStack Start, React, and Three.js in one Node container.
-- **Realtime data:** Convex Cloud stores users and job metadata and pushes board updates to connected browsers. Server mutations authenticate with a shared secret.
-- **File storage:** The container mounts the NAS prints directory at `/prints`. Original STLs move between `todo/`, `in-progress/`, and `done/`; generated viewer files live in `.previews/`; incomplete chunked uploads temporarily live in `.uploads/` and are eligible for cleanup after 24 hours.
-- **Identity:** Cloudflare Access injects `Cf-Access-Authenticated-User-Email`. Members of `ADMIN_EMAILS` can move, reorder, and delete jobs. Other users can upload, view, download, and edit their own unstarted requests.
-- **Observability:** PostHog captures identified product events in the browser and server, plus browser exceptions and React render failures. Browser telemetry uses the same-origin `/ingest` proxy configured in Vite.
+TanStack Start owns all reads and mutations. The application core depends on internal `Repository`, `AssetStore`, auth, workflow, event, and telemetry boundaries. SQLite runs in WAL mode with foreign keys, a busy timeout, and numbered migrations.
 
-The STL on disk is the source file and is never replaced by its preview. A job's file lives in the folder for its least-finished copies: it remains in `todo/` while anything is queued and reaches `done/` only when every copy is complete.
+Persistent paths:
+
+- `/data/printhub.sqlite`: metadata, users, and sessions.
+- `/data/uploads`: bounded incomplete chunked uploads, swept after 24 hours.
+- `/prints/todo`, `/prints/in-progress`, `/prints/done`: original STL files.
+- `/prints/.printhub/previews`: derived viewer files.
+
+The STL lives with its least-finished copies. Status moves and deletes use a durable SQLite operation journal: filesystem work is idempotent, metadata and the committed journal state change in one transaction, and unfinished operations replay before the app accepts traffic. Managed trash is retried and swept after committed deletes. PrintHub currently supports one application process; its SQLite connection, upload registry and SSE event bus are process-local.
+
+This standalone SQLite version is a clean-install transition. It does not import Convex metadata, discover existing files, or migrate the old `.previews` directory. Start with an empty `/data`; files already under `/prints` are left untouched but remain unmanaged until uploaded as new requests.
 
 ## Local development
 
-Requirements: Node 22+, pnpm 10.33+, and a Convex account.
+Requirements: Node 22+ and pnpm 10.33+.
 
 ```sh
 pnpm install
-npx convex dev # terminal 1: provision/sync Convex and regenerate types
-pnpm dev       # terminal 2: http://localhost:3000
+export SETUP_TOKEN="$(openssl rand -hex 24)"
+echo "First-run setup token: $SETUP_TOKEN"
+DATA_DIR=./data-dev PRINTS_DIR=./prints-dev pnpm dev
 ```
 
-Create `.env.local` with:
+Open `http://localhost:3000`. A fresh database shows the first-operator setup form. Passwords must be at least 12 characters and are hashed with Argon2id.
+Set `SETUP_TOKEN` to a random value of at least 24 characters before first-run setup; the browser must supply this out-of-band token to claim the first operator account.
 
-```sh
-CONVEX_DEPLOYMENT=...
-VITE_CONVEX_URL=https://<deployment>.convex.cloud
-CONVEX_URL=https://<deployment>.convex.cloud
-CONVEX_ACTION_SECRET=<random hex>
-PRINTS_DIR=./prints-dev
-ADMIN_EMAILS=you@example.com
-DEV_USER_EMAIL=you@example.com
-VITE_POSTHOG_PROJECT_TOKEN=phc_<project-token>
-VITE_POSTHOG_HOST=https://us.i.posthog.com
-```
-
-`DEV_USER_EMAIL` substitutes for the Cloudflare header outside production. `PRINTS_DIR` defaults to `/prints` when unset.
-
-Set the same write secret in the selected Convex deployment:
-
-```sh
-npx convex env set APP_WRITE_SECRET <same random hex>
-```
-
-Useful checks:
+Checks:
 
 ```sh
 pnpm typecheck
+pnpm test
 pnpm build
 ```
 
-## Deployment model
+## Docker and TrueNAS Custom App
 
-Production has two independently deployed parts:
+The default image needs two persistent mounts and no cloud service:
 
-1. `npx convex deploy` publishes the schema and Convex functions.
-2. A push to `main` runs `.github/workflows/docker.yml`, builds the `linux/amd64` app image, and publishes it to GHCR.
-
-The image receives the public Convex and PostHog values at build time because Vite embeds them in the browser bundle. Configure these GitHub repository variables before the first build:
-
-- `VITE_CONVEX_URL`
-- `VITE_POSTHOG_PROJECT_TOKEN`
-- `VITE_POSTHOG_HOST` (`https://us.i.posthog.com` for US Cloud)
-
-The workflow publishes three tags:
-
-- `latest`, consumed by the NAS Custom App.
-- `v<package.json version>`, the human-readable release tag.
-- `sha-<full commit SHA>`, the immutable build tag.
-
-### First production deployment as a TrueNAS Custom App
-
-1. Deploy Convex and set its production secret:
-
-   ```sh
-   npx convex deploy
-   npx convex env set APP_WRITE_SECRET <production secret>
-   ```
-
-2. Set the GitHub repository variables listed above and push `main`. Confirm that **Build and push image** publishes `ghcr.io/richardsolomou/printhub:latest`.
-3. Create `/mnt/HDDs/STL` on the NAS. PrintHub creates the status and working subdirectories as needed.
-4. In TrueNAS, open **Apps → Discover Apps → Custom App** and configure the guided wizard:
-
-   - Application name: `printhub`
-   - Image repository: `ghcr.io/richardsolomou/printhub`
-   - Tag: `latest`
-   - Pull policy: **Always pull image even if present on host**
-   - Restart policy: **Unless Stopped**
-   - Environment: `CONVEX_ACTION_SECRET=<production secret>` and `ADMIN_EMAILS=<comma-separated admin emails>`
-   - TCP port: container `3000`, host `3010`
-   - Host-path storage: `/mnt/HDDs/STL` mounted at `/prints`
-
-5. Install the app and verify that `http://<NAS-LAN-IP>:3010` loads.
-6. Add a hostname to the NAS's cloudflared tunnel pointing to `http://<NAS-LAN-IP>:3010`, then protect it with a Cloudflare Access application and email allowlist.
-
-TrueNAS can monitor upstream Docker images for both catalog and custom apps. Keep **Apps → Configuration → Settings → Check for docker image updates** enabled so a new `latest` image appears as an available update.
-
-### Normal release
-
-1. Update Convex first with `npx convex deploy` whenever schema or Convex functions changed.
-2. Bump `package.json` when the release should receive a new `vX.Y.Z` tag and visible header version.
-3. Push to `main` and wait for the image workflow to finish.
-4. When TrueNAS reports an image update, open the installed PrintHub app and apply the update.
-
-Deploying Convex first keeps a newly started container from calling functions that have not reached production yet.
-
-### Rollback
-
-Edit the Custom App's image tag and replace `latest` with a known `vX.Y.Z` or `sha-<full commit SHA>` tag. Restore `latest` when it should follow the newest build again.
-
-Container rollback does not roll back the Convex schema or functions. If a release changed Convex incompatibly, deploy the matching Convex revision separately.
-
-## Manual Docker deployment
-
-To build and publish without GitHub Actions:
-
-```sh
-docker buildx build --platform linux/amd64 \
-  --build-arg VITE_CONVEX_URL=https://<deployment>.convex.cloud \
-  --build-arg VITE_POSTHOG_PROJECT_TOKEN=phc_<project-token> \
-  --build-arg VITE_POSTHOG_HOST=https://us.i.posthog.com \
-  -t ghcr.io/richardsolomou/printhub:latest --push .
+```yaml
+services:
+  app:
+    image: ghcr.io/richardsolomou/printhub:latest
+    ports: ["3010:3000"]
+    environment:
+      SETUP_TOKEN: "replace-with-a-random-value-of-at-least-24-characters"
+    volumes:
+      - /mnt/HDDs/STL/.printhub-data:/data
+      - /mnt/HDDs/STL:/prints
 ```
 
-For a plain Docker host, copy `.env.example` to `.env`, fill it in, and run:
+For Docker Compose, copy `.env.example` to `.env`, set the two host paths, and run `docker compose up -d`. A fresh local-auth installation also needs `SETUP_TOKEN` set to a random value of at least 24 characters. Remove it after creating the first operator; subsequent starts do not require it. Trusted-header deployments never need `SETUP_TOKEN`.
+
+For TrueNAS, create `/mnt/HDDs/STL` and `/mnt/HDDs/STL/.printhub-data`, then use **Apps → Discover Apps → Custom App**:
+
+- Image: `ghcr.io/richardsolomou/printhub:latest`, pull policy **Always**, restart **Unless Stopped**.
+- Port: container `3000`, host `3010`.
+- Host path `/mnt/HDDs/STL/.printhub-data` mounted at `/data`.
+- Host path `/mnt/HDDs/STL` mounted at `/prints`.
+- Environment `AUTH_PROVIDER=local` for built-in login.
+- Environment `SETUP_TOKEN` with a random value of at least 24 characters. Remove it after creating the first operator.
+
+The unauthenticated `/api/health` endpoint returns success only after migrations and recovery finish, SQLite responds, and both `/data` and `/prints` accept a write probe. It can be used for container readiness and health checks.
+
+After installation, open the app and create the first operator. A Cloudflare Tunnel can point at port 3010 without making Cloudflare part of application identity.
+
+To delegate identity to Cloudflare Access or another trusted proxy, set:
 
 ```sh
-docker compose up -d --build
+AUTH_PROVIDER=trusted-header
+AUTH_EMAIL_HEADER=Cf-Access-Authenticated-User-Email
+TRUSTED_PROXY_SECRET=<a random value of at least 24 characters>
+OPERATOR_EMAILS=you@example.com
 ```
 
-The Compose stack exposes the app on port 3010 and mounts `PRINTS_HOST_DIR` at `/prints`.
+Configure the proxy to overwrite `X-PrintHub-Proxy-Secret` with the same secret. Only use trusted-header mode when direct access to the app port is blocked by a firewall or private network; PrintHub fails closed without the proxy secret.
 
-## Operations and security
+## Releases, upgrades, and rollback
 
-- Back up both the NAS prints directory and Convex data; neither contains a complete copy of the other.
-- The published port trusts the Cloudflare identity header. Devices that can reach port 3010 directly can spoof it, so direct LAN access is appropriate only on a trusted network. Validate Cloudflare Access JWTs before exposing that port to an untrusted network.
-- Preview generation is best-effort. If it fails, the original STL remains valid and the viewer loads full detail.
+A push to `main` publishes `latest`, `v<package version>`, and immutable `sha-<commit>` images for amd64 and arm64. TrueNAS can monitor `latest` for updates. Database migrations run automatically on startup; back up before applying a new image.
+
+Rollback by selecting a previous `vX.Y.Z` or `sha-...` image. If a release applied a non-backward-compatible migration, restore the matching database backup as well.
+
+The first standalone release is not an in-place upgrade from the old Convex-backed build. There is deliberately no migration tooling because the project had no production data at this transition. Use a fresh `/data` mount and re-upload any requests you want PrintHub to manage.
+
+## Backup and restore
+
+Back up `/data` and `/prints` together. For a consistent manual backup, stop the app first, copy both directories, then start it again. Restore by stopping the app, replacing both mounted directories from the same backup set, and starting the matching or newer image.
+
+SQLite WAL files next to `printhub.sqlite` are part of a live database. Do not copy only the main file while the app is running. An online backup command is not included yet.
+
+## Upload limits
+
+PrintHub accepts sequential multipart chunks up to 64 MB and an assembled STL up to 1 GB. It requires a valid `Content-Length` and rejects oversized declared request bodies before multipart parsing, limits concurrent multipart parsing, persists ownership and quotas for incomplete uploads across restarts, limits each identity to three incomplete uploads and 1 GB of incomplete data, expires abandoned ownership after 24 hours, and removes stale managed `.part` files. The framework multipart parser still buffers an individual request, so deployments must also enforce a request-body limit of about 74 MB at the ingress proxy. An ingress limit remains required because a malicious client can lie about `Content-Length` or stream differently at a proxy/runtime boundary.
+
+## Optional telemetry
+
+Leave all PostHog variables blank for no-op telemetry. Browser telemetry is baked into an image only when `VITE_POSTHOG_PROJECT_TOKEN` is provided at build time; server telemetry uses `POSTHOG_PROJECT_TOKEN` at runtime. Set the corresponding `*_HOST` variables for self-hosted or regional PostHog.
+
+Telemetry uses the internal user ID as its pseudonymous identity and records operational event metadata such as job IDs, quantities, status transitions, file counts, sizes, and errors. It does not intentionally send email addresses, user names, request names, or file names.

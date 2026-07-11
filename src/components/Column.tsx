@@ -1,22 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { dropTargetForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter'
-import { STATUS_LABELS, type Status } from '../../convex/statuses'
+import type { StatusId, WorkflowStatus } from '../core/workflow'
 import type { Job } from '../lib/jobTypes'
 import { JobCard } from './JobCard'
 
-const EMPTY_COPY: Record<Status, string> = {
-  todo: 'Nothing queued.',
-  in_progress: 'Printers are idle.',
-  done: 'Nothing finished yet.',
-}
-
 export function Column({
   status,
+  definition,
   entries,
   isAdmin,
   onOpenJob,
 }: {
-  status: Status
+  status: StatusId
+  definition: WorkflowStatus
   entries: { job: Job; count: number }[]
   isAdmin: boolean
   onOpenJob: (jobId: string) => void
@@ -42,11 +38,11 @@ export function Column({
     <section ref={ref} className={`column${isOver ? ' drop-target' : ''}`} data-status={status}>
       <header className="column-head">
         <span className="dot" />
-        {STATUS_LABELS[status]}
+        {definition.label}
         <span className="count">{total}</span>
       </header>
       <div className="column-body">
-        {entries.length === 0 && <div className="column-empty">{EMPTY_COPY[status]}</div>}
+        {entries.length === 0 && <div className="column-empty">{definition.empty}</div>}
         {entries.map(({ job, count }) => (
           <JobCard
             key={job._id}

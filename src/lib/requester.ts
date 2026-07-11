@@ -1,10 +1,10 @@
 export type UserEntry = { name: string; color?: string }
 
-type Requester = { requesterName?: string; requesterEmail: string }
+type Requester = { requesterName?: string; requesterEmail?: string }
 
 /** Display label for who a print is for: explicit name, else the uploader. */
 export function requesterLabel(job: Requester): string {
-  return job.requesterName?.trim() || job.requesterEmail.split('@')[0]
+  return job.requesterName?.trim() || job.requesterEmail?.split('@')[0] || 'Requester'
 }
 
 /** The person's stored color, with a hash fallback for names not in the users table. */

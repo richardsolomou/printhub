@@ -4,14 +4,25 @@ services:
     build:
       context: .
       args:
-        VITE_CONVEX_URL: ${VITE_CONVEX_URL}
-        VITE_POSTHOG_PROJECT_TOKEN: ${VITE_POSTHOG_PROJECT_TOKEN}
-        VITE_POSTHOG_HOST: ${VITE_POSTHOG_HOST}
+        VITE_POSTHOG_PROJECT_TOKEN: ${VITE_POSTHOG_PROJECT_TOKEN:-}
+        VITE_POSTHOG_HOST: ${VITE_POSTHOG_HOST:-}
     restart: unless-stopped
     ports:
       - '3010:3000'
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:3000/api/health']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     environment:
-      CONVEX_ACTION_SECRET: ${CONVEX_ACTION_SECRET}
-      ADMIN_EMAILS: ${ADMIN_EMAILS}
+      AUTH_PROVIDER: ${AUTH_PROVIDER:-local}
+      SETUP_TOKEN: ${SETUP_TOKEN:-}
+      AUTH_EMAIL_HEADER: ${AUTH_EMAIL_HEADER:-Cf-Access-Authenticated-User-Email}
+      TRUSTED_PROXY_SECRET: ${TRUSTED_PROXY_SECRET:-}
+      OPERATOR_EMAILS: ${OPERATOR_EMAILS:-}
+      POSTHOG_PROJECT_TOKEN: ${POSTHOG_PROJECT_TOKEN:-}
+      POSTHOG_HOST: ${POSTHOG_HOST:-}
     volumes:
-      - ${PRINTS_HOST_DIR}:/prints
+      - ${DATA_HOST_DIR:-/mnt/HDDs/STL/.printhub-data}:/data
+      - ${PRINTS_HOST_DIR:-/mnt/HDDs/STL}:/prints

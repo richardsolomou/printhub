@@ -1,8 +1,8 @@
 {
   "include": [
     "src",
-    "convex",
-    "vite.config.ts"
+    "vite.config.ts",
+    "vitest.config.ts"
   ],
   "compilerOptions": {
     "strict": true,

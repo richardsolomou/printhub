@@ -1,127 +1,78 @@
-import fs from 'node:fs'
 import { createServerFn } from '@tanstack/react-start'
-import type { Id } from '../../convex/_generated/dataModel'
-import { api } from '../../convex/_generated/api'
-import { STATUSES, type Status } from '../../convex/statuses'
-import { convex, writeSecret } from './convexServer'
-import { isAdmin, readUserEmail, requireAdmin } from './identity'
-import { absolutePath, fileStatus, moveToStatusFolder } from './files'
-import { getPostHogClient } from '../utils/posthog-server'
+import { app } from './app'
+import { workflow } from '../core/workflow'
+import { hashPassword } from '../adapters/auth'
+import { requireMutationOrigin } from './mutationOrigin'
 
-export const whoami = createServerFn({ method: 'GET' }).handler(async () => {
-  const email = readUserEmail()
-  const user = await convex().query(api.users.byEmail, { email })
-  return { email, name: user?.name ?? email.split('@')[0], isAdmin: isAdmin(email) }
+export const sessionInfo = createServerFn({ method: 'GET' }).handler(async () => {
+  const instance = await app()
+  const identity = instance.auth.current()
+  return {
+    identity,
+    setupRequired: process.env.AUTH_PROVIDER !== 'trusted-header' && instance.repository.countUsers() === 0,
+    setupConfigured: (process.env.SETUP_TOKEN?.length ?? 0) >= 24,
+    authProvider: process.env.AUTH_PROVIDER ?? 'local',
+    workflow,
+  }
+})
+
+export const setupOperator = createServerFn({ method: 'POST' })
+  .validator((data: { email: string; name: string; password: string; setupToken: string }) => data)
+  .handler(async ({ data }) => { requireMutationOrigin(); return (await app()).auth.setup(data) })
+
+export const login = createServerFn({ method: 'POST' })
+  .validator((data: { email: string; password: string }) => data)
+  .handler(async ({ data }) => { requireMutationOrigin(); return (await app()).auth.login(data) })
+
+export const logout = createServerFn({ method: 'POST' }).handler(async () => { requireMutationOrigin(); return (await app()).auth.logout() })
+
+export const changePassword = createServerFn({ method: 'POST' })
+  .validator((data: { currentPassword: string; newPassword: string }) => data)
+  .handler(async ({ data }) => { requireMutationOrigin(); return (await app()).auth.changePassword(data) })
+
+export const createUser = createServerFn({ method: 'POST' })
+  .validator((data: { email: string; name: string; password: string; role: 'requester' | 'operator' }) => data)
+  .handler(async ({ data }) => {
+    requireMutationOrigin()
+    const instance = await app()
+    if (instance.auth.require().role !== 'operator') throw new Response('forbidden', { status: 403 })
+    if (data.role !== 'requester' && data.role !== 'operator') throw new Response('invalid role', { status: 400 })
+    if (typeof data.email !== 'string' || typeof data.name !== 'string' || typeof data.password !== 'string' ||
+      data.email.length > 254 || data.name.length > 100 || data.password.length < 12 || data.password.length > 256 ||
+      !/^\S+@\S+\.\S+$/.test(data.email) || !data.name.trim()) throw new Response('invalid user', { status: 400 })
+    const user = instance.repository.createUser({ ...data, passwordHash: await hashPassword(data.password) })
+    instance.events.publish('user.created')
+    return user
+  })
+
+export const listJobs = createServerFn({ method: 'GET' }).handler(async () => {
+  const instance = await app()
+  return instance.service.listJobs(instance.auth.require())
+})
+
+export const listPeople = createServerFn({ method: 'GET' }).handler(async () => {
+  const instance = await app()
+  instance.auth.require()
+  return instance.service.listPeople()
 })
 
 export const moveCopies = createServerFn({ method: 'POST' })
-  .validator((data: { id: string; from: Status; to: Status; count: number; order?: number }) => {
-    if (!STATUSES.includes(data.from) || !STATUSES.includes(data.to) || data.from === data.to) {
-      throw new Error('invalid move')
-    }
-    if (!Number.isInteger(data.count) || data.count < 1) throw new Error('invalid count')
-    if (data.order !== undefined && !Number.isFinite(data.order)) throw new Error('invalid order')
-    return data
-  })
-  .handler(async ({ data }) => {
-    requireAdmin()
-    const id = data.id as Id<'jobs'>
-    const job = await convex().query(api.jobs.get, { id })
-    if (!job) throw new Response('not found', { status: 404 })
-    if (job.counts[data.from] < data.count) throw new Response('not enough copies', { status: 409 })
-
-    const nextCounts = {
-      ...job.counts,
-      [data.from]: job.counts[data.from] - data.count,
-      [data.to]: job.counts[data.to] + data.count,
-    }
-    const targetFolder = fileStatus(nextCounts)
-    const filePath =
-      targetFolder === fileStatus(job.counts) ? job.filePath : await moveToStatusFolder(job.filePath, targetFolder)
-
-    await convex().mutation(api.jobs.moveCopies, {
-      secret: writeSecret(),
-      id,
-      from: data.from,
-      to: data.to,
-      count: data.count,
-      filePath,
-      order: data.order,
-    })
-    const email = readUserEmail()
-    const posthog = getPostHogClient()
-    posthog.capture({
-      distinctId: email,
-      event: 'print_job_copies_moved',
-      properties: {
-        job_id: id,
-        from: data.from,
-        to: data.to,
-        count: data.count,
-      },
-    })
-    await posthog.flush()
-  })
+  .validator((data: { id: string; from: string; to: string; count: number; order?: number }) => data)
+  .handler(async ({ data }) => { requireMutationOrigin(); const instance = await app(); return instance.service.moveCopies(data, instance.auth.require()) })
 
 export const reorderJob = createServerFn({ method: 'POST' })
-  .validator((data: { id: string; status: Status; order: number }) => {
-    if (!STATUSES.includes(data.status) || !Number.isFinite(data.order)) throw new Error('invalid')
-    return data
-  })
-  .handler(async ({ data }) => {
-    requireAdmin()
-    await convex().mutation(api.jobs.reorder, {
-      secret: writeSecret(),
-      id: data.id as Id<'jobs'>,
-      status: data.status,
-      order: data.order,
-    })
-  })
+  .validator((data: { id: string; status: string; order: number }) => data)
+  .handler(async ({ data }) => { requireMutationOrigin(); const instance = await app(); return instance.service.reorder(data.id, data.status, data.order, instance.auth.require()) })
 
 export const updateJob = createServerFn({ method: 'POST' })
-  .validator(
-    (data: { id: string; name?: string; quantity?: number; requesterName?: string; notes?: string }) => data,
-  )
+  .validator((data: { id: string; name?: string; quantity?: number; requesterName?: string; notes?: string }) => data)
   .handler(async ({ data }) => {
-    const email = readUserEmail()
+    requireMutationOrigin()
     const { id, ...fields } = data
-    if (fields.quantity !== undefined) {
-      fields.quantity = Math.min(50, Math.max(1, Math.round(fields.quantity)))
-    }
-
-    if (!isAdmin(email)) {
-      // Requesters may adjust copies/notes on their own job, but only before any copy starts.
-      const job = await convex().query(api.jobs.get, { id: id as Id<'jobs'> })
-      if (!job || job.requesterEmail !== email) throw new Response('forbidden', { status: 403 })
-      if (job.counts.in_progress > 0 || job.counts.done > 0) {
-        throw new Response('job already started', { status: 409 })
-      }
-      const { quantity, notes } = fields
-      await convex().mutation(api.jobs.update, { secret: writeSecret(), id: id as Id<'jobs'>, quantity, notes })
-      return
-    }
-
-    await convex().mutation(api.jobs.update, { secret: writeSecret(), id: id as Id<'jobs'>, ...fields })
+    const instance = await app()
+    instance.service.update(id, fields, instance.auth.require())
   })
 
 export const deleteJob = createServerFn({ method: 'POST' })
   .validator((data: { id: string }) => data)
-  .handler(async ({ data }) => {
-    const email = requireAdmin()
-    const id = data.id as Id<'jobs'>
-    const job = await convex().query(api.jobs.get, { id })
-    if (!job) return
-    await convex().mutation(api.jobs.remove, { secret: writeSecret(), id })
-    await fs.promises.rm(absolutePath(job.filePath), { force: true })
-    if (job.previewPath) await fs.promises.rm(absolutePath(job.previewPath), { force: true })
-    const posthog = getPostHogClient()
-    posthog.capture({
-      distinctId: email,
-      event: 'print_job_deleted',
-      properties: {
-        job_id: id,
-        job_name: job.name,
-      },
-    })
-    await posthog.flush()
-  })
+  .handler(async ({ data }) => { requireMutationOrigin(); const instance = await app(); return instance.service.remove(data.id, instance.auth.require()) })

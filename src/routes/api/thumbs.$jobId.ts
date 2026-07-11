@@ -1,15 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { api } from '../../../convex/_generated/api'
-import type { Id } from '../../../convex/_generated/dataModel'
-import { convex } from '../../server/convexServer'
-import { readUserEmail } from '../../server/identity'
+import { app } from '../../server/app'
 
 export const Route = createFileRoute('/api/thumbs/$jobId')({
   server: {
     handlers: {
       GET: async ({ params }) => {
-        readUserEmail()
-        const job = await convex().query(api.jobs.get, { id: params.jobId as Id<'jobs'> })
+        const instance = await app()
+        instance.auth.require()
+        const job = instance.service.getJob(params.jobId)
         const match = job?.thumbnail?.match(/^data:(image\/\w+);base64,(.+)$/)
         if (!match) return new Response('not found', { status: 404, headers: { 'Cache-Control': 'no-store' } })
         return new Response(Buffer.from(match[2], 'base64'), {
