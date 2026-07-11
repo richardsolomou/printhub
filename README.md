@@ -32,7 +32,7 @@ Set the write secret on the deployment once: `npx convex env set APP_WRITE_SECRE
 
 ## Deploying to the NAS (HexOS / TrueNAS SCALE)
 
-TrueNAS custom apps pull a prebuilt image rather than building on the NAS, so the image is published to GHCR (`ghcr.io/richardsolomou/print-queue`) — either by the GitHub Actions workflow on push to main (set the `VITE_CONVEX_URL` repo variable), or manually:
+TrueNAS custom apps pull a prebuilt image rather than building on the NAS, so publish the image to GHCR (the client bundle bakes in `VITE_CONVEX_URL` at build time — rebuild after changing it):
 
 ```sh
 docker buildx build --platform linux/amd64 \
