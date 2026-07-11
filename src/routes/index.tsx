@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { createFileRoute, getRouteApi } from '@tanstack/react-router'
+import { Link, createFileRoute, getRouteApi } from '@tanstack/react-router'
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { usePostHog } from '@posthog/react'
 import { Board } from '../components/Board'
 import { RequestModal } from '../components/RequestModal'
 import { UploadForm } from '../components/UploadForm'
 import { AuthScreen } from '../components/AuthScreen'
-import { SettingsModal } from '../components/SettingsModal'
 import { requestsQuery, peopleQuery } from '../lib/queries'
 
 const rootRoute = getRouteApi('__root__')
@@ -20,14 +19,13 @@ function Home() {
 }
 
 function AuthenticatedHome() {
-  const { identity, workflow, authProvider } = rootRoute.useLoaderData()
+  const { identity, workflow } = rootRoute.useLoaderData()
   const me = identity!
   const { data: requests } = useSuspenseQuery(requestsQuery())
   useSuspenseQuery(peopleQuery())
   const queryClient = useQueryClient()
   const posthog = usePostHog()
   const [uploadOpen, setUploadOpen] = useState(false)
-  const [settingsOpen, setSettingsOpen] = useState(false)
   const [droppedFiles, setDroppedFiles] = useState<File[]>([])
   const [fileDragActive, setFileDragActive] = useState(false)
   const [openRequestId, setOpenRequestId] = useState<string | null>(null)
@@ -72,19 +70,18 @@ function AuthenticatedHome() {
         <span className="who">v{__APP_VERSION__}</span>
         <span className="header-spacer" />
         <div className="header-actions">
-          <button type="button" className="btn btn-icon" aria-label="Settings" onClick={() => setSettingsOpen(true)}>
+          <Link to="/settings" className="btn btn-icon" aria-label="Settings">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <circle cx="12" cy="12" r="3.2" />
               <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.08a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.08a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.03Z" />
             </svg>
-          </button>
+          </Link>
           <button type="button" className="btn btn-primary add-print" onClick={() => { posthog.capture('upload_opened', { source: 'button' }); setUploadOpen(true) }}>Add a print</button>
         </div>
       </header>
       <Board requests={requests} workflow={workflow} isAdmin={me.role === 'operator'} onOpenRequest={(id) => { setOpenRequestId(id); posthog.capture('request_viewed', { request_id: id }) }} />
       {fileDragActive && !uploadOpen && <div className="drop-hint">Drop STLs to add prints</div>}
       {uploadOpen && <UploadForm myName={me.name} initialFiles={droppedFiles} onClose={() => { setUploadOpen(false); setDroppedFiles([]) }} />}
-      {settingsOpen && <SettingsModal me={me} localAuth={authProvider === 'local'} onClose={() => setSettingsOpen(false)} />}
       {selectedRequest && <RequestModal request={selectedRequest} workflow={workflow} isAdmin={me.role === 'operator'} onClose={() => setOpenRequestId(null)} />}
     </div>
   )

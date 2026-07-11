@@ -723,31 +723,18 @@ select:focus-visible,
   color: var(--text);
 }
 
-.dialog-settings {
-  width: min(680px, 100%);
-}
-
-.settings-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-}
-
-.settings-head h2 {
-  margin: 0;
-}
-
-.settings-close {
-  color: var(--dim);
-  padding: 4px 8px;
+.settings-page {
+  width: min(760px, 100%);
+  margin: 0 auto;
+  padding: 28px 20px 48px;
+  overflow-y: auto;
 }
 
 .settings-body {
   display: grid;
-  grid-template-columns: 150px 1fr;
-  gap: 20px;
-  min-height: 300px;
+  grid-template-columns: 170px 1fr;
+  gap: 24px;
+  align-items: start;
 }
 
 .settings-nav {

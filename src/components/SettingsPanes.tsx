@@ -4,13 +4,11 @@ import { useServerFn } from '@tanstack/react-start'
 import type { AuthConfig, Identity, StorageConfig, TelemetryConfig } from '../core/types'
 import { changePassword, createUser, logout, updateAuthSettings, updateStorageSettings, updateTelemetrySettings } from '../server/fns'
 import { authQuery, storageQuery, telemetryQuery, usersQuery } from '../lib/queries'
-import { useEscape } from '../lib/useEscape'
 
 type Pane = 'account' | 'users' | 'auth' | 'storage' | 'telemetry' | 'about'
 
-export function SettingsModal({ me, localAuth, onClose }: { me: Identity; localAuth: boolean; onClose: () => void }) {
+export function SettingsPanes({ me, localAuth }: { me: Identity; localAuth: boolean }) {
   const [pane, setPane] = useState<Pane>('account')
-  useEscape(onClose)
   const operator = me.role === 'operator'
   const panes: { id: Pane; label: string }[] = [
     { id: 'account', label: 'Account' },
@@ -24,34 +22,26 @@ export function SettingsModal({ me, localAuth, onClose }: { me: Identity; localA
   ]
 
   return (
-    <div className="overlay" onClick={(event) => event.target === event.currentTarget && onClose()}>
-      <div className="dialog dialog-settings">
-        <div className="settings-head">
-          <h2>Settings</h2>
-          <button type="button" className="btn settings-close" aria-label="Close settings" onClick={onClose}>✕</button>
-        </div>
-        <div className="settings-body">
-          <nav className="settings-nav" aria-label="Settings sections">
-            {panes.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className={`settings-nav-item${pane === item.id ? ' active' : ''}`}
-                onClick={() => setPane(item.id)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </nav>
-          <div className="settings-pane">
-            {pane === 'account' && <AccountPane me={me} localAuth={localAuth} />}
-            {pane === 'users' && operator && <UsersPane />}
-            {pane === 'auth' && operator && <AuthPane />}
-            {pane === 'storage' && operator && <StoragePane />}
-            {pane === 'telemetry' && operator && <TelemetryPane />}
-            {pane === 'about' && <AboutPane localAuth={localAuth} />}
-          </div>
-        </div>
+    <div className="settings-body">
+      <nav className="settings-nav" aria-label="Settings sections">
+        {panes.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={`settings-nav-item${pane === item.id ? ' active' : ''}`}
+            onClick={() => setPane(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </nav>
+      <div className="settings-pane">
+        {pane === 'account' && <AccountPane me={me} localAuth={localAuth} />}
+        {pane === 'users' && operator && <UsersPane />}
+        {pane === 'auth' && operator && <AuthPane />}
+        {pane === 'storage' && operator && <StoragePane />}
+        {pane === 'telemetry' && operator && <TelemetryPane />}
+        {pane === 'about' && <AboutPane localAuth={localAuth} />}
       </div>
     </div>
   )
