@@ -4,10 +4,11 @@ import path from 'node:path'
 import initialMigration from './migrations/001_initial.sql?raw'
 import operationsMigration from './migrations/002_operations.sql?raw'
 import durableUploadsMigration from './migrations/003_uploads_and_reservations.sql?raw'
+import settingsMigration from './migrations/004_settings.sql?raw'
 import type { Identity, PrintRequest, NewPrintRequest, OperationPayload, PendingOperation, Person, Repository, Role, UploadOperation } from '../core/types'
 import { initialStatus, workflow } from '../core/workflow'
 
-const migrations = [{ version: 1, sql: initialMigration }, { version: 2, sql: operationsMigration }, { version: 3, sql: durableUploadsMigration }]
+const migrations = [{ version: 1, sql: initialMigration }, { version: 2, sql: operationsMigration }, { version: 3, sql: durableUploadsMigration }, { version: 4, sql: settingsMigration }]
 
 type RequestRow = {
   id: string; name: string; file_name: string; file_path: string; quantity: number
@@ -130,6 +131,16 @@ export class SqliteRepository implements Repository {
 
   listUsers() {
     return this.db.prepare('SELECT id,email,name,role FROM users ORDER BY name').all() as Identity[]
+  }
+
+  getSetting<T>(key: string): T | undefined {
+    const row = this.db.prepare('SELECT value_json FROM settings WHERE key=?').get(key) as { value_json: string } | undefined
+    return row ? (JSON.parse(row.value_json) as T) : undefined
+  }
+
+  setSetting(key: string, value: unknown) {
+    this.db.prepare('INSERT INTO settings (key,value_json,updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at')
+      .run(key, JSON.stringify(value), Date.now())
   }
 
   findUserByEmail(email: string) { return this.user(this.db.prepare('SELECT * FROM users WHERE email=?').get(email.toLowerCase())) }

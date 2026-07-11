@@ -34,6 +34,14 @@ describe('SqliteRepository contract', () => {
     expect(repository.getRequest(id)).toBeUndefined()
   })
 
+  it('round-trips JSON settings by key', () => {
+    expect(repository.getSetting('storage')).toBeUndefined()
+    repository.setSetting('storage', { adapter: 'local', root: '/prints' })
+    expect(repository.getSetting('storage')).toEqual({ adapter: 'local', root: '/prints' })
+    repository.setSetting('storage', { adapter: 's3', bucket: 'prints' })
+    expect(repository.getSetting('storage')).toEqual({ adapter: 's3', bucket: 'prints' })
+  })
+
   it('stores users and expiring hashed sessions', () => {
     const user = repository.createUser({ email: 'OP@example.com', name: 'Operator', passwordHash: 'hash', role: 'operator' })
     repository.createSession({ tokenHash: 'token', userId: user.id, expiresAt: Date.now() + 1000 })

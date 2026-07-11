@@ -94,6 +94,8 @@ export interface Repository {
   deleteRequest(id: string): void
   listPeople(): Person[]
   listUsers(): Identity[]
+  getSetting<T>(key: string): T | undefined
+  setSetting(key: string, value: unknown): void
   findUserByEmail(email: string): Identity | undefined
   countUsers(): number
   createUser(input: { email: string; name: string; passwordHash?: string; role: Role }): Identity
@@ -138,6 +140,19 @@ export interface AssetStore {
   sweepTrash(): Promise<void>
   writable(): Promise<void>
 }
+
+export type StorageConfig =
+  | { adapter: 'local'; root: string }
+  | {
+      adapter: 's3'
+      endpoint: string
+      region: string
+      bucket: string
+      prefix?: string
+      accessKeyId: string
+      secretAccessKey: string
+      forcePathStyle: boolean
+    }
 
 export interface EventBus {
   publish(event: string): void
