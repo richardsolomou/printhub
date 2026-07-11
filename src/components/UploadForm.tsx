@@ -2,7 +2,8 @@ import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { convexQuery } from '@convex-dev/react-query'
 import { api } from '../../convex/_generated/api'
-import { renderStlThumbnail } from '../lib/thumbnail'
+import { prepareUploadAssets } from '../lib/uploadAssets'
+import { isIOS, isPhone } from '../lib/device'
 import { useEscape } from '../lib/useEscape'
 
 const StlViewer = lazy(() => import('./StlViewer'))
@@ -10,20 +11,6 @@ const StlViewer = lazy(() => import('./StlViewer'))
 const MAX_FILE_BYTES = 1024 * 1024 * 1024
 // Each chunk stays well under Cloudflare's 100 MB request-body cap.
 const CHUNK_BYTES = 32 * 1024 * 1024
-
-// Phones get a one-shot thumbnail; a live viewer holding a multi-million
-// triangle mesh is what actually kills them. Desktops can take it.
-const isPhone = () =>
-  typeof navigator !== 'undefined' &&
-  (((navigator as { userAgentData?: { mobile?: boolean } }).userAgentData?.mobile ?? false) ||
-    /iPhone|iPod|Android.*Mobile/.test(navigator.userAgent))
-
-// iOS greys out files whose types it can't map from `accept` (.stl isn't a
-// recognised UTI), so leave the picker unrestricted there; we validate anyway.
-const isIOS = () =>
-  typeof navigator !== 'undefined' &&
-  (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
 
 type Entry = {
   key: string
@@ -33,6 +20,7 @@ type Entry = {
   notes: string
   noteOpen: boolean
   thumbnail?: string
+  preview?: File
   state: 'pending' | 'uploading' | 'done' | 'error'
 }
 
@@ -50,6 +38,7 @@ export function UploadForm({
   const { data: people } = useSuspenseQuery(convexQuery(api.users.list, {}))
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [entries, setEntries] = useState<Entry[]>([])
+  const assetPromises = useRef(new Map<string, Promise<{ thumbnail?: string; preview?: File }>>())
   const [forName, setForName] = useState(myName)
   const [dragOver, setDragOver] = useState(false)
   const [error, setError] = useState('')
@@ -94,11 +83,13 @@ export function UploadForm({
         state: 'pending',
       }
       accepted.push(entry)
-      renderStlThumbnail(file).then((thumbnail) => {
-        if (thumbnail) {
-          setEntries((prev) => prev.map((e) => (e.key === entry.key ? { ...e, thumbnail } : e)))
-        }
-      })
+      assetPromises.current.set(
+        entry.key,
+        prepareUploadAssets(file).then((assets) => {
+          setEntries((prev) => prev.map((e) => (e.key === entry.key ? { ...e, ...assets } : e)))
+          return assets
+        }),
+      )
     }
     if (accepted.length) setEntries((prev) => [...prev, ...accepted])
     if (rejected.length) setError(`Skipped: ${rejected.join(', ')}`)
@@ -138,13 +129,16 @@ export function UploadForm({
       form.set('offset', String(offset))
       form.set('chunk', file.slice(offset, end))
       if (isFinal) {
+        // The thumbnail/preview may still be generating in the worker.
+        const assets = (await assetPromises.current.get(entry.key)) ?? {}
         form.set('final', '1')
         form.set('fileName', file.name)
         form.set('name', entry.name.trim() || file.name.replace(/\.stl$/i, ''))
         form.set('quantity', String(Math.min(50, Math.max(1, Math.round(Number(entry.quantity) || 1)))))
         form.set('requesterName', forName)
         form.set('notes', entry.notes)
-        if (entry.thumbnail) form.set('thumbnail', entry.thumbnail)
+        if (assets.thumbnail) form.set('thumbnail', assets.thumbnail)
+        if (assets.preview) form.set('preview', assets.preview)
       }
       const chunkStart = offset
       await postChunk(form, (loaded) =>
@@ -156,6 +150,7 @@ export function UploadForm({
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
+    if (busy) return
     if (entries.length === 0) {
       setError('Pick at least one STL first.')
       return

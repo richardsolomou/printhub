@@ -23,6 +23,7 @@ export default defineSchema({
     orders: v.object(perStatusOrder),
     notes: v.optional(v.string()),
     thumbnail: v.optional(v.string()),
+    previewPath: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   }),

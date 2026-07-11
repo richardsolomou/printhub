@@ -545,6 +545,24 @@ select:focus-visible,
   height: 100%;
 }
 
+.viewer .load-full {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: var(--dim);
+  background: rgb(23 24 28 / 0.8);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+.viewer .load-full:hover {
+  color: var(--amber);
+  border-color: var(--amber);
+}
+
 .viewer .viewer-status {
   position: absolute;
   inset: 0;

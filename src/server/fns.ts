@@ -99,4 +99,5 @@ export const deleteJob = createServerFn({ method: 'POST' })
     if (!job) return
     await convex().mutation(api.jobs.remove, { secret: writeSecret(), id })
     await fs.promises.rm(absolutePath(job.filePath), { force: true })
+    if (job.previewPath) await fs.promises.rm(absolutePath(job.previewPath), { force: true })
   })

@@ -8,9 +8,10 @@ import {
 } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { convexQuery } from '@convex-dev/react-query'
-import type { Doc } from '../../convex/_generated/dataModel'
 import { api } from '../../convex/_generated/api'
 import type { Status } from '../../convex/statuses'
+import type { Job } from '../lib/jobTypes'
+import { LazyThumb } from './LazyThumb'
 import { requesterColor, requesterLabel } from '../lib/requester'
 
 export function JobCard({
@@ -20,7 +21,7 @@ export function JobCard({
   canDrag,
   onOpen,
 }: {
-  job: Doc<'jobs'>
+  job: Job
   status: Status
   count: number
   canDrag: boolean
@@ -67,9 +68,13 @@ export function JobCard({
       data-edge={closestEdge ?? undefined}
       onClick={onOpen}
     >
-      <div className="thumb">
-        {job.thumbnail ? <img src={job.thumbnail} alt="" /> : <span className="placeholder">stl</span>}
-      </div>
+      {job.hasThumbnail ? (
+        <LazyThumb jobId={job._id} />
+      ) : (
+        <div className="thumb">
+          <span className="placeholder">stl</span>
+        </div>
+      )}
       <div className="card-info">
         <div className="card-title">{job.name}</div>
         <div className="card-meta">

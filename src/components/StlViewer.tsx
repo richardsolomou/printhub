@@ -3,10 +3,21 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three-stdlib'
 import { buildScene, frameCamera, parseStl } from '../lib/stl'
 
-export default function StlViewer({ jobId, file }: { jobId?: string; file?: File }) {
+export default function StlViewer({
+  jobId,
+  file,
+  hasPreview = false,
+}: {
+  jobId?: string
+  file?: File
+  hasPreview?: boolean
+}) {
   const mountRef = useRef<HTMLDivElement>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [statusText, setStatusText] = useState('loading model…')
+  const [fullRequested, setFullRequested] = useState(false)
+
+  const showingPreview = hasPreview && !fullRequested
 
   useEffect(() => {
     const mount = mountRef.current
@@ -26,9 +37,10 @@ export default function StlViewer({ jobId, file }: { jobId?: string; file?: File
         if (file) {
           buffer = await file.arrayBuffer()
         } else {
-          const res = await fetch(`/api/files/${jobId}?inline=1`)
+          const res = await fetch(`/api/files/${jobId}?inline=1${showingPreview ? '&preview=1' : ''}`)
           if (!res.ok) throw new Error(`fetch failed: ${res.status}`)
-          const total = Number(res.headers.get('Content-Length')) || 0
+          // Content-Length is the compressed size when gzipped; the real size travels separately.
+          const total = Number(res.headers.get('X-File-Size') ?? res.headers.get('Content-Length')) || 0
           if (res.body && total) {
             const reader = res.body.getReader()
             const data = new Uint8Array(total)
@@ -47,6 +59,7 @@ export default function StlViewer({ jobId, file }: { jobId?: string; file?: File
         }
         setStatusText('preparing model…')
         await new Promise((r) => setTimeout(r)) // let the status paint before the parse blocks
+
         const geometry = parseStl(buffer)
         if (disposed) {
           geometry.dispose()
@@ -97,12 +110,17 @@ export default function StlViewer({ jobId, file }: { jobId?: string; file?: File
         renderer.domElement.remove()
       }
     }
-  }, [jobId, file])
+  }, [jobId, file, showingPreview])
 
   return (
     <div className="viewer" ref={mountRef}>
       {status === 'loading' && <div className="viewer-status">{statusText}</div>}
       {status === 'error' && <div className="viewer-status">couldn't load this model</div>}
+      {status === 'ready' && showingPreview && (
+        <button type="button" className="load-full" onClick={() => setFullRequested(true)}>
+          preview · load full detail
+        </button>
+      )}
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { dropTargetForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter'
-import type { Doc } from '../../convex/_generated/dataModel'
 import { STATUS_LABELS, type Status } from '../../convex/statuses'
+import type { Job } from '../lib/jobTypes'
 import { JobCard } from './JobCard'
 
 const EMPTY_COPY: Record<Status, string> = {
@@ -17,7 +17,7 @@ export function Column({
   onOpenJob,
 }: {
   status: Status
-  entries: { job: Doc<'jobs'>; count: number }[]
+  entries: { job: Job; count: number }[]
   isAdmin: boolean
   onOpenJob: (jobId: string) => void
 }) {

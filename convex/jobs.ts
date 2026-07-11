@@ -8,9 +8,15 @@ function assertSecret(secret: string) {
   }
 }
 
+// Thumbnails are heavy data-URLs; the board fetches them lazily over HTTP
+// instead of carrying them in every realtime update.
 export const list = query({
   args: {},
-  handler: (ctx) => ctx.db.query('jobs').order('desc').collect(),
+  handler: async (ctx) =>
+    (await ctx.db.query('jobs').order('desc').collect()).map(({ thumbnail, ...job }) => ({
+      ...job,
+      hasThumbnail: thumbnail !== undefined,
+    })),
 })
 
 export const get = query({
@@ -29,6 +35,7 @@ export const create = mutation({
     requesterName: v.optional(v.string()),
     notes: v.optional(v.string()),
     thumbnail: v.optional(v.string()),
+    previewPath: v.optional(v.string()),
   },
   handler: async (ctx, { secret, ...job }) => {
     assertSecret(secret)
@@ -98,6 +105,16 @@ export const update = mutation({
       Object.assign(patch, { quantity, counts: { ...job.counts, todo: quantity - started } })
     }
     await ctx.db.patch(id, { ...patch, updatedAt: Date.now() })
+  },
+})
+
+export const setPreview = mutation({
+  args: { secret: v.string(), id: v.id('jobs'), previewPath: v.string() },
+  handler: async (ctx, { secret, id, previewPath }) => {
+    assertSecret(secret)
+    const job = await ctx.db.get(id)
+    if (!job || job.previewPath) throw new Error('preview already set')
+    await ctx.db.patch(id, { previewPath })
   },
 })
 

@@ -3,7 +3,7 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { convexQuery } from '@convex-dev/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { api } from '../../convex/_generated/api'
-import type { Doc } from '../../convex/_generated/dataModel'
+import type { Job } from '../lib/jobTypes'
 import { STATUSES, STATUS_LABELS } from '../../convex/statuses'
 import { requesterColor, requesterLabel } from '../lib/requester'
 import { useEscape } from '../lib/useEscape'
@@ -17,7 +17,7 @@ export function JobModal({
   userEmail,
   onClose,
 }: {
-  job: Doc<'jobs'>
+  job: Job
   isAdmin: boolean
   userEmail: string
   onClose: () => void
@@ -86,7 +86,7 @@ export function JobModal({
         <h2>{job.name}</h2>
 
         <Suspense fallback={<div className="viewer"><div className="viewer-status">loading viewer…</div></div>}>
-          <StlViewer jobId={job._id} />
+          <StlViewer jobId={job._id} hasPreview={!!job.previewPath} />
         </Suspense>
 
         <div className="modal-meta">

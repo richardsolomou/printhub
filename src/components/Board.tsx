@@ -2,13 +2,12 @@ import { useCallback, useEffect, useState } from 'react'
 import { monitorForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter'
 import { extractClosestEdge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge'
 import { useServerFn } from '@tanstack/react-start'
-import type { Doc } from '../../convex/_generated/dataModel'
+import type { Job } from '../lib/jobTypes'
 import { STATUSES, type Status } from '../../convex/statuses'
 import { moveCopies, reorderJob } from '../server/fns'
 import { Column } from './Column'
 import { MoveDialog } from './MoveDialog'
 
-type Job = Doc<'jobs'>
 type Override = { counts: Job['counts']; orders: Job['orders'] }
 type PendingMove = { jobId: string; from: Status; to: Status; max: number; order?: number }
 
