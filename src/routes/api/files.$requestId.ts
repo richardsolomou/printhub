@@ -1,4 +1,3 @@
-import fs from 'node:fs'
 import zlib from 'node:zlib'
 import { Readable } from 'node:stream'
 import { createFileRoute } from '@tanstack/react-router'
@@ -16,12 +15,11 @@ export const Route = createFileRoute('/api/files/$requestId')({
         const url = new URL(request.url)
         const wantPreview = url.searchParams.get('preview') === '1'
         const relativePath = wantPreview && printRequest.previewPath ? printRequest.previewPath : printRequest.filePath
-        const filePath = instance.assets.absolute(relativePath)
-        let size: number
+        let asset: { stream: ReadableStream; size: number }
         try {
-          size = (await fs.promises.stat(filePath)).size
+          asset = await instance.assets.read(relativePath)
         } catch {
-          return new Response('file missing on disk', { status: 404 })
+          return new Response('file missing in storage', { status: 404 })
         }
 
         const headers = new Headers({
@@ -29,7 +27,7 @@ export const Route = createFileRoute('/api/files/$requestId')({
           // A request's file never changes, so let the browser keep it.
           'Cache-Control': 'private, max-age=31536000, immutable',
           // Uncompressed size, so the client can show progress across gzip.
-          'X-File-Size': String(size),
+          'X-File-Size': String(asset.size),
         })
         if (url.searchParams.get('inline') !== '1') {
           const safeName = printRequest.fileName.replace(/["\r\n]/g, '')
@@ -37,14 +35,13 @@ export const Route = createFileRoute('/api/files/$requestId')({
         }
 
         // STL binary gzips ~2-3x; fastest level keeps NAS CPU cheap.
-        const stream = fs.createReadStream(filePath)
         if ((request.headers.get('accept-encoding') ?? '').includes('gzip')) {
           headers.set('Content-Encoding', 'gzip')
           const gzip = zlib.createGzip({ level: zlib.constants.Z_BEST_SPEED })
-          return new Response(Readable.toWeb(stream.pipe(gzip)) as ReadableStream, { headers })
+          return new Response(Readable.toWeb(Readable.fromWeb(asset.stream as Parameters<typeof Readable.fromWeb>[0]).pipe(gzip)) as ReadableStream, { headers })
         }
-        headers.set('Content-Length', String(size))
-        return new Response(Readable.toWeb(stream) as ReadableStream, { headers })
+        headers.set('Content-Length', String(asset.size))
+        return new Response(asset.stream, { headers })
       },
     },
   },

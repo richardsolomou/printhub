@@ -8,7 +8,7 @@ export const Route = createFileRoute('/api/health')({
         try {
           const instance = await app()
           instance.repository.countUsers()
-          await instance.assets.writable()
+          await Promise.all([instance.assets.writable(), instance.staging.writable()])
           return Response.json({ ok: true })
         } catch {
           return Response.json({ ok: false }, { status: 503 })

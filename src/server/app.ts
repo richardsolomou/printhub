@@ -1,5 +1,6 @@
 import { SqliteRepository } from '../adapters/sqlite'
 import { LocalAssetStore } from '../adapters/filesystem'
+import { UploadStaging } from '../adapters/staging'
 import { LocalAuthProvider, TrustedHeaderAuthProvider } from '../adapters/auth'
 import { LocalEventBus } from '../adapters/events'
 import { OptionalPostHogTelemetry } from '../adapters/telemetry'
@@ -13,23 +14,25 @@ async function createApp() {
     repository = SqliteRepository.open()
     const assets = new LocalAssetStore()
     await assets.initialize()
+    const staging = new UploadStaging()
+    await staging.initialize()
     const events = new LocalEventBus()
     const telemetry = new OptionalPostHogTelemetry()
     const auth = process.env.AUTH_PROVIDER === 'trusted-header'
       ? new TrustedHeaderAuthProvider(repository)
       : new LocalAuthProvider(repository)
-    const service = new PrintHubService(repository, assets, events, telemetry)
+    const service = new PrintHubService(repository, assets, staging, events, telemetry)
     await service.recoverOperations()
     repository.reconcileWorkflow()
     for (const uploadId of repository.expireUploads(Date.now())) {
       await Promise.allSettled([
-        import('node:fs').then(({ promises }) => promises.rm(assets.uploadPart(uploadId), { force: true })),
-        import('node:fs').then(({ promises }) => promises.rm(assets.uploadPreviewPart(uploadId), { force: true })),
+        staging.remove(staging.uploadPart(uploadId)),
+        staging.remove(staging.uploadPreviewPart(uploadId)),
       ])
     }
-    await assets.sweepUploads(repository.activeUploadIds(Date.now()))
+    await staging.sweepUploads(repository.activeUploadIds(Date.now()))
     await assets.sweepTrash()
-    return { repository, assets, events, telemetry, auth, service }
+    return { repository, assets, staging, events, telemetry, auth, service }
   } catch (error) {
     repository?.close()
     throw error

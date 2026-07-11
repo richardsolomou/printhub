@@ -4,6 +4,7 @@ import path from 'node:path'
 import Database from 'better-sqlite3'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LocalAssetStore } from '../adapters/filesystem'
+import { UploadStaging } from '../adapters/staging'
 import { LocalEventBus } from '../adapters/events'
 import { SqliteRepository } from '../adapters/sqlite'
 import type { Identity, Telemetry } from './types'
@@ -17,15 +18,17 @@ describe('PrintHubService crash recovery', () => {
   let data: string
   let repository: SqliteRepository
   let assets: LocalAssetStore
+  let staging: UploadStaging
   let service: PrintHubService
 
   beforeEach(async () => {
     root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-service-'))
     data = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-service-data-'))
     repository = new SqliteRepository(new Database(':memory:'))
-    assets = new LocalAssetStore(root, data)
-    await assets.initialize()
-    service = new PrintHubService(repository, assets, new LocalEventBus(), telemetry)
+    assets = new LocalAssetStore(root)
+    staging = new UploadStaging(data)
+    await Promise.all([assets.initialize(), staging.initialize()])
+    service = new PrintHubService(repository, assets, staging, new LocalEventBus(), telemetry)
   })
 
   afterEach(async () => {
@@ -150,9 +153,9 @@ describe('PrintHubService crash recovery', () => {
   })
 
   it('compensates the original when preview persistence fails', async () => {
-    const part = assets.uploadPart('preview-failure-upload')
+    const part = staging.uploadPart('preview-failure-upload')
     await fs.promises.writeFile(part, 'stl')
-    vi.spyOn(assets, 'writeUploadPart').mockRejectedValueOnce(new Error('preview full'))
+    vi.spyOn(staging, 'writeUploadPart').mockRejectedValueOnce(new Error('preview full'))
     repository.createUploadSession('preview-failure-upload', operator.id, Date.now() + 60_000, 3)
     await expect(service.createUploadedRequest('preview-failure-upload', part, {
       name: 'Model', fileName: 'model.stl', quantity: 1, requesterEmail: 'owner@example.com',
@@ -162,7 +165,7 @@ describe('PrintHubService crash recovery', () => {
   })
 
   it('keeps a journaled upload recoverable when metadata insertion fails', async () => {
-    const part = assets.uploadPart('metadata-failure-upload')
+    const part = staging.uploadPart('metadata-failure-upload')
     await fs.promises.writeFile(part, 'stl')
     const failure = vi.spyOn(repository, 'completeUploadOperation').mockImplementationOnce(() => { throw new Error('database full') })
     repository.createUploadSession('metadata-failure-upload', operator.id, Date.now() + 60_000, 3)
@@ -199,7 +202,7 @@ describe('PrintHubService crash recovery', () => {
 
   it('recovers when the original finalize fails after the preview is durable', async () => {
     const uploadId = 'original-finalize-retry'
-    const part = assets.uploadPart(uploadId)
+    const part = staging.uploadPart(uploadId)
     await fs.promises.writeFile(part, 'stl')
     repository.createUploadSession(uploadId, operator.id, Date.now() + 60_000, 3)
     const original = assets.finalizeUpload.bind(assets)
@@ -221,7 +224,7 @@ describe('PrintHubService crash recovery', () => {
 
   it('contains rejected optional telemetry promises', async () => {
     const rejecting: Telemetry = { capture: async () => { throw new Error('telemetry down') }, exception: async () => undefined }
-    service = new PrintHubService(repository, assets, new LocalEventBus(), rejecting)
+    service = new PrintHubService(repository, assets, staging, new LocalEventBus(), rejecting)
     const unhandled = vi.fn()
     process.on('unhandledRejection', unhandled)
     try {
@@ -249,7 +252,7 @@ describe('PrintHubService crash recovery', () => {
 
   it('returns the original request for an ambiguous final-upload retry', async () => {
     const uploadId = 'ambiguous-upload-id'
-    const part = assets.uploadPart(uploadId)
+    const part = staging.uploadPart(uploadId)
     await fs.promises.writeFile(part, 'stl')
     repository.createUploadSession(uploadId, operator.id, Date.now() + 60_000, 3)
     const input = { name: 'Model', fileName: 'model.stl', quantity: 1, requesterEmail: 'owner@example.com' }
@@ -264,7 +267,7 @@ describe('PrintHubService crash recovery', () => {
     repository.createUploadSession(uploadId, operator.id, Date.now() + 60_000, 3)
     repository.beginUploadOperation(crypto.randomUUID(), {
       kind: 'upload', uploadId, ownerId: operator.id, requestId: crypto.randomUUID(),
-      partPath: assets.uploadPart(uploadId), destinationPath: 'todo/missing.stl',
+      partPath: staging.uploadPart(uploadId), destinationPath: 'todo/missing.stl',
       request: { name: 'Missing', fileName: 'missing.stl', quantity: 1, requesterEmail: operator.email },
     })
     await service.recoverOperations()

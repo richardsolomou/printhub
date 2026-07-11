@@ -118,26 +118,37 @@ export interface Repository {
   abandonOperation(id: string): void
 }
 
+// Final print-file storage. Keys are '/'-separated paths from core/assetKeys;
+// implementations must honor the operation journal's idempotency contract
+// (ensureMoved truth table, idempotent finalizeUpload, retryable purge).
 export interface AssetStore {
   initialize(): Promise<void>
-  absolute(relativePath: string): string
   createPath(originalFileName: string): string
   previewPath(originalRelativePath: string): string
-  finalizeUpload(partPath: string, relativePath: string): Promise<void>
+  finalizeUpload(stagedPath: string, relativePath: string): Promise<void>
   write(relativePath: string, bytes: Uint8Array): Promise<void>
+  read(relativePath: string): Promise<{ stream: ReadableStream; size: number }>
   move(relativePath: string, statusId: string): Promise<string>
   remove(relativePath: string): Promise<void>
   trash(relativePath: string): Promise<string | undefined>
   purgeTrash(trashPath: string): Promise<void>
-  uploadPart(uploadId: string): string
-  uploadPreviewPart(uploadId: string): string
-  writeUploadPart(filePath: string, bytes: Uint8Array): Promise<void>
-  sweepUploads(exclude?: ReadonlySet<string>): Promise<void>
   destinationPath(relativePath: string, statusId: string): string
   ensureMoved(sourcePath: string, destinationPath: string): Promise<void>
   exists(relativePath: string): Promise<boolean>
   trashPath(operationId: string, relativePath: string): string
   sweepTrash(): Promise<void>
+  writable(): Promise<void>
+}
+
+// Local-disk staging for in-flight chunked uploads; always filesystem-backed.
+export interface UploadStagingArea {
+  initialize(): Promise<void>
+  uploadPart(uploadId: string): string
+  uploadPreviewPart(uploadId: string): string
+  writeUploadPart(filePath: string, bytes: Uint8Array): Promise<void>
+  size(filePath: string): Promise<number>
+  remove(filePath: string): Promise<void>
+  sweepUploads(exclude?: ReadonlySet<string>): Promise<void>
   writable(): Promise<void>
 }
 

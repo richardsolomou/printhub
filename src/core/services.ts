@@ -1,10 +1,11 @@
-import type { AssetStore, DeleteOperation, EventBus, Identity, MoveOperation, NewPrintRequest, PendingOperation, Repository, Telemetry, UploadOperation } from './types'
+import type { AssetStore, DeleteOperation, EventBus, Identity, MoveOperation, NewPrintRequest, PendingOperation, Repository, Telemetry, UploadOperation, UploadStagingArea } from './types'
 import { initialStatus, statusById, workflow } from './workflow'
 
 export class PrintHubService {
   constructor(
     private repository: Repository,
     private assets: AssetStore,
+    private staging: UploadStagingArea,
     private events: EventBus,
     private telemetry: Telemetry,
   ) {}
@@ -37,16 +38,16 @@ export class PrintHubService {
     if (completed) return completed
     const filePath = this.assets.createPath(input.fileName)
     const previewPath = preview ? this.assets.previewPath(filePath) : undefined
-    const previewPartPath = preview ? this.assets.uploadPreviewPart(uploadId) : undefined
+    const previewPartPath = preview ? this.staging.uploadPreviewPart(uploadId) : undefined
     const operation: UploadOperation = {
       kind: 'upload', uploadId, ownerId: identity.id, requestId: crypto.randomUUID(), partPath,
       destinationPath: filePath, previewPartPath, previewDestinationPath: previewPath, request: input,
     }
     try {
-      if (preview && previewPartPath) await this.assets.writeUploadPart(previewPartPath, preview)
+      if (preview && previewPartPath) await this.staging.writeUploadPart(previewPartPath, preview)
       this.repository.beginUploadOperation(crypto.randomUUID(), operation)
     } catch (error) {
-      if (previewPartPath) await fsRemove(previewPartPath)
+      if (previewPartPath) await this.staging.remove(previewPartPath)
       throw error
     }
     const pending = this.repository.listOperations().find((candidate) => candidate.payload.kind === 'upload' && candidate.payload.uploadId === uploadId)
@@ -237,7 +238,3 @@ export function validSourceUrl(value: string) {
   }
 }
 
-async function fsRemove(filePath: string) {
-  const { promises } = await import('node:fs')
-  await promises.rm(filePath, { force: true })
-}

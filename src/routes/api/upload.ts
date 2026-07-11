@@ -1,4 +1,3 @@
-import fs from 'node:fs'
 import path from 'node:path'
 import { createFileRoute } from '@tanstack/react-router'
 import { app } from '../../server/app'
@@ -30,8 +29,8 @@ export const Route = createFileRoute('/api/upload')({
         uploadLocks.expire()
         for (const expired of instance.repository.expireUploads(Date.now())) {
           await Promise.allSettled([
-            fs.promises.rm(instance.assets.uploadPart(expired), { force: true }),
-            fs.promises.rm(instance.assets.uploadPreviewPart(expired), { force: true }),
+            instance.staging.remove(instance.staging.uploadPart(expired)),
+            instance.staging.remove(instance.staging.uploadPreviewPart(expired)),
           ])
         }
         const releaseRequest = uploadRequests.enter(identity.id)
@@ -50,7 +49,7 @@ export const Route = createFileRoute('/api/upload')({
           try {
             const session = instance.repository.createUploadSession(uploadId, identity.id, Date.now() + 86_400_000, 3)
             if (session.completedRequestId) return Response.json({ id: session.completedRequestId, completed: true })
-            const acceptedOffset = await fs.promises.stat(instance.assets.uploadPart(uploadId)).then((value) => value.size).catch(() => 0)
+            const acceptedOffset = await instance.staging.size(instance.staging.uploadPart(uploadId))
             return Response.json({ acceptedOffset })
           } finally {
             releaseRequest()
@@ -73,9 +72,9 @@ export const Route = createFileRoute('/api/upload')({
             completed = true
             return Response.json({ id: session.completedRequestId })
           }
-          const part = instance.assets.uploadPart(uploadId)
+          const part = instance.staging.uploadPart(uploadId)
           if (offset === 0 && session.fresh) {
-            await fs.promises.rm(part, { force: true })
+            await instance.staging.remove(part)
           }
           const chunkBytes = Buffer.from(await chunk.arrayBuffer())
           if (!instance.repository.reserveUpload(uploadId, identity.id, offset + chunk.size, Date.now() + 86_400_000, { count: 3, bytes: MAX_TOTAL_BYTES })) {
