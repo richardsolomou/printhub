@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
-import type { AuthConfig, Identity, StorageConfig } from '../core/types'
-import { changePassword, createUser, logout, updateAuthSettings, updateStorageSettings } from '../server/fns'
-import { authQuery, storageQuery, usersQuery } from '../lib/queries'
+import type { AuthConfig, Identity, StorageConfig, TelemetryConfig } from '../core/types'
+import { changePassword, createUser, logout, updateAuthSettings, updateStorageSettings, updateTelemetrySettings } from '../server/fns'
+import { authQuery, storageQuery, telemetryQuery, usersQuery } from '../lib/queries'
 import { useEscape } from '../lib/useEscape'
 
-type Pane = 'account' | 'users' | 'auth' | 'storage' | 'about'
+type Pane = 'account' | 'users' | 'auth' | 'storage' | 'telemetry' | 'about'
 
 export function SettingsModal({ me, localAuth, onClose }: { me: Identity; localAuth: boolean; onClose: () => void }) {
   const [pane, setPane] = useState<Pane>('account')
@@ -18,6 +18,7 @@ export function SettingsModal({ me, localAuth, onClose }: { me: Identity; localA
       { id: 'users' as const, label: 'Users' },
       { id: 'auth' as const, label: 'Authentication' },
       { id: 'storage' as const, label: 'Storage' },
+      { id: 'telemetry' as const, label: 'Telemetry' },
     ] : []),
     { id: 'about', label: 'About' },
   ]
@@ -47,6 +48,7 @@ export function SettingsModal({ me, localAuth, onClose }: { me: Identity; localA
             {pane === 'users' && operator && <UsersPane />}
             {pane === 'auth' && operator && <AuthPane />}
             {pane === 'storage' && operator && <StoragePane />}
+            {pane === 'telemetry' && operator && <TelemetryPane />}
             {pane === 'about' && <AboutPane localAuth={localAuth} />}
           </div>
         </div>
@@ -315,6 +317,50 @@ function StorageForm({ current }: { current: StorageConfig }) {
       {error && <p className="error">{error}</p>}
       {saved && <p className="settings-saved">Storage settings saved and applied.</p>}
       <button className="btn btn-primary" disabled={busy}>{busy ? 'Checking storage…' : 'Save storage settings'}</button>
+    </form>
+  )
+}
+
+function TelemetryPane() {
+  const { data: current } = useQuery(telemetryQuery())
+  if (!current) return <h3>Telemetry</h3>
+  return <TelemetryForm key={current.token} current={current} />
+}
+
+function TelemetryForm({ current }: { current: TelemetryConfig }) {
+  const callUpdate = useServerFn(updateTelemetrySettings)
+  const queryClient = useQueryClient()
+  const [token, setToken] = useState(current.token)
+  const [host, setHost] = useState(current.host || 'https://us.i.posthog.com')
+  const [error, setError] = useState('')
+  const [saved, setSaved] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    setSaved(false)
+    try {
+      await callUpdate({ data: { token, host } })
+      await queryClient.invalidateQueries({ queryKey: ['telemetry'] })
+      setSaved(true)
+    } catch (err) {
+      const message = err instanceof Error && err.message ? err.message : ''
+      setError(message || 'Could not save telemetry settings.')
+    }
+    setBusy(false)
+  }
+
+  return (
+    <form onSubmit={submit} className="settings-form">
+      <h3>Telemetry</h3>
+      <p className="settings-dim">Optional PostHog analytics for this instance. Leave the token blank for no telemetry at all.</p>
+      <div className="field"><label htmlFor="telemetry-token">Project token</label><input id="telemetry-token" value={token} onChange={(event) => setToken(event.target.value)} placeholder="phc_…" autoComplete="off" /></div>
+      <div className="field"><label htmlFor="telemetry-host">Host</label><input id="telemetry-host" type="url" value={host} onChange={(event) => setHost(event.target.value)} /></div>
+      {error && <p className="error">{error}</p>}
+      {saved && <p className="settings-saved">Telemetry settings saved and applied.</p>}
+      <button className="btn btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Save telemetry settings'}</button>
     </form>
   )
 }

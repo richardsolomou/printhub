@@ -3,7 +3,7 @@ import { getRequestHeader } from '@tanstack/react-start/server'
 import { app, buildAssetStore, resetApp } from './app'
 import { workflow } from '../core/workflow'
 import { validSourceUrl } from '../core/services'
-import type { AuthConfig, StorageConfig } from '../core/types'
+import type { AuthConfig, StorageConfig, TelemetryConfig } from '../core/types'
 import { hashPassword } from '../adapters/auth'
 import { requireMutationOrigin } from './mutationOrigin'
 
@@ -26,6 +26,8 @@ export const sessionInfo = createServerFn({ method: 'GET' }).handler(async () =>
     identity,
     setupRequired: instance.authConfig.provider === 'local' && instance.repository.countUsers() === 0,
     authProvider: instance.authConfig.provider,
+    // The project token is public by design (it ships in any browser bundle).
+    telemetry: instance.telemetryConfig?.token ? { token: instance.telemetryConfig.token, host: instance.telemetryConfig.host } : null,
     workflow,
   }
 }))
@@ -83,6 +85,28 @@ function maskStorage(config: StorageConfig) {
 function maskAuth(config: AuthConfig) {
   return config.provider === 'trusted-header' ? { ...config, proxySecret: '' } : config
 }
+
+export const getTelemetrySettings = createServerFn({ method: 'GET' }).handler(async () => rpc(async () => {
+  const instance = await app()
+  if (instance.auth.require().role !== 'operator') throw new Response('forbidden', { status: 403 })
+  return instance.telemetryConfig ?? { token: '', host: '' }
+}))
+
+export const updateTelemetrySettings = createServerFn({ method: 'POST' })
+  .validator((data: { token: string; host: string }) => data)
+  .handler(async ({ data }) => rpc(async () => {
+    const instance = await app()
+    requireMutationOrigin(instance.authConfig.provider)
+    if (instance.auth.require().role !== 'operator') throw new Response('forbidden', { status: 403 })
+    const token = typeof data.token === 'string' ? data.token.trim() : ''
+    const host = typeof data.host === 'string' ? data.host.trim() : ''
+    if (token.length > 200 || !/^[\w-]*$/.test(token)) throw new Response('invalid project token', { status: 400 })
+    if (host && !validSourceUrl(host)) throw new Response('host must be an http(s) URL', { status: 400 })
+    const config: TelemetryConfig = { token, host: host || 'https://us.i.posthog.com' }
+    instance.repository.setSetting('telemetry', config)
+    await resetApp()
+    return config
+  }))
 
 export const getAuthSettings = createServerFn({ method: 'GET' }).handler(async () => rpc(async () => {
   const instance = await app()

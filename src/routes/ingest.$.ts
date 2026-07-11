@@ -1,14 +1,14 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { app } from '../server/app'
 
 // Reverse proxy for browser PostHog traffic so telemetry works first-party
 // in every deployment. Unauthenticated by design: it runs before login and
 // forwards nothing from the app (cookies are stripped).
-const INGEST_HOST = process.env.POSTHOG_HOST || 'https://us.i.posthog.com'
-const ASSETS_HOST = INGEST_HOST.replace(/\/\/(us|eu)\.i\./, '//$1-assets.i.')
-
 async function proxy(request: Request, splat: string | undefined) {
+  const ingestHost = (await app()).telemetryConfig?.host || 'https://us.i.posthog.com'
+  const assetsHost = ingestHost.replace(/\/\/(us|eu)\.i\./, '//$1-assets.i.')
   const path = `/${splat ?? ''}`
-  const host = path.startsWith('/static/') || path.startsWith('/array/') ? ASSETS_HOST : INGEST_HOST
+  const host = path.startsWith('/static/') || path.startsWith('/array/') ? assetsHost : ingestHost
   const upstream = await fetch(`${host}${path}${new URL(request.url).search}`, {
     method: request.method,
     headers: {

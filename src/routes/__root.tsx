@@ -39,7 +39,7 @@ function PostHogIdentify() {
 }
 
 function RootComponent() {
-  const token = import.meta.env.VITE_POSTHOG_PROJECT_TOKEN
+  const { telemetry } = Route.useLoaderData()
   const content = <Outlet />
   return (
     <html lang="en">
@@ -47,11 +47,11 @@ function RootComponent() {
         <HeadContent />
       </head>
       <body>
-        {token ? <PostHogProvider
-          apiKey={token}
+        {telemetry ? <PostHogProvider
+          apiKey={telemetry.token}
           options={{
             api_host: '/ingest',
-            ui_host: import.meta.env.VITE_POSTHOG_HOST || 'https://us.posthog.com',
+            ui_host: telemetry.host || 'https://us.posthog.com',
             defaults: '2025-05-24',
             autocapture: false,
             disable_session_recording: true,

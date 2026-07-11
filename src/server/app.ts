@@ -6,7 +6,7 @@ import { LocalAuthProvider, TrustedHeaderAuthProvider } from '../adapters/auth'
 import { LocalEventBus } from '../adapters/events'
 import { OptionalPostHogTelemetry } from '../adapters/telemetry'
 import { PrintHubService } from '../core/services'
-import type { AuthConfig, Repository, StorageConfig } from '../core/types'
+import type { AuthConfig, Repository, StorageConfig, TelemetryConfig } from '../core/types'
 
 const singleton = globalThis as typeof globalThis & { __printhub?: ReturnType<typeof createApp> }
 
@@ -18,6 +18,10 @@ export function resolveStorageConfig(repository: Repository): StorageConfig {
 
 export function resolveAuthConfig(repository: Repository): AuthConfig {
   return repository.getSetting<AuthConfig>('auth') ?? { provider: 'local' }
+}
+
+export function resolveTelemetryConfig(repository: Repository): TelemetryConfig | undefined {
+  return repository.getSetting<TelemetryConfig>('telemetry')
 }
 
 export function buildAssetStore(config: StorageConfig) {
@@ -34,7 +38,8 @@ async function createApp() {
     const staging = new UploadStaging()
     await staging.initialize()
     const events = new LocalEventBus()
-    const telemetry = new OptionalPostHogTelemetry()
+    const telemetryConfig = resolveTelemetryConfig(repository)
+    const telemetry = new OptionalPostHogTelemetry(telemetryConfig)
     const authConfig = resolveAuthConfig(repository)
     const auth = authConfig.provider === 'trusted-header'
       ? new TrustedHeaderAuthProvider(repository, authConfig)
@@ -50,7 +55,7 @@ async function createApp() {
     }
     await staging.sweepUploads(repository.activeUploadIds(Date.now()))
     await assets.sweepTrash()
-    return { repository, assets, staging, events, telemetry, auth, service, storage, authConfig }
+    return { repository, assets, staging, events, telemetry, auth, service, storage, authConfig, telemetryConfig }
   } catch (error) {
     repository?.close()
     throw error
