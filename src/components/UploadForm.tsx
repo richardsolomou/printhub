@@ -8,6 +8,13 @@ const StlViewer = lazy(() => import('./StlViewer'))
 
 const MAX_FILE_BYTES = 95 * 1024 * 1024
 
+// iOS greys out files whose types it can't map from `accept` (.stl isn't a
+// recognised UTI), so leave the picker unrestricted there; we validate anyway.
+const isIOS = () =>
+  typeof navigator !== 'undefined' &&
+  (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
+
 export function UploadForm({ myName, onClose }: { myName: string; onClose: () => void }) {
   const { data: people } = useSuspenseQuery(convexQuery(api.users.list, {}))
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -106,7 +113,7 @@ export function UploadForm({ myName, onClose }: { myName: string; onClose: () =>
         <input
           ref={fileInputRef}
           type="file"
-          accept=".stl"
+          accept={isIOS() ? undefined : '.stl,model/stl,application/sla'}
           hidden
           onChange={(e) => pickFile(e.target.files?.[0])}
         />
