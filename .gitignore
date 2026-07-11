@@ -8,5 +8,6 @@ dist/
 data-dev/
 prints-dev/
 src/routeTree.gen.ts
-deploy/hexos-app.local.yaml
+deploy/
+.pnpm-store/
 .DS_Store
