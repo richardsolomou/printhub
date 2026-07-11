@@ -2,6 +2,7 @@ import { Suspense, lazy, useState } from 'react'
 import { useServerFn } from '@tanstack/react-start'
 import type { Doc } from '../../convex/_generated/dataModel'
 import { STATUS_LABELS } from '../../convex/statuses'
+import { requesterColor } from '../lib/requesterColor'
 import { deleteJob, updateJob } from '../server/fns'
 
 const StlViewer = lazy(() => import('./StlViewer'))
@@ -71,7 +72,12 @@ export function JobModal({
         <div className="modal-meta">
           <span className="chip qty">×{job.quantity}</span>
           <span className="chip">{STATUS_LABELS[job.status]}</span>
-          <span className="chip">for {job.requesterName ?? job.requesterEmail}</span>
+          <span
+            className="chip"
+            style={{ color: requesterColor(job.requesterEmail), borderColor: requesterColor(job.requesterEmail) }}
+          >
+            for {job.requesterName ?? job.requesterEmail}
+          </span>
         </div>
 
         {!canEdit && job.notes && <p>{job.notes}</p>}

@@ -7,6 +7,7 @@ import {
   type Edge,
 } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge'
 import type { Doc } from '../../convex/_generated/dataModel'
+import { requesterColor } from '../lib/requesterColor'
 
 export function JobCard({
   job,
@@ -62,7 +63,9 @@ export function JobCard({
         <div className="card-meta">
           <span className="chip qty">×{job.quantity}</span>
         </div>
-        <div className="card-requester">for {requester}</div>
+        <div className="card-requester" style={{ color: requesterColor(job.requesterEmail) }}>
+          for {requester}
+        </div>
       </div>
     </button>
   )
