@@ -1,11 +1,12 @@
 FROM node:22-alpine AS build
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci
+RUN npm i -g pnpm@10.33.0
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 COPY . .
 ARG VITE_CONVEX_URL
 ENV VITE_CONVEX_URL=$VITE_CONVEX_URL
-RUN npm run build
+RUN pnpm build
 
 FROM node:22-alpine
 WORKDIR /app
