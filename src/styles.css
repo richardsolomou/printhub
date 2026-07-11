@@ -7,8 +7,6 @@
   --dim: #9a968a;
   --amber: #f2a33c;
   --amber-deep: #c97b16;
-  --resin: #56c2b0;
-  --fdm: #e07a4f;
   --ok: #79c97c;
   --danger: #e0604f;
   --radius: 10px;
@@ -316,16 +314,6 @@ select:focus-visible,
   border-color: var(--dim);
 }
 
-.chip.printer-resin {
-  color: var(--resin);
-  border-color: var(--resin);
-}
-
-.chip.printer-fdm {
-  color: var(--fdm);
-  border-color: var(--fdm);
-}
-
 .card-requester {
   margin-top: 6px;
   color: var(--dim);
@@ -448,7 +436,6 @@ select:focus-visible,
   background: var(--amber);
   transition: width 0.2s;
 }
-
 
 .viewer {
   width: 100%;

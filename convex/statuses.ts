@@ -12,6 +12,3 @@ export const STATUS_FOLDERS: Record<Status, string> = {
   in_progress: 'in-progress',
   done: 'done',
 }
-
-export const PRINTERS = ['resin', 'fdm', 'unassigned'] as const
-export type Printer = (typeof PRINTERS)[number]

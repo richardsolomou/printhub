@@ -10,7 +10,7 @@ export function UploadForm({ onClose }: { onClose: () => void }) {
   const [file, setFile] = useState<File | null>(null)
   const [name, setName] = useState('')
   const [quantity, setQuantity] = useState(1)
-  const [tags, setTags] = useState('')
+  const [notes, setNotes] = useState('')
   const [dragOver, setDragOver] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -44,7 +44,7 @@ export function UploadForm({ onClose }: { onClose: () => void }) {
       form.set('file', file)
       form.set('name', name.trim() || file.name.replace(/\.stl$/i, ''))
       form.set('quantity', String(quantity))
-      form.set('tags', tags)
+      form.set('notes', notes)
       const thumbnail = await renderStlThumbnail(file)
       if (thumbnail) form.set('thumbnail', thumbnail)
 
@@ -129,28 +129,28 @@ export function UploadForm({ onClose }: { onClose: () => void }) {
           />
         </div>
 
-        <div className="field-row">
-          <div className="field">
-            <label htmlFor="upload-qty">Copies</label>
-            <input
-              id="upload-qty"
-              type="number"
-              min={1}
-              max={50}
-              value={quantity}
-              onChange={(e) => setQuantity(Number(e.target.value))}
-              required
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="upload-tags">Tags (comma-separated, optional)</label>
-            <input
-              id="upload-tags"
-              value={tags}
-              onChange={(e) => setTags(e.target.value)}
-              placeholder="warhammer, orks"
-            />
-          </div>
+        <div className="field">
+          <label htmlFor="upload-qty">Copies</label>
+          <input
+            id="upload-qty"
+            type="number"
+            min={1}
+            max={50}
+            value={quantity}
+            onChange={(e) => setQuantity(Number(e.target.value))}
+            required
+          />
+        </div>
+
+        <div className="field">
+          <label htmlFor="upload-notes">Notes (optional)</label>
+          <textarea
+            id="upload-notes"
+            rows={3}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="scale, supports, colour — anything the printer should know"
+          />
         </div>
 
         {error && <p className="error">{error}</p>}

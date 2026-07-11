@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import { createServerFn } from '@tanstack/react-start'
 import type { Id } from '../../convex/_generated/dataModel'
 import { api } from '../../convex/_generated/api'
-import { STATUSES, type Printer, type Status } from '../../convex/statuses'
+import { STATUSES, type Status } from '../../convex/statuses'
 import { convex, writeSecret } from './convexServer'
 import { isAdmin, readUserEmail, requireAdmin } from './identity'
 import { absolutePath, moveToStatusFolder } from './files'
@@ -35,16 +35,7 @@ export const moveJob = createServerFn({ method: 'POST' })
   })
 
 export const updateJob = createServerFn({ method: 'POST' })
-  .validator(
-    (data: {
-      id: string
-      name?: string
-      quantity?: number
-      printer?: Printer
-      tags?: string[]
-      notes?: string
-    }) => data,
-  )
+  .validator((data: { id: string; name?: string; quantity?: number; notes?: string }) => data)
   .handler(async ({ data }) => {
     const email = readUserEmail()
     const { id, ...fields } = data

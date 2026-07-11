@@ -1,6 +1,6 @@
 import { mutation, query } from './_generated/server'
 import { v } from 'convex/values'
-import { printerValidator, statusValidator } from './schema'
+import { statusValidator } from './schema'
 
 function assertSecret(secret: string) {
   if (!process.env.APP_WRITE_SECRET || secret !== process.env.APP_WRITE_SECRET) {
@@ -27,7 +27,7 @@ export const create = mutation({
     quantity: v.number(),
     requesterEmail: v.string(),
     requesterName: v.optional(v.string()),
-    tags: v.array(v.string()),
+    notes: v.optional(v.string()),
     thumbnail: v.optional(v.string()),
   },
   handler: async (ctx, { secret, ...job }) => {
@@ -35,7 +35,6 @@ export const create = mutation({
     const now = Date.now()
     return ctx.db.insert('jobs', {
       ...job,
-      printer: 'unassigned',
       status: 'todo',
       createdAt: now,
       updatedAt: now,
@@ -68,8 +67,6 @@ export const update = mutation({
     id: v.id('jobs'),
     name: v.optional(v.string()),
     quantity: v.optional(v.number()),
-    printer: v.optional(printerValidator),
-    tags: v.optional(v.array(v.string())),
     notes: v.optional(v.string()),
   },
   handler: async (ctx, { secret, id, ...fields }) => {

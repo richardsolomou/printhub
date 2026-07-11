@@ -1,7 +1,7 @@
 import { Suspense, lazy, useState } from 'react'
 import { useServerFn } from '@tanstack/react-start'
 import type { Doc } from '../../convex/_generated/dataModel'
-import { PRINTERS, STATUS_LABELS, type Printer } from '../../convex/statuses'
+import { STATUS_LABELS } from '../../convex/statuses'
 import { deleteJob, updateJob } from '../server/fns'
 
 const StlViewer = lazy(() => import('./StlViewer'))
@@ -23,13 +23,9 @@ export function JobModal({
   const callDelete = useServerFn(deleteJob)
   const [name, setName] = useState(job.name)
   const [quantity, setQuantity] = useState(job.quantity)
-  const [printer, setPrinter] = useState<Printer>(job.printer)
-  const [tags, setTags] = useState(job.tags.join(', '))
   const [notes, setNotes] = useState(job.notes ?? '')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-
-  const requester = job.requesterName ?? job.requesterEmail
 
   const save = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -41,8 +37,6 @@ export function JobModal({
           id: job._id,
           name: name.trim() || job.name,
           quantity: Math.min(50, Math.max(1, Math.round(quantity))),
-          printer,
-          tags: tags.split(',').map((tag) => tag.trim().toLowerCase()).filter(Boolean).slice(0, 10),
           notes: notes.trim(),
         },
       })
@@ -77,13 +71,7 @@ export function JobModal({
         <div className="modal-meta">
           <span className="chip qty">×{job.quantity}</span>
           <span className="chip">{STATUS_LABELS[job.status]}</span>
-          {job.printer !== 'unassigned' && <span className={`chip printer-${job.printer}`}>{job.printer}</span>}
-          {job.tags.map((tag) => (
-            <span key={tag} className="chip">
-              {tag}
-            </span>
-          ))}
-          <span className="chip">for {requester}</span>
+          <span className="chip">for {job.requesterName ?? job.requesterEmail}</span>
         </div>
 
         {!canEdit && job.notes && <p>{job.notes}</p>}
@@ -108,25 +96,7 @@ export function JobModal({
                   onChange={(e) => setQuantity(Number(e.target.value))}
                 />
               </div>
-              {isAdmin && (
-                <div className="field">
-                  <label htmlFor="job-printer">Printer</label>
-                  <select id="job-printer" value={printer} onChange={(e) => setPrinter(e.target.value as Printer)}>
-                    {PRINTERS.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
             </div>
-            {isAdmin && (
-              <div className="field">
-                <label htmlFor="job-tags">Tags</label>
-                <input id="job-tags" value={tags} onChange={(e) => setTags(e.target.value)} />
-              </div>
-            )}
             <div className="field">
               <label htmlFor="job-notes">Notes</label>
               <textarea id="job-notes" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />

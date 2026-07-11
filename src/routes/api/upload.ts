@@ -34,11 +34,7 @@ export const Route = createFileRoute('/api/upload')({
         }
 
         const requesterName = String(form.get('requesterName') ?? '').trim().slice(0, 60) || undefined
-        const tags = String(form.get('tags') ?? '')
-          .split(',')
-          .map((tag) => tag.trim().toLowerCase().slice(0, 30))
-          .filter(Boolean)
-          .slice(0, 10)
+        const notes = String(form.get('notes') ?? '').trim().slice(0, 2000) || undefined
 
         const thumbnailRaw = String(form.get('thumbnail') ?? '')
         const thumbnail =
@@ -60,7 +56,7 @@ export const Route = createFileRoute('/api/upload')({
             quantity,
             requesterEmail: email,
             requesterName,
-            tags,
+            notes,
             thumbnail,
           })
           return Response.json({ id })

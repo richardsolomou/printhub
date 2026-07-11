@@ -61,14 +61,6 @@ export function JobCard({
         <div className="card-title">{job.name}</div>
         <div className="card-meta">
           <span className="chip qty">×{job.quantity}</span>
-          {job.printer !== 'unassigned' && (
-            <span className={`chip printer-${job.printer}`}>{job.printer}</span>
-          )}
-          {job.tags.map((tag) => (
-            <span key={tag} className="chip">
-              {tag}
-            </span>
-          ))}
         </div>
         <div className="card-requester">for {requester}</div>
       </div>
