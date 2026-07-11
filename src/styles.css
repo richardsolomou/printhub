@@ -66,6 +66,15 @@ select:focus-visible,
   color: var(--dim);
 }
 
+.fatal-error a {
+  color: var(--dim);
+  text-decoration: underline;
+}
+
+.fatal-error a:hover {
+  color: var(--text);
+}
+
 /* ---------- header ---------- */
 
 .header {

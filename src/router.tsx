@@ -5,7 +5,19 @@ import { routeTree } from './routeTree.gen'
 
 export function getRouter() {
   const queryClient = new QueryClient()
-  const router = createRouter({ routeTree, context: { queryClient }, defaultPreload: 'intent' })
+  const router = createRouter({
+    routeTree,
+    context: { queryClient },
+    defaultPreload: 'intent',
+    defaultNotFoundComponent: () => (
+      <main className="fatal-error">
+        <h1>Page not found</h1>
+        <p>
+          <a href="/">Back to the board</a>
+        </p>
+      </main>
+    ),
+  })
   setupRouterSsrQueryIntegration({ router, queryClient })
   return router
 }
