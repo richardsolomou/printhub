@@ -55,6 +55,12 @@ export const listPeople = createServerFn({ method: 'GET' }).handler(async () => 
   return instance.service.listPeople()
 })
 
+export const listUsers = createServerFn({ method: 'GET' }).handler(async () => {
+  const instance = await app()
+  if (instance.auth.require().role !== 'operator') throw new Response('forbidden', { status: 403 })
+  return instance.repository.listUsers()
+})
+
 export const moveCopies = createServerFn({ method: 'POST' })
   .validator((data: { id: string; from: string; to: string; count: number; order?: number }) => data)
   .handler(async ({ data }) => { requireMutationOrigin(); const instance = await app(); return instance.service.moveCopies(data, instance.auth.require()) })

@@ -93,6 +93,7 @@ export interface Repository {
   updateRequest(id: string, fields: { name?: string; quantity?: number; requesterName?: string; notes?: string; sourceUrl?: string }): void
   deleteRequest(id: string): void
   listPeople(): Person[]
+  listUsers(): Identity[]
   findUserByEmail(email: string): Identity | undefined
   countUsers(): number
   createUser(input: { email: string; name: string; passwordHash?: string; role: Role }): Identity

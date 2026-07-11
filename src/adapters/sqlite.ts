@@ -128,6 +128,10 @@ export class SqliteRepository implements Repository {
     return this.db.prepare('SELECT name,color FROM users ORDER BY name').all() as Person[]
   }
 
+  listUsers() {
+    return this.db.prepare('SELECT id,email,name,role FROM users ORDER BY name').all() as Identity[]
+  }
+
   findUserByEmail(email: string) { return this.user(this.db.prepare('SELECT * FROM users WHERE email=?').get(email.toLowerCase())) }
   countUsers() { return (this.db.prepare('SELECT count(*) count FROM users').get() as { count: number }).count }
 
