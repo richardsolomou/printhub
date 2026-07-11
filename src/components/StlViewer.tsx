@@ -5,11 +5,11 @@ import { OrbitControls } from 'three-stdlib'
 import { buildScene, frameCamera, parseStl } from '../lib/stl'
 
 export default function StlViewer({
-  jobId,
+  requestId,
   file,
   hasPreview = false,
 }: {
-  jobId?: string
+  requestId?: string
   file?: File
   hasPreview?: boolean
 }) {
@@ -23,7 +23,7 @@ export default function StlViewer({
 
   useEffect(() => {
     const mount = mountRef.current
-    if (!mount || (!jobId && !file)) return
+    if (!mount || (!requestId && !file)) return
 
     let disposed = false
     let renderer: THREE.WebGLRenderer | undefined
@@ -39,7 +39,7 @@ export default function StlViewer({
         if (file) {
           buffer = await file.arrayBuffer()
         } else {
-          const res = await fetch(`/api/files/${jobId}?inline=1${showingPreview ? '&preview=1' : ''}`)
+          const res = await fetch(`/api/files/${requestId}?inline=1${showingPreview ? '&preview=1' : ''}`)
           if (!res.ok) throw new Error(`fetch failed: ${res.status}`)
           // Content-Length is the compressed size when gzipped; the real size travels separately.
           const total = Number(res.headers.get('X-File-Size') ?? res.headers.get('Content-Length')) || 0
@@ -101,7 +101,7 @@ export default function StlViewer({
         if (!disposed) {
           posthog.captureException(error, {
             area: 'stl_viewer',
-            job_id: jobId,
+            request_id: requestId,
             showing_preview: showingPreview,
           })
           setStatus('error')
@@ -119,7 +119,7 @@ export default function StlViewer({
         renderer.domElement.remove()
       }
     }
-  }, [jobId, file, showingPreview, posthog])
+  }, [requestId, file, showingPreview, posthog])
 
   return (
     <div className="viewer" ref={mountRef}>
@@ -130,7 +130,7 @@ export default function StlViewer({
           type="button"
           className="load-full"
           onClick={() => {
-            posthog.capture('stl_full_detail_requested', { job_id: jobId })
+            posthog.capture('stl_full_detail_requested', { request_id: requestId })
             setFullRequested(true)
           }}
         >

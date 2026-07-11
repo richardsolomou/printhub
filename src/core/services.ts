@@ -1,4 +1,4 @@
-import type { AssetStore, DeleteOperation, EventBus, Identity, MoveOperation, NewJob, PendingOperation, Repository, Telemetry, UploadOperation } from './types'
+import type { AssetStore, DeleteOperation, EventBus, Identity, MoveOperation, NewPrintRequest, PendingOperation, Repository, Telemetry, UploadOperation } from './types'
 import { initialStatus, statusById, workflow } from './workflow'
 
 export class PrintHubService {
@@ -9,11 +9,11 @@ export class PrintHubService {
     private telemetry: Telemetry,
   ) {}
 
-  listJobs(identity: Identity) {
-    return this.repository.listJobs().map(({ fileName: _fileName, filePath: _filePath, requesterEmail, thumbnail: _thumbnail, previewPath, ...job }) => ({
-      ...job,
+  listRequests(identity: Identity) {
+    return this.repository.listRequests().map(({ fileName: _fileName, filePath: _filePath, requesterEmail, thumbnail: _thumbnail, previewPath, ...request }) => ({
+      ...request,
       hasPreview: !!previewPath,
-      canEdit: identity.role === 'operator' || (requesterEmail === identity.email && !workflow.statuses.slice(1).some((status) => job.counts[status.id] > 0)),
+      canEdit: identity.role === 'operator' || (requesterEmail === identity.email && !workflow.statuses.slice(1).some((status) => request.counts[status.id] > 0)),
     }))
   }
 
@@ -21,26 +21,26 @@ export class PrintHubService {
     return this.repository.listPeople()
   }
 
-  getJob(id: string) {
-    return this.repository.getJob(id)
+  getRequest(id: string) {
+    return this.repository.getRequest(id)
   }
 
-  createJob(input: Parameters<Repository['createJob']>[0], identity: Identity) {
-    const id = this.repository.createJob(input)
+  createRequest(input: Parameters<Repository['createRequest']>[0], identity: Identity) {
+    const id = this.repository.createRequest(input)
     this.changed('request.created')
-    this.capture(identity.id, 'print_job_created', { job_id: id, quantity: input.quantity })
+    this.capture(identity.id, 'request_created', { request_id: id, quantity: input.quantity })
     return id
   }
 
-  async createUploadedJob(uploadId: string, partPath: string, input: Omit<NewJob, 'filePath' | 'previewPath'>, identity: Identity, preview?: Uint8Array) {
+  async createUploadedRequest(uploadId: string, partPath: string, input: Omit<NewPrintRequest, 'filePath' | 'previewPath'>, identity: Identity, preview?: Uint8Array) {
     const completed = this.repository.getCompletedUpload(uploadId, identity.id)
     if (completed) return completed
     const filePath = this.assets.createPath(input.fileName)
     const previewPath = preview ? this.assets.previewPath(filePath) : undefined
     const previewPartPath = preview ? this.assets.uploadPreviewPart(uploadId) : undefined
     const operation: UploadOperation = {
-      kind: 'upload', uploadId, ownerId: identity.id, jobId: crypto.randomUUID(), partPath,
-      destinationPath: filePath, previewPartPath, previewDestinationPath: previewPath, job: input,
+      kind: 'upload', uploadId, ownerId: identity.id, requestId: crypto.randomUUID(), partPath,
+      destinationPath: filePath, previewPartPath, previewDestinationPath: previewPath, request: input,
     }
     try {
       if (preview && previewPartPath) await this.assets.writeUploadPart(previewPartPath, preview)
@@ -57,7 +57,7 @@ export class PrintHubService {
     }
     const id = await this.resumeOperation(pending)
     this.changed('request.created')
-    this.capture(identity.id, 'print_job_created', { job_id: id, quantity: input.quantity })
+    this.capture(identity.id, 'request_created', { request_id: id, quantity: input.quantity })
     return id!
   }
 
@@ -65,19 +65,19 @@ export class PrintHubService {
     this.requireOperator(identity)
     statusById(input.from)
     statusById(input.to)
-    const job = this.requiredJob(input.id)
-    if (!(input.from in job.counts) || !(input.to in job.counts) || input.from === input.to || !Number.isInteger(input.count) || input.count < 1 || job.counts[input.from] < input.count) {
+    const request = this.requiredRequest(input.id)
+    if (!(input.from in request.counts) || !(input.to in request.counts) || input.from === input.to || !Number.isInteger(input.count) || input.count < 1 || request.counts[input.from] < input.count) {
       throw new Response('invalid move', { status: 409 })
     }
-    const counts = { ...job.counts, [input.from]: job.counts[input.from] - input.count, [input.to]: job.counts[input.to] + input.count }
+    const counts = { ...request.counts, [input.from]: request.counts[input.from] - input.count, [input.to]: request.counts[input.to] + input.count }
     const target = workflow.statuses.find((status) => counts[status.id] > 0)?.id ?? workflow.statuses.at(-1)!.id
-    const current = workflow.statuses.find((status) => job.counts[status.id] > 0)?.id ?? initialStatus().id
-    const filePath = target === current ? job.filePath : this.assets.destinationPath(job.filePath, target)
-    if (filePath !== job.filePath) {
+    const current = workflow.statuses.find((status) => request.counts[status.id] > 0)?.id ?? initialStatus().id
+    const filePath = target === current ? request.filePath : this.assets.destinationPath(request.filePath, target)
+    if (filePath !== request.filePath) {
       const operationId = crypto.randomUUID()
       const operation: MoveOperation = {
-        kind: 'move', jobId: input.id, fromStatus: input.from, toStatus: input.to, count: input.count,
-        order: input.order, sourcePath: job.filePath, destinationPath: filePath,
+        kind: 'move', requestId: input.id, fromStatus: input.from, toStatus: input.to, count: input.count,
+        order: input.order, sourcePath: request.filePath, destinationPath: filePath,
       }
       this.repository.beginOperation(operationId, operation)
       await this.resumeOperation({ id: operationId, state: 'prepared', payload: operation })
@@ -85,14 +85,14 @@ export class PrintHubService {
       this.repository.moveCopies({ ...input, filePath })
     }
     this.changed('request.copiesMoved')
-    this.capture(identity.id, 'print_job_copies_moved', input)
+    this.capture(identity.id, 'request_copies_moved', input)
   }
 
   reorder(id: string, status: string, order: number, identity: Identity) {
     this.requireOperator(identity)
     statusById(status)
     if (!Number.isFinite(order)) throw new Error('invalid order')
-    this.repository.reorderJob(id, status, order)
+    this.repository.reorderRequest(id, status, order)
     this.changed('request.reordered')
   }
 
@@ -105,13 +105,13 @@ export class PrintHubService {
       (fields.quantity !== undefined && (typeof fields.quantity !== 'number' || !Number.isInteger(fields.quantity) || fields.quantity < 1 || fields.quantity > 50))) {
       throw new Response('invalid update', { status: 400 })
     }
-    const job = this.requiredJob(id)
+    const request = this.requiredRequest(id)
     if (identity.role !== 'operator') {
-      const started = workflow.statuses.slice(1).some((status) => job.counts[status.id] > 0)
-      if (job.requesterEmail !== identity.email || started) throw new Response('forbidden', { status: 403 })
+      const started = workflow.statuses.slice(1).some((status) => request.counts[status.id] > 0)
+      if (request.requesterEmail !== identity.email || started) throw new Response('forbidden', { status: 403 })
       fields = { quantity: fields.quantity, notes: fields.notes, sourceUrl: fields.sourceUrl }
     }
-    this.repository.updateJob(id, {
+    this.repository.updateRequest(id, {
       ...fields,
       name: fields.name?.trim(),
       requesterName: fields.requesterName?.trim(),
@@ -123,18 +123,18 @@ export class PrintHubService {
 
   async remove(id: string, identity: Identity) {
     this.requireOperator(identity)
-    const job = this.requiredJob(id)
+    const request = this.requiredRequest(id)
     const operationId = crypto.randomUUID()
     const operation: DeleteOperation = {
       kind: 'delete',
-      jobId: id,
-      assets: [job.filePath, job.previewPath].filter((value): value is string => !!value)
+      requestId: id,
+      assets: [request.filePath, request.previewPath].filter((value): value is string => !!value)
         .map((originalPath) => ({ originalPath, trashPath: this.assets.trashPath(operationId, originalPath) })),
     }
     this.repository.beginOperation(operationId, operation)
     await this.resumeOperation({ id: operationId, state: 'prepared', payload: operation })
     this.changed('request.deleted')
-    this.capture(identity.id, 'print_job_deleted', { job_id: id })
+    this.capture(identity.id, 'request_deleted', { request_id: id })
   }
 
   async recoverOperations() {
@@ -143,13 +143,13 @@ export class PrintHubService {
 
   private async resumeOperation(operation: PendingOperation) {
     if (operation.payload.kind === 'move') {
-      const job = this.repository.getJob(operation.payload.jobId)
-      if (!job) { this.repository.abandonOperation(operation.id); return }
-      if (operation.state !== 'committed' && (job.counts[operation.payload.fromStatus] ?? 0) < operation.payload.count) {
+      const request = this.repository.getRequest(operation.payload.requestId)
+      if (!request) { this.repository.abandonOperation(operation.id); return }
+      if (operation.state !== 'committed' && (request.counts[operation.payload.fromStatus] ?? 0) < operation.payload.count) {
         const [sourceExists, destinationExists] = await Promise.all([
           this.assets.exists(operation.payload.sourcePath), this.assets.exists(operation.payload.destinationPath),
         ])
-        if (!sourceExists && destinationExists && job.filePath === operation.payload.sourcePath) {
+        if (!sourceExists && destinationExists && request.filePath === operation.payload.sourcePath) {
           await this.assets.ensureMoved(operation.payload.destinationPath, operation.payload.sourcePath)
         }
         this.repository.abandonOperation(operation.id)
@@ -161,7 +161,7 @@ export class PrintHubService {
       }
       if (operation.state !== 'committed') {
         this.repository.completeMoveOperation(operation.id, {
-          id: operation.payload.jobId,
+          id: operation.payload.requestId,
           from: operation.payload.fromStatus,
           to: operation.payload.toStatus,
           count: operation.payload.count,
@@ -204,15 +204,15 @@ export class PrintHubService {
       }
       this.repository.markOperationAssetsMoved(operation.id)
     }
-    if (operation.state !== 'committed') this.repository.completeDeleteOperation(operation.id, operation.payload.jobId)
+    if (operation.state !== 'committed') this.repository.completeDeleteOperation(operation.id, operation.payload.requestId)
     const purged = await Promise.allSettled(operation.payload.assets.map((asset) => this.assets.purgeTrash(asset.trashPath)))
     if (purged.every((result) => result.status === 'fulfilled')) this.repository.finishOperation(operation.id)
   }
 
-  private requiredJob(id: string) {
-    const job = this.repository.getJob(id)
-    if (!job) throw new Response('not found', { status: 404 })
-    return job
+  private requiredRequest(id: string) {
+    const request = this.repository.getRequest(id)
+    if (!request) throw new Response('not found', { status: 404 })
+    return request
   }
 
   private requireOperator(identity: Identity) {

@@ -2,13 +2,13 @@ import { useState } from 'react'
 import { useEscape } from '../lib/useEscape'
 
 export function MoveDialog({
-  jobName,
+  requestName,
   toLabel,
   max,
   onConfirm,
   onCancel,
 }: {
-  jobName: string
+  requestName: string
   toLabel: string
   max: number
   onConfirm: (count: number) => void
@@ -28,7 +28,7 @@ export function MoveDialog({
       >
         <h2>Move copies</h2>
         <p className="move-copy">
-          How many copies of “{jobName}” to {toLabel}?
+          How many copies of “{requestName}” to {toLabel}?
         </p>
         <div className="field">
           <label htmlFor="move-count">Copies (of {max})</label>

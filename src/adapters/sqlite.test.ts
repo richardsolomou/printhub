@@ -11,27 +11,27 @@ describe('SqliteRepository contract', () => {
   beforeEach(() => { repository = new SqliteRepository(new Database(':memory:')) })
   afterEach(() => repository.close())
 
-  it('persists jobs and tracks copy quantities transactionally', () => {
-    const id = repository.createJob({
+  it('persists requests and tracks copy quantities transactionally', () => {
+    const id = repository.createRequest({
       name: 'Bracket', fileName: 'bracket.stl', filePath: 'todo/bracket.stl', quantity: 3,
       requesterEmail: 'maker@example.com', requesterName: 'Maker', notes: 'PETG', sourceUrl: 'https://example.com/bracket',
     })
-    expect(repository.getJob(id)).toMatchObject({ counts: { todo: 3, in_progress: 0, done: 0 }, sourceUrl: 'https://example.com/bracket' })
+    expect(repository.getRequest(id)).toMatchObject({ counts: { todo: 3, in_progress: 0, done: 0 }, sourceUrl: 'https://example.com/bracket' })
 
     repository.moveCopies({ id, from: 'todo', to: 'in_progress', count: 2, filePath: 'todo/bracket.stl', order: 4 })
-    expect(repository.getJob(id)).toMatchObject({ counts: { todo: 1, in_progress: 2, done: 0 }, orders: { in_progress: 4 } })
+    expect(repository.getRequest(id)).toMatchObject({ counts: { todo: 1, in_progress: 2, done: 0 }, orders: { in_progress: 4 } })
     expect(() => repository.moveCopies({ id, from: 'todo', to: 'done', count: 2, filePath: 'todo/bracket.stl' })).toThrow('invalid move')
-    expect(repository.getJob(id)?.counts).toEqual({ todo: 1, in_progress: 2, done: 0 })
+    expect(repository.getRequest(id)?.counts).toEqual({ todo: 1, in_progress: 2, done: 0 })
   })
 
   it('enforces quantity invariants and cascades status deletion', () => {
-    const id = repository.createJob({ name: 'Gear', fileName: 'gear.stl', filePath: 'todo/gear.stl', quantity: 2, requesterEmail: 'a@b.test' })
+    const id = repository.createRequest({ name: 'Gear', fileName: 'gear.stl', filePath: 'todo/gear.stl', quantity: 2, requesterEmail: 'a@b.test' })
     repository.moveCopies({ id, from: 'todo', to: 'done', count: 1, filePath: 'todo/gear.stl' })
-    expect(() => repository.updateJob(id, { quantity: 0 })).toThrow()
-    repository.updateJob(id, { quantity: 4, notes: 'four please', sourceUrl: 'https://example.com/gear' })
-    expect(repository.getJob(id)).toMatchObject({ quantity: 4, counts: { todo: 3, done: 1 }, notes: 'four please', sourceUrl: 'https://example.com/gear' })
-    repository.deleteJob(id)
-    expect(repository.getJob(id)).toBeUndefined()
+    expect(() => repository.updateRequest(id, { quantity: 0 })).toThrow()
+    repository.updateRequest(id, { quantity: 4, notes: 'four please', sourceUrl: 'https://example.com/gear' })
+    expect(repository.getRequest(id)).toMatchObject({ quantity: 4, counts: { todo: 3, done: 1 }, notes: 'four please', sourceUrl: 'https://example.com/gear' })
+    repository.deleteRequest(id)
+    expect(repository.getRequest(id)).toBeUndefined()
   })
 
   it('stores users and expiring hashed sessions', () => {
@@ -65,26 +65,26 @@ describe('SqliteRepository contract', () => {
   })
 
   it('persists operation state transitions with the associated metadata commit', () => {
-    const id = repository.createJob({ name: 'Gear', fileName: 'gear.stl', filePath: 'todo/gear.stl', quantity: 1, requesterEmail: 'a@b.test' })
+    const id = repository.createRequest({ name: 'Gear', fileName: 'gear.stl', filePath: 'todo/gear.stl', quantity: 1, requesterEmail: 'a@b.test' })
     const operationId = crypto.randomUUID()
     repository.beginOperation(operationId, {
-      kind: 'move', jobId: id, fromStatus: 'todo', toStatus: 'done', count: 1,
+      kind: 'move', requestId: id, fromStatus: 'todo', toStatus: 'done', count: 1,
       sourcePath: 'todo/gear.stl', destinationPath: 'done/gear.stl',
     })
     repository.markOperationAssetsMoved(operationId)
     repository.completeMoveOperation(operationId, { id, from: 'todo', to: 'done', count: 1, filePath: 'done/gear.stl' })
-    expect(repository.getJob(id)).toMatchObject({ counts: { todo: 0, done: 1 }, filePath: 'done/gear.stl' })
+    expect(repository.getRequest(id)).toMatchObject({ counts: { todo: 0, done: 1 }, filePath: 'done/gear.stl' })
     expect(repository.listOperations()).toMatchObject([{ id: operationId, state: 'committed' }])
     repository.finishOperation(operationId)
     expect(repository.listOperations()).toHaveLength(0)
   })
 
   it('replaces stale ordering when a status is re-entered', () => {
-    const id = repository.createJob({ name: 'Gear', fileName: 'gear.stl', filePath: 'todo/gear.stl', quantity: 1, requesterEmail: 'a@b.test' })
+    const id = repository.createRequest({ name: 'Gear', fileName: 'gear.stl', filePath: 'todo/gear.stl', quantity: 1, requesterEmail: 'a@b.test' })
     repository.moveCopies({ id, from: 'todo', to: 'in_progress', count: 1, filePath: 'in-progress/gear.stl', order: 4 })
     repository.moveCopies({ id, from: 'in_progress', to: 'todo', count: 1, filePath: 'todo/gear.stl', order: 2 })
     repository.moveCopies({ id, from: 'todo', to: 'in_progress', count: 1, filePath: 'in-progress/gear.stl', order: 9 })
-    expect(repository.getJob(id)?.orders).toMatchObject({ todo: undefined, in_progress: 9 })
+    expect(repository.getRequest(id)?.orders).toMatchObject({ todo: undefined, in_progress: 9 })
   })
 
   it('atomically allows only one first operator', () => {
@@ -94,12 +94,12 @@ describe('SqliteRepository contract', () => {
   })
 
   it('reconciles added statuses and rejects removed statuses that contain copies', () => {
-    const id = repository.createJob({ name: 'Gear', fileName: 'gear.stl', filePath: 'todo/gear.stl', quantity: 1, requesterEmail: 'a@b.test' })
+    const id = repository.createRequest({ name: 'Gear', fileName: 'gear.stl', filePath: 'todo/gear.stl', quantity: 1, requesterEmail: 'a@b.test' })
     const raw = (repository as unknown as { db: Database.Database }).db
-    raw.prepare("DELETE FROM job_statuses WHERE job_id=? AND status_id='done'").run(id)
+    raw.prepare("DELETE FROM request_statuses WHERE request_id=? AND status_id='done'").run(id)
     repository.reconcileWorkflow()
-    expect(repository.getJob(id)?.counts.done).toBe(0)
-    raw.prepare("INSERT INTO job_statuses VALUES (?, 'retired', 1, NULL)").run(id)
+    expect(repository.getRequest(id)?.counts.done).toBe(0)
+    raw.prepare("INSERT INTO request_statuses VALUES (?, 'retired', 1, NULL)").run(id)
     expect(() => repository.reconcileWorkflow()).toThrow('still has copies')
   })
 
@@ -112,16 +112,16 @@ describe('SqliteRepository contract', () => {
     expect(() => repository.createUploadSession('persisted-upload-id', 'attacker', expires, 3)).toThrow(expect.objectContaining({ status: 409 }))
   })
 
-  it('atomically reserves a job against overlapping durable operations', () => {
-    const id = repository.createJob({ name: 'Gear', fileName: 'gear.stl', filePath: 'todo/gear.stl', quantity: 1, requesterEmail: 'a@b.test' })
+  it('atomically reserves a request against overlapping durable operations', () => {
+    const id = repository.createRequest({ name: 'Gear', fileName: 'gear.stl', filePath: 'todo/gear.stl', quantity: 1, requesterEmail: 'a@b.test' })
     repository.beginOperation(crypto.randomUUID(), {
-      kind: 'move', jobId: id, fromStatus: 'todo', toStatus: 'done', count: 1,
+      kind: 'move', requestId: id, fromStatus: 'todo', toStatus: 'done', count: 1,
       sourcePath: 'todo/gear.stl', destinationPath: 'done/gear.stl',
     })
-    expect(() => repository.beginOperation(crypto.randomUUID(), { kind: 'delete', jobId: id, assets: [] }))
+    expect(() => repository.beginOperation(crypto.randomUUID(), { kind: 'delete', requestId: id, assets: [] }))
       .toThrow(expect.objectContaining({ status: 409 }))
-    expect(() => repository.updateJob(id, { quantity: 2 })).toThrow(expect.objectContaining({ status: 409 }))
-    expect(repository.getJob(id)).toMatchObject({ quantity: 1, filePath: 'todo/gear.stl' })
+    expect(() => repository.updateRequest(id, { quantity: 2 })).toThrow(expect.objectContaining({ status: 409 }))
+    expect(repository.getRequest(id)).toMatchObject({ quantity: 1, filePath: 'todo/gear.stl' })
   })
 
   it('does not persist a newly rejected upload session', () => {

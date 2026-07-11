@@ -9,18 +9,18 @@ import {
 import { useSuspenseQuery } from '@tanstack/react-query'
 import type { StatusId } from '../core/workflow'
 import { peopleQuery } from '../lib/queries'
-import type { Job } from '../lib/jobTypes'
+import type { PublicPrintRequest } from '../core/types'
 import { LazyThumb } from './LazyThumb'
 import { requesterColor, requesterLabel } from '../lib/requester'
 
-export function JobCard({
-  job,
+export function RequestCard({
+  request,
   status,
   count,
   canDrag,
   onOpen,
 }: {
-  job: Job
+  request: PublicPrintRequest
   status: StatusId
   count: number
   canDrag: boolean
@@ -37,7 +37,7 @@ export function JobCard({
     return combine(
       draggable({
         element,
-        getInitialData: () => ({ jobId: job._id, from: status }),
+        getInitialData: () => ({ requestId: request.id, from: status }),
         onDragStart: () => setDragging(true),
         onDrop: () => setDragging(false),
       }),
@@ -45,11 +45,11 @@ export function JobCard({
         element,
         getData: ({ input, element: el }) =>
           attachClosestEdge(
-            { type: 'card', jobId: job._id, status },
+            { type: 'card', requestId: request.id, status },
             { input, element: el, allowedEdges: ['top', 'bottom'] },
           ),
         onDrag: ({ self, source }) => {
-          if (source.data.jobId !== job._id || source.data.from !== status) {
+          if (source.data.requestId !== request.id || source.data.from !== status) {
             setClosestEdge(extractClosestEdge(self.data))
           }
         },
@@ -57,7 +57,7 @@ export function JobCard({
         onDrop: () => setClosestEdge(null),
       }),
     )
-  }, [canDrag, job._id, status])
+  }, [canDrag, request.id, status])
 
   return (
     <button
@@ -67,25 +67,25 @@ export function JobCard({
       data-edge={closestEdge ?? undefined}
       onClick={onOpen}
     >
-      {job.hasThumbnail ? (
-        <LazyThumb jobId={job._id} />
+      {request.hasThumbnail ? (
+        <LazyThumb requestId={request.id} />
       ) : (
         <div className="thumb">
           <span className="placeholder">stl</span>
         </div>
       )}
       <div className="card-info">
-        <div className="card-title">{job.name}</div>
+        <div className="card-title">{request.name}</div>
         <div className="card-meta">
-          <span className="chip qty">{count === job.quantity ? `×${count}` : `×${count} of ${job.quantity}`}</span>
+          <span className="chip qty">{count === request.quantity ? `×${count}` : `×${count} of ${request.quantity}`}</span>
           <span
             className="chip"
-            style={{ color: requesterColor(job, users), borderColor: requesterColor(job, users) }}
+            style={{ color: requesterColor(request, users), borderColor: requesterColor(request, users) }}
           >
-            {requesterLabel(job)}
+            {requesterLabel(request)}
           </span>
-          {job.notes && (
-            <span className="chip" title={job.notes}>
+          {request.notes && (
+            <span className="chip" title={request.notes}>
               ✎ notes
             </span>
           )}

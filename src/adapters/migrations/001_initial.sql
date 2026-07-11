@@ -14,7 +14,7 @@ CREATE TABLE sessions (
   expires_at INTEGER NOT NULL
 );
 
-CREATE TABLE jobs (
+CREATE TABLE requests (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   file_name TEXT NOT NULL,
@@ -23,19 +23,20 @@ CREATE TABLE jobs (
   requester_email TEXT NOT NULL,
   requester_name TEXT,
   notes TEXT,
+  source_url TEXT,
   thumbnail TEXT,
   preview_path TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
 
-CREATE TABLE job_statuses (
-  job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+CREATE TABLE request_statuses (
+  request_id TEXT NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
   status_id TEXT NOT NULL,
   quantity INTEGER NOT NULL,
   sort_order REAL,
-  PRIMARY KEY (job_id, status_id)
+  PRIMARY KEY (request_id, status_id)
 );
 
 CREATE INDEX sessions_expiry ON sessions(expires_at);
-CREATE INDEX jobs_created ON jobs(created_at DESC);
+CREATE INDEX requests_created ON requests(created_at DESC);

@@ -1,21 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
 import { dropTargetForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter'
 import type { StatusId, WorkflowStatus } from '../core/workflow'
-import type { Job } from '../lib/jobTypes'
-import { JobCard } from './JobCard'
+import type { PublicPrintRequest } from '../core/types'
+import { RequestCard } from './RequestCard'
 
 export function Column({
   status,
   definition,
   entries,
   isAdmin,
-  onOpenJob,
+  onOpenRequest,
 }: {
   status: StatusId
   definition: WorkflowStatus
-  entries: { job: Job; count: number }[]
+  entries: { request: PublicPrintRequest; count: number }[]
   isAdmin: boolean
-  onOpenJob: (jobId: string) => void
+  onOpenRequest: (requestId: string) => void
 }) {
   const ref = useRef<HTMLElement>(null)
   const [isOver, setIsOver] = useState(false)
@@ -43,14 +43,14 @@ export function Column({
       </header>
       <div className="column-body">
         {entries.length === 0 && <div className="column-empty">{definition.empty}</div>}
-        {entries.map(({ job, count }) => (
-          <JobCard
-            key={job._id}
-            job={job}
+        {entries.map(({ request, count }) => (
+          <RequestCard
+            key={request.id}
+            request={request}
             status={status}
             count={count}
             canDrag={isAdmin}
-            onOpen={() => onOpenJob(job._id)}
+            onOpen={() => onOpenRequest(request.id)}
           />
         ))}
       </div>

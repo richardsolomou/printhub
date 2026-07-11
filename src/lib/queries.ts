@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
-import { listJobs, listPeople } from '../server/fns'
+import { listRequests, listPeople } from '../server/fns'
 
-export const jobsQuery = () => queryOptions({ queryKey: ['jobs'], queryFn: () => listJobs() })
+export const requestsQuery = () => queryOptions({ queryKey: ['requests'], queryFn: () => listRequests() })
 export const peopleQuery = () => queryOptions({ queryKey: ['people'], queryFn: () => listPeople() })

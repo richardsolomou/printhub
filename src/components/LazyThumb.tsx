@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 // Fetch-based lazy image: <img> requests carry Sec-Fetch-Dest: image, which
 // nitro's dev middleware misroutes to static assets; fetch() passes everywhere
 // and the immutable cache header still applies.
-export function LazyThumb({ jobId }: { jobId: string }) {
+export function LazyThumb({ requestId }: { requestId: string }) {
   const ref = useRef<HTMLDivElement>(null)
   const [src, setSrc] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
@@ -17,7 +17,7 @@ export function LazyThumb({ jobId }: { jobId: string }) {
     const observer = new IntersectionObserver((entries) => {
       if (!entries.some((entry) => entry.isIntersecting)) return
       observer.disconnect()
-      fetch(`/api/thumbs/${jobId}`)
+      fetch(`/api/thumbs/${requestId}`)
         .then(async (res) => {
           if (!res.ok) throw new Error(String(res.status))
           objectUrl = URL.createObjectURL(await res.blob())
@@ -32,7 +32,7 @@ export function LazyThumb({ jobId }: { jobId: string }) {
       observer.disconnect()
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }, [jobId])
+  }, [requestId])
 
   return (
     <div className="thumb" ref={ref}>

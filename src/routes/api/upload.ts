@@ -7,7 +7,7 @@ import { acceptUploadChunk, contentLengthAllowed, UploadLockRegistry, UploadRequ
 
 // Cloudflare's proxy caps request bodies at 100 MB, so files arrive as
 // sequential chunks appended to a .part file; the final request carries the
-// job metadata and assembles the STL.
+// request metadata and assembles the STL.
 const MAX_TOTAL_BYTES = 1024 * 1024 * 1024
 const MAX_CHUNK_BYTES = 64 * 1024 * 1024
 const MAX_THUMBNAIL_CHARS = 300_000
@@ -49,7 +49,7 @@ export const Route = createFileRoute('/api/upload')({
         if (statusOnly) {
           try {
             const session = instance.repository.createUploadSession(uploadId, identity.id, Date.now() + 86_400_000, 3)
-            if (session.completedJobId) return Response.json({ id: session.completedJobId, completed: true })
+            if (session.completedRequestId) return Response.json({ id: session.completedRequestId, completed: true })
             const acceptedOffset = await fs.promises.stat(instance.assets.uploadPart(uploadId)).then((value) => value.size).catch(() => 0)
             return Response.json({ acceptedOffset })
           } finally {
@@ -69,9 +69,9 @@ export const Route = createFileRoute('/api/upload')({
 
         try {
           const session = instance.repository.createUploadSession(uploadId, identity.id, Date.now() + 86_400_000, 3)
-          if (session.completedJobId) {
+          if (session.completedRequestId) {
             completed = true
-            return Response.json({ id: session.completedJobId })
+            return Response.json({ id: session.completedRequestId })
           }
           const part = instance.assets.uploadPart(uploadId)
           if (offset === 0 && session.fresh) {
@@ -115,7 +115,7 @@ export const Route = createFileRoute('/api/upload')({
             ? new Uint8Array(await preview.arrayBuffer())
             : undefined
 
-          const id = await instance.service.createUploadedJob(uploadId, part, {
+          const id = await instance.service.createUploadedRequest(uploadId, part, {
             name,
             fileName,
             quantity,

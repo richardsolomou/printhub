@@ -182,7 +182,7 @@ export function UploadForm({
       patchEntry(entry.key, { state: 'uploading' })
       try {
         await uploadOne(entry, index * share, share)
-        await queryClient.invalidateQueries({ queryKey: ['jobs'] })
+        await queryClient.invalidateQueries({ queryKey: ['requests'] })
         patchEntry(entry.key, { state: 'done' })
       } catch (err) {
         failures++
@@ -196,7 +196,7 @@ export function UploadForm({
       }
     }
     if (failures === 0) {
-      posthog.capture('print_job_submitted', {
+      posthog.capture('requests_submitted', {
         file_count: pending.length,
       })
       onClose()

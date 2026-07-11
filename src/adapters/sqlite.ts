@@ -4,13 +4,12 @@ import path from 'node:path'
 import initialMigration from './migrations/001_initial.sql?raw'
 import operationsMigration from './migrations/002_operations.sql?raw'
 import durableUploadsMigration from './migrations/003_uploads_and_reservations.sql?raw'
-import sourceUrlMigration from './migrations/004_source_url.sql?raw'
-import type { Identity, Job, NewJob, OperationPayload, PendingOperation, Person, Repository, Role, UploadOperation } from '../core/types'
+import type { Identity, PrintRequest, NewPrintRequest, OperationPayload, PendingOperation, Person, Repository, Role, UploadOperation } from '../core/types'
 import { initialStatus, workflow } from '../core/workflow'
 
-const migrations = [{ version: 1, sql: initialMigration }, { version: 2, sql: operationsMigration }, { version: 3, sql: durableUploadsMigration }, { version: 4, sql: sourceUrlMigration }]
+const migrations = [{ version: 1, sql: initialMigration }, { version: 2, sql: operationsMigration }, { version: 3, sql: durableUploadsMigration }]
 
-type JobRow = {
+type RequestRow = {
   id: string; name: string; file_name: string; file_path: string; quantity: number
   requester_email: string; requester_name: string | null; notes: string | null; source_url: string | null; thumbnail: string | null
   preview_path: string | null; created_at: number; updated_at: number
@@ -31,30 +30,30 @@ export class SqliteRepository implements Repository {
 
   close() { this.db.close() }
 
-  listJobs() {
-    return (this.db.prepare('SELECT * FROM jobs ORDER BY created_at DESC').all() as JobRow[]).map((row) => this.hydrate(row, false))
+  listRequests() {
+    return (this.db.prepare('SELECT * FROM requests ORDER BY created_at DESC').all() as RequestRow[]).map((row) => this.hydrate(row, false))
   }
 
-  getJob(id: string) {
-    const row = this.db.prepare('SELECT * FROM jobs WHERE id = ?').get(id) as JobRow | undefined
+  getRequest(id: string) {
+    const row = this.db.prepare('SELECT * FROM requests WHERE id = ?').get(id) as RequestRow | undefined
     return row ? this.hydrate(row, true) : undefined
   }
 
-  createJob(job: NewJob) {
+  createRequest(request: NewPrintRequest) {
     const id = crypto.randomUUID()
-    this.db.transaction(() => this.insertJob(id, job))()
+    this.db.transaction(() => this.insertRequest(id, request))()
     return id
   }
 
   createUploadSession(uploadId: string, ownerId: string, expiresAt: number, maxIncomplete: number) {
     return this.db.transaction(() => {
-      const existing = this.db.prepare('SELECT owner_id,completed_job_id FROM upload_sessions WHERE id=?').get(uploadId) as { owner_id: string; completed_job_id: string | null } | undefined
+      const existing = this.db.prepare('SELECT owner_id,completed_request_id FROM upload_sessions WHERE id=?').get(uploadId) as { owner_id: string; completed_request_id: string | null } | undefined
       if (existing) {
         if (existing.owner_id !== ownerId) throw new Response('upload id belongs to another user', { status: 409 })
-        this.db.prepare('UPDATE upload_sessions SET expires_at=? WHERE id=? AND completed_job_id IS NULL').run(expiresAt, uploadId)
-        return { fresh: false, completedJobId: existing.completed_job_id ?? undefined }
+        this.db.prepare('UPDATE upload_sessions SET expires_at=? WHERE id=? AND completed_request_id IS NULL').run(expiresAt, uploadId)
+        return { fresh: false, completedRequestId: existing.completed_request_id ?? undefined }
       }
-      const active = (this.db.prepare('SELECT count(*) count FROM upload_sessions WHERE owner_id=? AND completed_job_id IS NULL AND expires_at>?').get(ownerId, Date.now()) as { count: number }).count
+      const active = (this.db.prepare('SELECT count(*) count FROM upload_sessions WHERE owner_id=? AND completed_request_id IS NULL AND expires_at>?').get(ownerId, Date.now()) as { count: number }).count
       if (active >= maxIncomplete) throw new Response('too many incomplete uploads', { status: 429 })
       this.db.prepare('INSERT INTO upload_sessions (id,owner_id,expires_at) VALUES (?,?,?)').run(uploadId, ownerId, expiresAt)
       return { fresh: true }
@@ -63,9 +62,9 @@ export class SqliteRepository implements Repository {
 
   reserveUpload(uploadId: string, ownerId: string, bytes: number, expiresAt: number, limits: { count: number; bytes: number }) {
     return this.db.transaction(() => {
-      const session = this.db.prepare('SELECT owner_id,completed_job_id FROM upload_sessions WHERE id=?').get(uploadId) as { owner_id: string; completed_job_id: string | null } | undefined
-      if (!session || session.owner_id !== ownerId || session.completed_job_id) return false
-      const usage = this.db.prepare('SELECT count(*) count,coalesce(sum(bytes),0) bytes FROM upload_sessions WHERE owner_id=? AND completed_job_id IS NULL AND expires_at>?').get(ownerId, Date.now()) as { count: number; bytes: number }
+      const session = this.db.prepare('SELECT owner_id,completed_request_id FROM upload_sessions WHERE id=?').get(uploadId) as { owner_id: string; completed_request_id: string | null } | undefined
+      if (!session || session.owner_id !== ownerId || session.completed_request_id) return false
+      const usage = this.db.prepare('SELECT count(*) count,coalesce(sum(bytes),0) bytes FROM upload_sessions WHERE owner_id=? AND completed_request_id IS NULL AND expires_at>?').get(ownerId, Date.now()) as { count: number; bytes: number }
       const current = this.db.prepare('SELECT bytes FROM upload_sessions WHERE id=?').get(uploadId) as { bytes: number }
       if (usage.count > limits.count || usage.bytes - current.bytes + bytes > limits.bytes) return false
       this.db.prepare('UPDATE upload_sessions SET bytes=?,expires_at=? WHERE id=?').run(bytes, expiresAt, uploadId)
@@ -75,55 +74,55 @@ export class SqliteRepository implements Repository {
 
   expireUploads(now: number) {
     return this.db.transaction(() => {
-      const ids = (this.db.prepare('SELECT id FROM upload_sessions WHERE completed_job_id IS NULL AND expires_at<=?').all(now) as { id: string }[]).map(({ id }) => id)
-      this.db.prepare('DELETE FROM upload_sessions WHERE completed_job_id IS NULL AND expires_at<=?').run(now)
+      const ids = (this.db.prepare('SELECT id FROM upload_sessions WHERE completed_request_id IS NULL AND expires_at<=?').all(now) as { id: string }[]).map(({ id }) => id)
+      this.db.prepare('DELETE FROM upload_sessions WHERE completed_request_id IS NULL AND expires_at<=?').run(now)
       return ids
     })()
   }
 
   activeUploadIds(now: number) {
-    return new Set((this.db.prepare('SELECT id FROM upload_sessions WHERE completed_job_id IS NULL AND expires_at>?').all(now) as { id: string }[]).map(({ id }) => id))
+    return new Set((this.db.prepare('SELECT id FROM upload_sessions WHERE completed_request_id IS NULL AND expires_at>?').all(now) as { id: string }[]).map(({ id }) => id))
   }
 
   getCompletedUpload(uploadId: string, ownerId: string) {
-    return (this.db.prepare('SELECT completed_job_id id FROM upload_sessions WHERE id=? AND owner_id=?').get(uploadId, ownerId) as { id: string | null } | undefined)?.id ?? undefined
+    return (this.db.prepare('SELECT completed_request_id id FROM upload_sessions WHERE id=? AND owner_id=?').get(uploadId, ownerId) as { id: string | null } | undefined)?.id ?? undefined
   }
 
   moveCopies(input: { id: string; from: string; to: string; count: number; filePath: string; order?: number }) {
     this.db.transaction(() => {
-      const from = this.db.prepare('SELECT quantity FROM job_statuses WHERE job_id=? AND status_id=?').get(input.id, input.from) as { quantity: number } | undefined
+      const from = this.db.prepare('SELECT quantity FROM request_statuses WHERE request_id=? AND status_id=?').get(input.id, input.from) as { quantity: number } | undefined
       if (!from || from.quantity < input.count) throw new Error('invalid move')
-      const target = this.db.prepare('SELECT quantity FROM job_statuses WHERE job_id=? AND status_id=?').get(input.id, input.to) as { quantity: number } | undefined
+      const target = this.db.prepare('SELECT quantity FROM request_statuses WHERE request_id=? AND status_id=?').get(input.id, input.to) as { quantity: number } | undefined
       if (!target) throw new Error('invalid target status')
-      this.db.prepare('UPDATE job_statuses SET quantity=quantity-?, sort_order=CASE WHEN quantity-?=0 THEN NULL ELSE sort_order END WHERE job_id=? AND status_id=?').run(input.count, input.count, input.id, input.from)
-      this.db.prepare('UPDATE job_statuses SET quantity=quantity+?, sort_order=CASE WHEN quantity=0 THEN ? ELSE sort_order END WHERE job_id=? AND status_id=?').run(input.count, input.order ?? null, input.id, input.to)
-      this.db.prepare('UPDATE jobs SET file_path=?, updated_at=? WHERE id=?').run(input.filePath, Date.now(), input.id)
+      this.db.prepare('UPDATE request_statuses SET quantity=quantity-?, sort_order=CASE WHEN quantity-?=0 THEN NULL ELSE sort_order END WHERE request_id=? AND status_id=?').run(input.count, input.count, input.id, input.from)
+      this.db.prepare('UPDATE request_statuses SET quantity=quantity+?, sort_order=CASE WHEN quantity=0 THEN ? ELSE sort_order END WHERE request_id=? AND status_id=?').run(input.count, input.order ?? null, input.id, input.to)
+      this.db.prepare('UPDATE requests SET file_path=?, updated_at=? WHERE id=?').run(input.filePath, Date.now(), input.id)
     })()
   }
 
-  reorderJob(id: string, status: string, order: number) {
-    this.db.prepare('UPDATE job_statuses SET sort_order=? WHERE job_id=? AND status_id=?').run(order, id, status)
+  reorderRequest(id: string, status: string, order: number) {
+    this.db.prepare('UPDATE request_statuses SET sort_order=? WHERE request_id=? AND status_id=?').run(order, id, status)
   }
 
-  updateJob(id: string, fields: { name?: string; quantity?: number; requesterName?: string; notes?: string; sourceUrl?: string }) {
+  updateRequest(id: string, fields: { name?: string; quantity?: number; requesterName?: string; notes?: string; sourceUrl?: string }) {
     this.db.transaction(() => {
-      const active = this.db.prepare("SELECT 1 FROM operations WHERE job_id=? AND state<>'committed' LIMIT 1").get(id)
-      if (active) throw new Response('another operation is already running for this job', { status: 409 })
-      const job = this.getJob(id)
-      if (!job) throw new Error('not found')
+      const active = this.db.prepare("SELECT 1 FROM operations WHERE request_id=? AND state<>'committed' LIMIT 1").get(id)
+      if (active) throw new Response('another operation is already running for this request', { status: 409 })
+      const request = this.getRequest(id)
+      if (!request) throw new Error('not found')
       if (fields.quantity !== undefined) {
-        const started = workflow.statuses.slice(1).reduce((sum, status) => sum + (job.counts[status.id] ?? 0), 0)
+        const started = workflow.statuses.slice(1).reduce((sum, status) => sum + (request.counts[status.id] ?? 0), 0)
         if (fields.quantity < Math.max(started, 1)) throw new Error('cannot reduce below started copies')
-        this.db.prepare('UPDATE job_statuses SET quantity=? WHERE job_id=? AND status_id=?').run(fields.quantity - started, id, initialStatus().id)
+        this.db.prepare('UPDATE request_statuses SET quantity=? WHERE request_id=? AND status_id=?').run(fields.quantity - started, id, initialStatus().id)
       }
-      this.db.prepare(`UPDATE jobs SET name=?, quantity=?, requester_name=?, notes=?, source_url=?, updated_at=? WHERE id=?`).run(
-        fields.name ?? job.name, fields.quantity ?? job.quantity, fields.requesterName ?? job.requesterName ?? null,
-        fields.notes ?? job.notes ?? null, fields.sourceUrl ?? job.sourceUrl ?? null, Date.now(), id,
+      this.db.prepare(`UPDATE requests SET name=?, quantity=?, requester_name=?, notes=?, source_url=?, updated_at=? WHERE id=?`).run(
+        fields.name ?? request.name, fields.quantity ?? request.quantity, fields.requesterName ?? request.requesterName ?? null,
+        fields.notes ?? request.notes ?? null, fields.sourceUrl ?? request.sourceUrl ?? null, Date.now(), id,
       )
     })()
   }
 
-  deleteJob(id: string) { this.db.prepare('DELETE FROM jobs WHERE id=?').run(id) }
+  deleteRequest(id: string) { this.db.prepare('DELETE FROM requests WHERE id=?').run(id) }
 
   listPeople() {
     return this.db.prepare('SELECT name,color FROM users ORDER BY name').all() as Person[]
@@ -181,10 +180,10 @@ export class SqliteRepository implements Repository {
     if (payload.kind === 'upload') return this.beginUploadOperation(id, payload)
     const now = Date.now()
     try {
-      this.db.prepare('INSERT INTO operations (id,kind,job_id,payload_json,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?)')
-        .run(id, payload.kind, payload.jobId, JSON.stringify(payload), 'prepared', now, now)
+      this.db.prepare('INSERT INTO operations (id,kind,request_id,payload_json,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?)')
+        .run(id, payload.kind, payload.requestId, JSON.stringify(payload), 'prepared', now, now)
     } catch (error) {
-      if ((error as { code?: string }).code === 'SQLITE_CONSTRAINT_UNIQUE') throw new Response('another operation is already running for this job', { status: 409 })
+      if ((error as { code?: string }).code === 'SQLITE_CONSTRAINT_UNIQUE') throw new Response('another operation is already running for this request', { status: 409 })
       throw error
     }
   }
@@ -194,8 +193,8 @@ export class SqliteRepository implements Repository {
     this.db.transaction(() => {
       const completed = this.getCompletedUpload(payload.uploadId, payload.ownerId)
       if (completed) return
-      this.db.prepare('INSERT OR IGNORE INTO operations (id,kind,job_id,upload_id,payload_json,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)')
-        .run(id, payload.kind, payload.jobId, payload.uploadId, JSON.stringify(payload), 'prepared', now, now)
+      this.db.prepare('INSERT OR IGNORE INTO operations (id,kind,request_id,upload_id,payload_json,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)')
+        .run(id, payload.kind, payload.requestId, payload.uploadId, JSON.stringify(payload), 'prepared', now, now)
     })()
   }
 
@@ -212,11 +211,11 @@ export class SqliteRepository implements Repository {
     })()
   }
 
-  completeDeleteOperation(id: string, jobId: string) {
+  completeDeleteOperation(id: string, requestId: string) {
     this.db.transaction(() => {
       const operation = this.db.prepare('SELECT state FROM operations WHERE id=?').get(id) as { state: string } | undefined
       if (!operation || operation.state === 'committed') return
-      this.deleteJob(jobId)
+      this.deleteRequest(requestId)
       this.db.prepare("UPDATE operations SET state='committed',updated_at=? WHERE id=?").run(Date.now(), id)
     })()
   }
@@ -227,10 +226,10 @@ export class SqliteRepository implements Repository {
       if (completed) return completed
       const operation = this.db.prepare('SELECT state FROM operations WHERE id=?').get(id) as { state: string } | undefined
       if (!operation) throw new Error('upload operation is missing')
-      this.insertJob(payload.jobId, { ...payload.job, filePath: payload.destinationPath, previewPath: payload.previewDestinationPath })
-      this.db.prepare('UPDATE upload_sessions SET completed_job_id=?,bytes=0 WHERE id=? AND owner_id=?').run(payload.jobId, payload.uploadId, payload.ownerId)
+      this.insertRequest(payload.requestId, { ...payload.request, filePath: payload.destinationPath, previewPath: payload.previewDestinationPath })
+      this.db.prepare('UPDATE upload_sessions SET completed_request_id=?,bytes=0 WHERE id=? AND owner_id=?').run(payload.requestId, payload.uploadId, payload.ownerId)
       this.db.prepare("UPDATE operations SET state='committed',updated_at=? WHERE id=?").run(Date.now(), id)
-      return payload.jobId
+      return payload.requestId
     })()
   }
 
@@ -242,10 +241,10 @@ export class SqliteRepository implements Repository {
   finishOperation(id: string) { this.db.prepare("DELETE FROM operations WHERE id=? AND state='committed'").run(id) }
   abandonOperation(id: string) { this.db.prepare('DELETE FROM operations WHERE id=?').run(id) }
 
-  private hydrate(row: JobRow, thumbnail: boolean): Job {
-    const states = this.db.prepare('SELECT status_id,quantity,sort_order FROM job_statuses WHERE job_id=?').all(row.id) as { status_id: string; quantity: number; sort_order: number | null }[]
+  private hydrate(row: RequestRow, thumbnail: boolean): PrintRequest {
+    const states = this.db.prepare('SELECT status_id,quantity,sort_order FROM request_statuses WHERE request_id=?').all(row.id) as { status_id: string; quantity: number; sort_order: number | null }[]
     return {
-      _id: row.id, name: row.name, fileName: row.file_name, filePath: row.file_path, quantity: row.quantity,
+      id: row.id, name: row.name, fileName: row.file_name, filePath: row.file_path, quantity: row.quantity,
       requesterEmail: row.requester_email, requesterName: row.requester_name ?? undefined, notes: row.notes ?? undefined,
       sourceUrl: row.source_url ?? undefined,
       thumbnail: thumbnail ? row.thumbnail ?? undefined : undefined, previewPath: row.preview_path ?? undefined,
@@ -260,12 +259,12 @@ export class SqliteRepository implements Repository {
     return row ? { id: row.id, email: row.email, name: row.name, role: row.role } : undefined
   }
 
-  private insertJob(id: string, job: NewJob) {
+  private insertRequest(id: string, request: NewPrintRequest) {
     const now = Date.now()
-    this.db.prepare(`INSERT INTO jobs (id,name,file_name,file_path,quantity,requester_email,requester_name,notes,source_url,thumbnail,preview_path,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(id, job.name, job.fileName, job.filePath, job.quantity, job.requesterEmail, job.requesterName ?? null, job.notes ?? null, job.sourceUrl ?? null, job.thumbnail ?? null, job.previewPath ?? null, now, now)
-    const insert = this.db.prepare('INSERT INTO job_statuses (job_id,status_id,quantity) VALUES (?,?,?)')
-    for (const status of workflow.statuses) insert.run(id, status.id, status.id === initialStatus().id ? job.quantity : 0)
+    this.db.prepare(`INSERT INTO requests (id,name,file_name,file_path,quantity,requester_email,requester_name,notes,source_url,thumbnail,preview_path,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(id, request.name, request.fileName, request.filePath, request.quantity, request.requesterEmail, request.requesterName ?? null, request.notes ?? null, request.sourceUrl ?? null, request.thumbnail ?? null, request.previewPath ?? null, now, now)
+    const insert = this.db.prepare('INSERT INTO request_statuses (request_id,status_id,quantity) VALUES (?,?,?)')
+    for (const status of workflow.statuses) insert.run(id, status.id, status.id === initialStatus().id ? request.quantity : 0)
   }
 
   private migrate() {
@@ -280,14 +279,14 @@ export class SqliteRepository implements Repository {
   reconcileWorkflow() {
     this.db.transaction(() => {
       const configured = new Set(workflow.statuses.map((status) => status.id))
-      const existing = this.db.prepare('SELECT DISTINCT status_id FROM job_statuses').all() as { status_id: string }[]
+      const existing = this.db.prepare('SELECT DISTINCT status_id FROM request_statuses').all() as { status_id: string }[]
       for (const { status_id } of existing) {
         if (configured.has(status_id)) continue
-        const used = this.db.prepare('SELECT 1 FROM job_statuses WHERE status_id=? AND quantity>0 LIMIT 1').get(status_id)
+        const used = this.db.prepare('SELECT 1 FROM request_statuses WHERE status_id=? AND quantity>0 LIMIT 1').get(status_id)
         if (used) throw new Error(`workflow status ${status_id} still has copies and cannot be removed`)
-        this.db.prepare('DELETE FROM job_statuses WHERE status_id=?').run(status_id)
+        this.db.prepare('DELETE FROM request_statuses WHERE status_id=?').run(status_id)
       }
-      const insert = this.db.prepare('INSERT OR IGNORE INTO job_statuses (job_id,status_id,quantity) SELECT id,?,0 FROM jobs')
+      const insert = this.db.prepare('INSERT OR IGNORE INTO request_statuses (request_id,status_id,quantity) SELECT id,?,0 FROM requests')
       for (const status of workflow.statuses) insert.run(status.id)
     })()
   }

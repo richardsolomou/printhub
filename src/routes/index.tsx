@@ -3,11 +3,11 @@ import { createFileRoute, getRouteApi } from '@tanstack/react-router'
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { usePostHog } from '@posthog/react'
 import { Board } from '../components/Board'
-import { JobModal } from '../components/JobModal'
+import { RequestModal } from '../components/RequestModal'
 import { UploadForm } from '../components/UploadForm'
 import { AuthScreen } from '../components/AuthScreen'
 import { SettingsModal } from '../components/SettingsModal'
-import { jobsQuery, peopleQuery } from '../lib/queries'
+import { requestsQuery, peopleQuery } from '../lib/queries'
 
 const rootRoute = getRouteApi('__root__')
 
@@ -22,7 +22,7 @@ function Home() {
 function AuthenticatedHome() {
   const { identity, workflow, authProvider } = rootRoute.useLoaderData()
   const me = identity!
-  const { data: jobs } = useSuspenseQuery(jobsQuery())
+  const { data: requests } = useSuspenseQuery(requestsQuery())
   useSuspenseQuery(peopleQuery())
   const queryClient = useQueryClient()
   const posthog = usePostHog()
@@ -30,18 +30,18 @@ function AuthenticatedHome() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [droppedFiles, setDroppedFiles] = useState<File[]>([])
   const [fileDragActive, setFileDragActive] = useState(false)
-  const [openJobId, setOpenJobId] = useState<string | null>(null)
+  const [openRequestId, setOpenRequestId] = useState<string | null>(null)
   const uploadOpenRef = useRef(uploadOpen)
   uploadOpenRef.current = uploadOpen
 
   useEffect(() => {
     const events = new EventSource('/api/events')
     events.onopen = () => {
-      void queryClient.invalidateQueries({ queryKey: ['jobs'] })
+      void queryClient.invalidateQueries({ queryKey: ['requests'] })
       void queryClient.invalidateQueries({ queryKey: ['people'] })
     }
     events.addEventListener('change', () => {
-      void queryClient.invalidateQueries({ queryKey: ['jobs'] })
+      void queryClient.invalidateQueries({ queryKey: ['requests'] })
       void queryClient.invalidateQueries({ queryKey: ['people'] })
     })
     return () => events.close()
@@ -58,13 +58,13 @@ function AuthenticatedHome() {
       event.preventDefault(); depth = 0; setFileDragActive(false)
       if (uploadOpenRef.current) return
       const files = Array.from(event.dataTransfer?.files ?? [])
-      if (files.length) { posthog.capture('print_upload_opened', { source: 'drop', file_count: files.length }); setDroppedFiles(files); setUploadOpen(true) }
+      if (files.length) { posthog.capture('upload_opened', { source: 'drop', file_count: files.length }); setDroppedFiles(files); setUploadOpen(true) }
     }
     window.addEventListener('dragenter', onDragEnter); window.addEventListener('dragover', onDragOver); window.addEventListener('dragleave', onDragLeave); window.addEventListener('drop', onDrop)
     return () => { window.removeEventListener('dragenter', onDragEnter); window.removeEventListener('dragover', onDragOver); window.removeEventListener('dragleave', onDragLeave); window.removeEventListener('drop', onDrop) }
   }, [posthog])
 
-  const selectedJob = jobs.find((job) => job._id === openJobId)
+  const selectedRequest = requests.find((request) => request.id === openRequestId)
   return (
     <div className="app">
       <header className="header">
@@ -73,14 +73,14 @@ function AuthenticatedHome() {
         <span className="header-spacer" />
         <div className="header-actions">
           <button type="button" className="btn" aria-label="Settings" onClick={() => setSettingsOpen(true)}>⚙</button>
-          <button type="button" className="btn btn-primary add-print" onClick={() => { posthog.capture('print_upload_opened', { source: 'button' }); setUploadOpen(true) }}>Add a print</button>
+          <button type="button" className="btn btn-primary add-print" onClick={() => { posthog.capture('upload_opened', { source: 'button' }); setUploadOpen(true) }}>Add a print</button>
         </div>
       </header>
-      <Board jobs={jobs} workflow={workflow} isAdmin={me.role === 'operator'} onOpenJob={(id) => { setOpenJobId(id); posthog.capture('print_job_viewed', { job_id: id }) }} />
+      <Board requests={requests} workflow={workflow} isAdmin={me.role === 'operator'} onOpenRequest={(id) => { setOpenRequestId(id); posthog.capture('request_viewed', { request_id: id }) }} />
       {fileDragActive && !uploadOpen && <div className="drop-hint">Drop STLs to add prints</div>}
       {uploadOpen && <UploadForm myName={me.name} initialFiles={droppedFiles} onClose={() => { setUploadOpen(false); setDroppedFiles([]) }} />}
       {settingsOpen && <SettingsModal me={me} localAuth={authProvider === 'local'} onClose={() => setSettingsOpen(false)} />}
-      {selectedJob && <JobModal job={selectedJob} workflow={workflow} isAdmin={me.role === 'operator'} onClose={() => setOpenJobId(null)} />}
+      {selectedRequest && <RequestModal request={selectedRequest} workflow={workflow} isAdmin={me.role === 'operator'} onClose={() => setOpenRequestId(null)} />}
     </div>
   )
 }

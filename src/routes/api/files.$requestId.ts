@@ -4,18 +4,18 @@ import { Readable } from 'node:stream'
 import { createFileRoute } from '@tanstack/react-router'
 import { app } from '../../server/app'
 
-export const Route = createFileRoute('/api/files/$jobId')({
+export const Route = createFileRoute('/api/files/$requestId')({
   server: {
     handlers: {
       GET: async ({ request, params }) => {
         const instance = await app()
         instance.auth.require()
-        const job = instance.service.getJob(params.jobId)
-        if (!job) return new Response('not found', { status: 404 })
+        const printRequest = instance.service.getRequest(params.requestId)
+        if (!printRequest) return new Response('not found', { status: 404 })
 
         const url = new URL(request.url)
         const wantPreview = url.searchParams.get('preview') === '1'
-        const relativePath = wantPreview && job.previewPath ? job.previewPath : job.filePath
+        const relativePath = wantPreview && printRequest.previewPath ? printRequest.previewPath : printRequest.filePath
         const filePath = instance.assets.absolute(relativePath)
         let size: number
         try {
@@ -26,13 +26,13 @@ export const Route = createFileRoute('/api/files/$jobId')({
 
         const headers = new Headers({
           'Content-Type': 'model/stl',
-          // A job's file never changes, so let the browser keep it.
+          // A request's file never changes, so let the browser keep it.
           'Cache-Control': 'private, max-age=31536000, immutable',
           // Uncompressed size, so the client can show progress across gzip.
           'X-File-Size': String(size),
         })
         if (url.searchParams.get('inline') !== '1') {
-          const safeName = job.fileName.replace(/["\r\n]/g, '')
+          const safeName = printRequest.fileName.replace(/["\r\n]/g, '')
           headers.set('Content-Disposition', `attachment; filename="${safeName}"`)
         }
 

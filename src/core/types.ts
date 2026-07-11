@@ -9,8 +9,8 @@ export type Identity = {
 
 export type Person = { name: string; color?: string }
 
-export type Job = {
-  _id: string
+export type PrintRequest = {
+  id: string
   name: string
   fileName: string
   filePath: string
@@ -28,13 +28,13 @@ export type Job = {
   updatedAt: number
 }
 
-export type PublicJob = Omit<Job, 'fileName' | 'filePath' | 'requesterEmail' | 'thumbnail' | 'previewPath'> & {
+export type PublicPrintRequest = Omit<PrintRequest, 'fileName' | 'filePath' | 'requesterEmail' | 'thumbnail' | 'previewPath'> & {
   canEdit: boolean
   hasPreview: boolean
 }
 
-export type NewJob = Pick<
-  Job,
+export type NewPrintRequest = Pick<
+  PrintRequest,
   | 'name'
   | 'fileName'
   | 'filePath'
@@ -49,7 +49,7 @@ export type NewJob = Pick<
 
 export type MoveOperation = {
   kind: 'move'
-  jobId: string
+  requestId: string
   fromStatus: string
   toStatus: string
   count: number
@@ -60,7 +60,7 @@ export type MoveOperation = {
 
 export type DeleteOperation = {
   kind: 'delete'
-  jobId: string
+  requestId: string
   assets: { originalPath: string; trashPath: string }[]
 }
 
@@ -68,30 +68,30 @@ export type UploadOperation = {
   kind: 'upload'
   uploadId: string
   ownerId: string
-  jobId: string
+  requestId: string
   partPath: string
   destinationPath: string
   previewPartPath?: string
   previewDestinationPath?: string
-  job: Omit<NewJob, 'filePath' | 'previewPath'>
+  request: Omit<NewPrintRequest, 'filePath' | 'previewPath'>
 }
 
 export type OperationPayload = MoveOperation | DeleteOperation | UploadOperation
 export type PendingOperation = { id: string; state: 'prepared' | 'assets_moved' | 'committed'; payload: OperationPayload }
 
 export interface Repository {
-  listJobs(): Job[]
-  getJob(id: string): Job | undefined
-  createJob(job: NewJob): string
-  createUploadSession(uploadId: string, ownerId: string, expiresAt: number, maxIncomplete: number): { fresh: boolean; completedJobId?: string }
+  listRequests(): PrintRequest[]
+  getRequest(id: string): PrintRequest | undefined
+  createRequest(request: NewPrintRequest): string
+  createUploadSession(uploadId: string, ownerId: string, expiresAt: number, maxIncomplete: number): { fresh: boolean; completedRequestId?: string }
   reserveUpload(uploadId: string, ownerId: string, bytes: number, expiresAt: number, limits: { count: number; bytes: number }): boolean
   expireUploads(now: number): string[]
   activeUploadIds(now: number): Set<string>
   getCompletedUpload(uploadId: string, ownerId: string): string | undefined
   moveCopies(input: { id: string; from: string; to: string; count: number; filePath: string; order?: number }): void
-  reorderJob(id: string, status: string, order: number): void
-  updateJob(id: string, fields: { name?: string; quantity?: number; requesterName?: string; notes?: string; sourceUrl?: string }): void
-  deleteJob(id: string): void
+  reorderRequest(id: string, status: string, order: number): void
+  updateRequest(id: string, fields: { name?: string; quantity?: number; requesterName?: string; notes?: string; sourceUrl?: string }): void
+  deleteRequest(id: string): void
   listPeople(): Person[]
   findUserByEmail(email: string): Identity | undefined
   countUsers(): number
@@ -108,7 +108,7 @@ export interface Repository {
   beginUploadOperation(id: string, payload: UploadOperation): void
   markOperationAssetsMoved(id: string): void
   completeMoveOperation(id: string, input: { id: string; from: string; to: string; count: number; filePath: string; order?: number }): void
-  completeDeleteOperation(id: string, jobId: string): void
+  completeDeleteOperation(id: string, requestId: string): void
   completeUploadOperation(id: string, payload: UploadOperation): string
   listOperations(): PendingOperation[]
   finishOperation(id: string): void

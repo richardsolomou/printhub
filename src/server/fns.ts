@@ -44,9 +44,9 @@ export const createUser = createServerFn({ method: 'POST' })
     return user
   })
 
-export const listJobs = createServerFn({ method: 'GET' }).handler(async () => {
+export const listRequests = createServerFn({ method: 'GET' }).handler(async () => {
   const instance = await app()
-  return instance.service.listJobs(instance.auth.require())
+  return instance.service.listRequests(instance.auth.require())
 })
 
 export const listPeople = createServerFn({ method: 'GET' }).handler(async () => {
@@ -59,11 +59,11 @@ export const moveCopies = createServerFn({ method: 'POST' })
   .validator((data: { id: string; from: string; to: string; count: number; order?: number }) => data)
   .handler(async ({ data }) => { requireMutationOrigin(); const instance = await app(); return instance.service.moveCopies(data, instance.auth.require()) })
 
-export const reorderJob = createServerFn({ method: 'POST' })
+export const reorderRequest = createServerFn({ method: 'POST' })
   .validator((data: { id: string; status: string; order: number }) => data)
   .handler(async ({ data }) => { requireMutationOrigin(); const instance = await app(); return instance.service.reorder(data.id, data.status, data.order, instance.auth.require()) })
 
-export const updateJob = createServerFn({ method: 'POST' })
+export const updateRequest = createServerFn({ method: 'POST' })
   .validator((data: { id: string; name?: string; quantity?: number; requesterName?: string; notes?: string; sourceUrl?: string }) => data)
   .handler(async ({ data }) => {
     requireMutationOrigin()
@@ -72,6 +72,6 @@ export const updateJob = createServerFn({ method: 'POST' })
     instance.service.update(id, fields, instance.auth.require())
   })
 
-export const deleteJob = createServerFn({ method: 'POST' })
+export const deleteRequest = createServerFn({ method: 'POST' })
   .validator((data: { id: string }) => data)
   .handler(async ({ data }) => { requireMutationOrigin(); const instance = await app(); return instance.service.remove(data.id, instance.auth.require()) })
