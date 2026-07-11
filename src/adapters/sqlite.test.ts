@@ -14,9 +14,9 @@ describe('SqliteRepository contract', () => {
   it('persists jobs and tracks copy quantities transactionally', () => {
     const id = repository.createJob({
       name: 'Bracket', fileName: 'bracket.stl', filePath: 'todo/bracket.stl', quantity: 3,
-      requesterEmail: 'maker@example.com', requesterName: 'Maker', notes: 'PETG',
+      requesterEmail: 'maker@example.com', requesterName: 'Maker', notes: 'PETG', sourceUrl: 'https://example.com/bracket',
     })
-    expect(repository.getJob(id)).toMatchObject({ counts: { todo: 3, in_progress: 0, done: 0 } })
+    expect(repository.getJob(id)).toMatchObject({ counts: { todo: 3, in_progress: 0, done: 0 }, sourceUrl: 'https://example.com/bracket' })
 
     repository.moveCopies({ id, from: 'todo', to: 'in_progress', count: 2, filePath: 'todo/bracket.stl', order: 4 })
     expect(repository.getJob(id)).toMatchObject({ counts: { todo: 1, in_progress: 2, done: 0 }, orders: { in_progress: 4 } })
@@ -28,8 +28,8 @@ describe('SqliteRepository contract', () => {
     const id = repository.createJob({ name: 'Gear', fileName: 'gear.stl', filePath: 'todo/gear.stl', quantity: 2, requesterEmail: 'a@b.test' })
     repository.moveCopies({ id, from: 'todo', to: 'done', count: 1, filePath: 'todo/gear.stl' })
     expect(() => repository.updateJob(id, { quantity: 0 })).toThrow()
-    repository.updateJob(id, { quantity: 4, notes: 'four please' })
-    expect(repository.getJob(id)).toMatchObject({ quantity: 4, counts: { todo: 3, done: 1 }, notes: 'four please' })
+    repository.updateJob(id, { quantity: 4, notes: 'four please', sourceUrl: 'https://example.com/gear' })
+    expect(repository.getJob(id)).toMatchObject({ quantity: 4, counts: { todo: 3, done: 1 }, notes: 'four please', sourceUrl: 'https://example.com/gear' })
     repository.deleteJob(id)
     expect(repository.getJob(id)).toBeUndefined()
   })

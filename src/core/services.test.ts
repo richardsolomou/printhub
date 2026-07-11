@@ -139,6 +139,13 @@ describe('PrintHubService crash recovery', () => {
     expect(() => service.update(id, { notes: 'x'.repeat(2001) }, operator)).toThrow(expect.objectContaining({ status: 400 }))
     expect(() => service.update(id, { requesterName: 'x'.repeat(61) }, operator)).toThrow(expect.objectContaining({ status: 400 }))
     expect(() => service.update(id, { quantity: 1.5 }, operator)).toThrow(expect.objectContaining({ status: 400 }))
+    expect(() => service.update(id, { sourceUrl: 'ftp://example.com/model' }, operator)).toThrow(expect.objectContaining({ status: 400 }))
+    expect(() => service.update(id, { sourceUrl: 'not a url' }, operator)).toThrow(expect.objectContaining({ status: 400 }))
+    expect(() => service.update(id, { sourceUrl: `https://example.com/${'x'.repeat(500)}` }, operator)).toThrow(expect.objectContaining({ status: 400 }))
+    service.update(id, { sourceUrl: 'https://example.com/model' }, operator)
+    expect(repository.getJob(id)?.sourceUrl).toBe('https://example.com/model')
+    service.update(id, { sourceUrl: '' }, operator)
+    expect(repository.getJob(id)?.sourceUrl).toBeFalsy()
     expect(repository.getJob(id)?.name).toBe('Model')
   })
 

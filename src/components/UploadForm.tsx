@@ -20,7 +20,9 @@ type Entry = {
   name: string
   quantity: string
   notes: string
+  sourceUrl: string
   noteOpen: boolean
+  linkOpen: boolean
   thumbnail?: string
   preview?: File
   state: 'pending' | 'uploading' | 'done' | 'error'
@@ -84,7 +86,9 @@ export function UploadForm({
         name: file.name.replace(/\.stl$/i, '').replace(/[_-]+/g, ' ').trim(),
         quantity: '1',
         notes: '',
+        sourceUrl: '',
         noteOpen: false,
+        linkOpen: false,
         state: 'pending',
       }
       accepted.push(entry)
@@ -150,6 +154,7 @@ export function UploadForm({
         form.set('quantity', String(Math.min(50, Math.max(1, Math.round(Number(entry.quantity) || 1)))))
         form.set('requesterName', forName)
         form.set('notes', entry.notes)
+        if (entry.sourceUrl.trim()) form.set('sourceUrl', entry.sourceUrl.trim())
         if (assets.thumbnail) form.set('thumbnail', assets.thumbnail)
         if (assets.preview) form.set('preview', assets.preview)
       }
@@ -297,7 +302,7 @@ export function UploadForm({
                       </button>
                     )}
                   </div>
-                  {entry.noteOpen ? (
+                  {entry.noteOpen && (
                     <textarea
                       aria-label="Notes"
                       rows={2}
@@ -306,16 +311,40 @@ export function UploadForm({
                       placeholder="scale, supports, colour — anything the printer should know"
                       disabled={entry.state === 'done'}
                     />
-                  ) : (
-                    entry.state === 'pending' && (
-                      <button
-                        type="button"
-                        className="row-note-toggle"
-                        onClick={() => patchEntry(entry.key, { noteOpen: true })}
-                      >
-                        + add note
-                      </button>
-                    )
+                  )}
+                  {entry.linkOpen && (
+                    <input
+                      aria-label="Source URL"
+                      type="url"
+                      inputMode="url"
+                      value={entry.sourceUrl}
+                      onChange={(e) => patchEntry(entry.key, { sourceUrl: e.target.value })}
+                      placeholder="https://… where this model came from"
+                      maxLength={500}
+                      disabled={entry.state === 'done'}
+                    />
+                  )}
+                  {entry.state === 'pending' && (!entry.noteOpen || !entry.linkOpen) && (
+                    <div className="row-toggles">
+                      {!entry.noteOpen && (
+                        <button
+                          type="button"
+                          className="row-note-toggle"
+                          onClick={() => patchEntry(entry.key, { noteOpen: true })}
+                        >
+                          + add note
+                        </button>
+                      )}
+                      {!entry.linkOpen && (
+                        <button
+                          type="button"
+                          className="row-note-toggle"
+                          onClick={() => patchEntry(entry.key, { linkOpen: true })}
+                        >
+                          + add link
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>

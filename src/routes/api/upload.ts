@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createFileRoute } from '@tanstack/react-router'
 import { app } from '../../server/app'
+import { validSourceUrl } from '../../core/services'
 import { acceptUploadChunk, contentLengthAllowed, UploadLockRegistry, UploadRequestLimiter, validSameOrigin } from '../../server/uploadGuards'
 
 // Cloudflare's proxy caps request bodies at 100 MB, so files arrive as
@@ -87,6 +88,8 @@ export const Route = createFileRoute('/api/upload')({
           if (finishing && !name) return bad('missing name')
           const quantity = finishing ? Number(form.get('quantity')) : 1
           if (finishing && (!Number.isInteger(quantity) || quantity < 1 || quantity > 50)) return bad('quantity must be between 1 and 50')
+          const sourceUrl = finishing ? String(form.get('sourceUrl') ?? '').trim() || undefined : undefined
+          if (sourceUrl && !validSourceUrl(sourceUrl)) return bad('source URL must be an http(s) link')
 
           try { await acceptUploadChunk(part, offset, chunkBytes) } catch (error) {
             if (error instanceof Response) return bad(await error.text(), error.status)
@@ -119,6 +122,7 @@ export const Route = createFileRoute('/api/upload')({
             requesterEmail: identity.email,
             requesterName,
             notes,
+            sourceUrl,
             thumbnail,
           }, identity, previewBytes)
           completed = true

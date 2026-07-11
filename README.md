@@ -10,6 +10,7 @@ PrintHub is a self-hosted STL request board for a small group. It runs as one No
 - Built-in first-run operator setup, password login and self-service password changes, with secure HttpOnly sessions.
 - Optional trusted-header identity for Cloudflare Access and other authenticated proxies.
 - Live board refresh across browsers through Server-Sent Events.
+- Quantity, notes, requester, and source URL fields on every request.
 - Optional PostHog telemetry; no external telemetry is enabled by default.
 
 ## Architecture and storage

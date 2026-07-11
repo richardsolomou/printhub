@@ -20,6 +20,7 @@ export type Job = {
   counts: Record<string, number>
   orders: Record<string, number | undefined>
   notes?: string
+  sourceUrl?: string
   thumbnail?: string
   previewPath?: string
   hasThumbnail: boolean
@@ -41,6 +42,7 @@ export type NewJob = Pick<
   | 'requesterEmail'
   | 'requesterName'
   | 'notes'
+  | 'sourceUrl'
   | 'thumbnail'
   | 'previewPath'
 >
@@ -88,7 +90,7 @@ export interface Repository {
   getCompletedUpload(uploadId: string, ownerId: string): string | undefined
   moveCopies(input: { id: string; from: string; to: string; count: number; filePath: string; order?: number }): void
   reorderJob(id: string, status: string, order: number): void
-  updateJob(id: string, fields: { name?: string; quantity?: number; requesterName?: string; notes?: string }): void
+  updateJob(id: string, fields: { name?: string; quantity?: number; requesterName?: string; notes?: string; sourceUrl?: string }): void
   deleteJob(id: string): void
   listPeople(): Person[]
   findUserByEmail(email: string): Identity | undefined

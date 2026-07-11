@@ -96,11 +96,12 @@ export class PrintHubService {
     this.changed('request.reordered')
   }
 
-  update(id: string, fields: { name?: string; quantity?: number; requesterName?: string; notes?: string }, identity: Identity) {
+  update(id: string, fields: { name?: string; quantity?: number; requesterName?: string; notes?: string; sourceUrl?: string }, identity: Identity) {
     if (typeof id !== 'string' || id.length > 100 ||
       (fields.name !== undefined && (typeof fields.name !== 'string' || !fields.name.trim() || fields.name.length > 120)) ||
       (fields.requesterName !== undefined && (typeof fields.requesterName !== 'string' || fields.requesterName.length > 60)) ||
       (fields.notes !== undefined && (typeof fields.notes !== 'string' || fields.notes.length > 2000)) ||
+      (fields.sourceUrl !== undefined && (typeof fields.sourceUrl !== 'string' || (fields.sourceUrl.trim() !== '' && !validSourceUrl(fields.sourceUrl.trim())))) ||
       (fields.quantity !== undefined && (typeof fields.quantity !== 'number' || !Number.isInteger(fields.quantity) || fields.quantity < 1 || fields.quantity > 50))) {
       throw new Response('invalid update', { status: 400 })
     }
@@ -108,13 +109,14 @@ export class PrintHubService {
     if (identity.role !== 'operator') {
       const started = workflow.statuses.slice(1).some((status) => job.counts[status.id] > 0)
       if (job.requesterEmail !== identity.email || started) throw new Response('forbidden', { status: 403 })
-      fields = { quantity: fields.quantity, notes: fields.notes }
+      fields = { quantity: fields.quantity, notes: fields.notes, sourceUrl: fields.sourceUrl }
     }
     this.repository.updateJob(id, {
       ...fields,
       name: fields.name?.trim(),
       requesterName: fields.requesterName?.trim(),
       notes: fields.notes?.trim(),
+      sourceUrl: fields.sourceUrl?.trim(),
     })
     this.changed('request.updated')
   }
@@ -223,6 +225,15 @@ export class PrintHubService {
 
   private capture(identity: string, event: string, properties?: Record<string, unknown>) {
     void this.telemetry.capture(identity, event, properties).catch(() => undefined)
+  }
+}
+
+export function validSourceUrl(value: string) {
+  if (value.length > 500) return false
+  try {
+    return ['http:', 'https:'].includes(new URL(value).protocol)
+  } catch {
+    return false
   }
 }
 

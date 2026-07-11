@@ -65,7 +65,7 @@ export const reorderJob = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => { requireMutationOrigin(); const instance = await app(); return instance.service.reorder(data.id, data.status, data.order, instance.auth.require()) })
 
 export const updateJob = createServerFn({ method: 'POST' })
-  .validator((data: { id: string; name?: string; quantity?: number; requesterName?: string; notes?: string }) => data)
+  .validator((data: { id: string; name?: string; quantity?: number; requesterName?: string; notes?: string; sourceUrl?: string }) => data)
   .handler(async ({ data }) => {
     requireMutationOrigin()
     const { id, ...fields } = data

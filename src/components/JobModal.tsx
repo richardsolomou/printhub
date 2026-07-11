@@ -11,6 +11,14 @@ import { deleteJob, updateJob } from '../server/fns'
 
 const StlViewer = lazy(() => import('./StlViewer'))
 
+function sourceLabel(url: string) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return url
+  }
+}
+
 export function JobModal({
   job,
   workflow,
@@ -33,6 +41,7 @@ export function JobModal({
   const [quantity, setQuantity] = useState(String(job.quantity))
   const [forName, setForName] = useState(requesterLabel(job))
   const [notes, setNotes] = useState(job.notes ?? '')
+  const [sourceUrl, setSourceUrl] = useState(job.sourceUrl ?? '')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -41,7 +50,8 @@ export function JobModal({
     (name !== job.name ||
       Number(quantity) !== job.quantity ||
       forName !== requesterLabel(job) ||
-      notes !== (job.notes ?? ''))
+      notes !== (job.notes ?? '') ||
+      sourceUrl !== (job.sourceUrl ?? ''))
 
   const requestClose = () => {
     if (!dirty || confirm('Discard unsaved changes?')) onClose()
@@ -60,6 +70,7 @@ export function JobModal({
           quantity: Math.min(50, Math.max(1, Math.round(Number(quantity) || job.quantity))),
           requesterName: forName.trim(),
           notes: notes.trim(),
+          sourceUrl: sourceUrl.trim(),
         },
       })
       await queryClient.invalidateQueries({ queryKey: ['jobs'] })
@@ -112,6 +123,15 @@ export function JobModal({
           </span>
         </div>
 
+        {job.sourceUrl && (
+          <p className="modal-source">
+            Source:{' '}
+            <a href={job.sourceUrl} target="_blank" rel="noopener noreferrer">
+              {sourceLabel(job.sourceUrl)}
+            </a>
+          </p>
+        )}
+
         {!canEdit && job.notes && <p>{job.notes}</p>}
 
         {canEdit && (
@@ -154,6 +174,18 @@ export function JobModal({
             <div className="field">
               <label htmlFor="job-notes">Notes</label>
               <textarea id="job-notes" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
+            </div>
+            <div className="field">
+              <label htmlFor="job-source">Source URL</label>
+              <input
+                id="job-source"
+                type="url"
+                inputMode="url"
+                value={sourceUrl}
+                onChange={(e) => setSourceUrl(e.target.value)}
+                placeholder="https://… where this model came from"
+                maxLength={500}
+              />
             </div>
             {error && <p className="error">{error}</p>}
             <div className="dialog-actions">

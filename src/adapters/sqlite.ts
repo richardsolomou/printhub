@@ -4,14 +4,15 @@ import path from 'node:path'
 import initialMigration from '../server/migrations/001_initial.sql?raw'
 import operationsMigration from '../server/migrations/002_operations.sql?raw'
 import durableUploadsMigration from '../server/migrations/003_uploads_and_reservations.sql?raw'
+import sourceUrlMigration from '../server/migrations/004_source_url.sql?raw'
 import type { Identity, Job, NewJob, OperationPayload, PendingOperation, Person, Repository, Role, UploadOperation } from '../core/types'
 import { initialStatus, workflow } from '../core/workflow'
 
-const migrations = [{ version: 1, sql: initialMigration }, { version: 2, sql: operationsMigration }, { version: 3, sql: durableUploadsMigration }]
+const migrations = [{ version: 1, sql: initialMigration }, { version: 2, sql: operationsMigration }, { version: 3, sql: durableUploadsMigration }, { version: 4, sql: sourceUrlMigration }]
 
 type JobRow = {
   id: string; name: string; file_name: string; file_path: string; quantity: number
-  requester_email: string; requester_name: string | null; notes: string | null; thumbnail: string | null
+  requester_email: string; requester_name: string | null; notes: string | null; source_url: string | null; thumbnail: string | null
   preview_path: string | null; created_at: number; updated_at: number
 }
 
@@ -104,7 +105,7 @@ export class SqliteRepository implements Repository {
     this.db.prepare('UPDATE job_statuses SET sort_order=? WHERE job_id=? AND status_id=?').run(order, id, status)
   }
 
-  updateJob(id: string, fields: { name?: string; quantity?: number; requesterName?: string; notes?: string }) {
+  updateJob(id: string, fields: { name?: string; quantity?: number; requesterName?: string; notes?: string; sourceUrl?: string }) {
     this.db.transaction(() => {
       const active = this.db.prepare("SELECT 1 FROM operations WHERE job_id=? AND state<>'committed' LIMIT 1").get(id)
       if (active) throw new Response('another operation is already running for this job', { status: 409 })
@@ -115,9 +116,9 @@ export class SqliteRepository implements Repository {
         if (fields.quantity < Math.max(started, 1)) throw new Error('cannot reduce below started copies')
         this.db.prepare('UPDATE job_statuses SET quantity=? WHERE job_id=? AND status_id=?').run(fields.quantity - started, id, initialStatus().id)
       }
-      this.db.prepare(`UPDATE jobs SET name=?, quantity=?, requester_name=?, notes=?, updated_at=? WHERE id=?`).run(
+      this.db.prepare(`UPDATE jobs SET name=?, quantity=?, requester_name=?, notes=?, source_url=?, updated_at=? WHERE id=?`).run(
         fields.name ?? job.name, fields.quantity ?? job.quantity, fields.requesterName ?? job.requesterName ?? null,
-        fields.notes ?? job.notes ?? null, Date.now(), id,
+        fields.notes ?? job.notes ?? null, fields.sourceUrl ?? job.sourceUrl ?? null, Date.now(), id,
       )
     })()
   }
@@ -249,6 +250,7 @@ export class SqliteRepository implements Repository {
     return {
       _id: row.id, name: row.name, fileName: row.file_name, filePath: row.file_path, quantity: row.quantity,
       requesterEmail: row.requester_email, requesterName: row.requester_name ?? undefined, notes: row.notes ?? undefined,
+      sourceUrl: row.source_url ?? undefined,
       thumbnail: thumbnail ? row.thumbnail ?? undefined : undefined, previewPath: row.preview_path ?? undefined,
       hasThumbnail: row.thumbnail !== null, createdAt: row.created_at, updatedAt: row.updated_at,
       counts: Object.fromEntries(states.map((state) => [state.status_id, state.quantity])),
@@ -263,8 +265,8 @@ export class SqliteRepository implements Repository {
 
   private insertJob(id: string, job: NewJob) {
     const now = Date.now()
-    this.db.prepare(`INSERT INTO jobs (id,name,file_name,file_path,quantity,requester_email,requester_name,notes,thumbnail,preview_path,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(id, job.name, job.fileName, job.filePath, job.quantity, job.requesterEmail, job.requesterName ?? null, job.notes ?? null, job.thumbnail ?? null, job.previewPath ?? null, now, now)
+    this.db.prepare(`INSERT INTO jobs (id,name,file_name,file_path,quantity,requester_email,requester_name,notes,source_url,thumbnail,preview_path,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(id, job.name, job.fileName, job.filePath, job.quantity, job.requesterEmail, job.requesterName ?? null, job.notes ?? null, job.sourceUrl ?? null, job.thumbnail ?? null, job.previewPath ?? null, now, now)
     const insert = this.db.prepare('INSERT INTO job_statuses (job_id,status_id,quantity) VALUES (?,?,?)')
     for (const status of workflow.statuses) insert.run(id, status.id, status.id === initialStatus().id ? job.quantity : 0)
   }

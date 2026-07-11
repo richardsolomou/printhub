@@ -444,7 +444,7 @@ select:focus-visible,
   align-items: center;
 }
 
-.row-main input,
+.row-fields input,
 .row-fields textarea {
   font: inherit;
   font-size: 14px;
@@ -479,6 +479,11 @@ select:focus-visible,
 
 .row-remove:hover {
   color: var(--danger);
+}
+
+.row-toggles {
+  display: flex;
+  gap: 12px;
 }
 
 .row-note-toggle {
@@ -641,6 +646,21 @@ select:focus-visible,
   flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 12px;
+}
+
+.modal-source {
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+
+.modal-source a {
+  color: var(--dim);
+  text-decoration: underline;
+  word-break: break-all;
+}
+
+.modal-source a:hover {
+  color: var(--text);
 }
 
 @media (max-width: 900px) {
