@@ -23,7 +23,7 @@ CONVEX_DEPLOYMENT=...
 VITE_CONVEX_URL=https://<deployment>.convex.cloud
 CONVEX_URL=https://<deployment>.convex.cloud
 CONVEX_ACTION_SECRET=<random hex, must match APP_WRITE_SECRET on the deployment>
-PRINTS_DIR=./prints-dev
+PRINTS_DIR=./prints-dev          # defaults to /prints (the container mount) when unset
 ADMIN_EMAILS=you@example.com
 DEV_USER_EMAIL=you@example.com   # fakes the Cloudflare Access header locally
 ```

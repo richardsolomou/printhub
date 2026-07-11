@@ -1,5 +1,5 @@
 # Paste into TrueNAS UI (HexOS advanced access): Apps -> Discover -> ⋮ -> Install via YAML.
-# Fill in the three <...> placeholders first.
+# Fill in the two <...> placeholders first.
 #
 # Uses the NAS's existing cloudflared: add a public hostname on that tunnel
 # pointing at http://<NAS-LAN-IP>:3010, and put a Cloudflare Access application
@@ -14,9 +14,7 @@ services:
     ports:
       - '3010:3000'
     environment:
-      CONVEX_URL: <https://your-prod-deployment.convex.cloud>
       CONVEX_ACTION_SECRET: <same value as APP_WRITE_SECRET on the Convex deployment>
       ADMIN_EMAILS: <you@example.com>
-      PRINTS_DIR: /data/prints
     volumes:
-      - /mnt/HDDs/Applications/print-queue/prints:/data/prints
+      - /mnt/HDDs/Applications/print-queue/prints:/prints

@@ -3,9 +3,7 @@ import path from 'node:path'
 import { STATUS_FOLDERS, STATUSES, type Status } from '../../convex/statuses'
 
 export function printsDir(): string {
-  const dir = process.env.PRINTS_DIR
-  if (!dir) throw new Error('PRINTS_DIR is not set')
-  return path.resolve(dir)
+  return path.resolve(process.env.PRINTS_DIR ?? '/prints')
 }
 
 export async function ensureStatusFolders(): Promise<void> {

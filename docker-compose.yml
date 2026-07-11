@@ -9,9 +9,7 @@ services:
     ports:
       - '3010:3000'
     environment:
-      CONVEX_URL: ${VITE_CONVEX_URL}
       CONVEX_ACTION_SECRET: ${CONVEX_ACTION_SECRET}
       ADMIN_EMAILS: ${ADMIN_EMAILS}
-      PRINTS_DIR: /data/prints
     volumes:
-      - ${PRINTS_HOST_DIR}:/data/prints
+      - ${PRINTS_HOST_DIR}:/prints
