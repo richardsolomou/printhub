@@ -2,15 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { createFileRoute, getRouteApi } from '@tanstack/react-router'
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { usePostHog } from '@posthog/react'
-import { useServerFn } from '@tanstack/react-start'
 import { Board } from '../components/Board'
 import { JobModal } from '../components/JobModal'
 import { UploadForm } from '../components/UploadForm'
 import { AuthScreen } from '../components/AuthScreen'
-import { CreateUserDialog } from '../components/CreateUserDialog'
-import { ChangePasswordDialog } from '../components/ChangePasswordDialog'
+import { SettingsModal } from '../components/SettingsModal'
 import { jobsQuery, peopleQuery } from '../lib/queries'
-import { logout } from '../server/fns'
 
 const rootRoute = getRouteApi('__root__')
 
@@ -18,7 +15,7 @@ export const Route = createFileRoute('/')({ component: Home })
 
 function Home() {
   const session = rootRoute.useLoaderData()
-  if (!session.identity) return <AuthScreen setupRequired={session.setupRequired} setupConfigured={session.setupConfigured} trustedHeader={session.authProvider === 'trusted-header'} />
+  if (!session.identity) return <AuthScreen setupRequired={session.setupRequired} trustedHeader={session.authProvider === 'trusted-header'} />
   return <AuthenticatedHome />
 }
 
@@ -28,11 +25,9 @@ function AuthenticatedHome() {
   const { data: jobs } = useSuspenseQuery(jobsQuery())
   useSuspenseQuery(peopleQuery())
   const queryClient = useQueryClient()
-  const callLogout = useServerFn(logout)
   const posthog = usePostHog()
   const [uploadOpen, setUploadOpen] = useState(false)
-  const [createUserOpen, setCreateUserOpen] = useState(false)
-  const [changePasswordOpen, setChangePasswordOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [droppedFiles, setDroppedFiles] = useState<File[]>([])
   const [fileDragActive, setFileDragActive] = useState(false)
   const [openJobId, setOpenJobId] = useState<string | null>(null)
@@ -77,17 +72,14 @@ function AuthenticatedHome() {
         <span className="who">v{__APP_VERSION__}</span>
         <span className="header-spacer" />
         <div className="header-actions">
-          {authProvider === 'local' && <button type="button" className="btn" onClick={() => setChangePasswordOpen(true)}>Change password</button>}
-          {authProvider === 'local' && <button type="button" className="btn sign-out" onClick={async () => { await callLogout(); window.location.reload() }}>Sign out</button>}
-          {me.role === 'operator' && authProvider === 'local' && <button type="button" className="btn" onClick={() => setCreateUserOpen(true)}>Add user</button>}
+          <button type="button" className="btn" aria-label="Settings" onClick={() => setSettingsOpen(true)}>⚙</button>
           <button type="button" className="btn btn-primary add-print" onClick={() => { posthog.capture('print_upload_opened', { source: 'button' }); setUploadOpen(true) }}>Add a print</button>
         </div>
       </header>
       <Board jobs={jobs} workflow={workflow} isAdmin={me.role === 'operator'} onOpenJob={(id) => { setOpenJobId(id); posthog.capture('print_job_viewed', { job_id: id }) }} />
       {fileDragActive && !uploadOpen && <div className="drop-hint">Drop STLs to add prints</div>}
       {uploadOpen && <UploadForm myName={me.name} initialFiles={droppedFiles} onClose={() => { setUploadOpen(false); setDroppedFiles([]) }} />}
-      {createUserOpen && <CreateUserDialog onClose={() => setCreateUserOpen(false)} />}
-      {changePasswordOpen && <ChangePasswordDialog onClose={() => setChangePasswordOpen(false)} />}
+      {settingsOpen && <SettingsModal me={me} localAuth={authProvider === 'local'} onClose={() => setSettingsOpen(false)} />}
       {selectedJob && <JobModal job={selectedJob} workflow={workflow} isAdmin={me.role === 'operator'} onClose={() => setOpenJobId(null)} />}
     </div>
   )

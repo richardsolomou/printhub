@@ -36,13 +36,10 @@ Requirements: Node 22+ and pnpm 10.33+.
 
 ```sh
 pnpm install
-export SETUP_TOKEN="$(openssl rand -hex 24)"
-echo "First-run setup token: $SETUP_TOKEN"
 DATA_DIR=./data-dev PRINTS_DIR=./prints-dev pnpm dev
 ```
 
-Open `http://localhost:3000`. A fresh database shows the first-operator setup form. Passwords must be at least 12 characters and are hashed with Argon2id.
-Set `SETUP_TOKEN` to a random value of at least 24 characters before first-run setup; the browser must supply this out-of-band token to claim the first operator account.
+Open `http://localhost:3000`. A fresh database shows a welcome form; whoever submits it first becomes the operator. Passwords must be at least 12 characters and are hashed with Argon2id.
 
 Checks:
 
@@ -61,14 +58,12 @@ services:
   app:
     image: ghcr.io/richardsolomou/printhub:latest
     ports: ["3010:3000"]
-    environment:
-      SETUP_TOKEN: "replace-with-a-random-value-of-at-least-24-characters"
     volumes:
       - ./data:/data
       - /mnt/my-print-files:/prints
 ```
 
-For Docker Compose, copy `.env.example` to `.env`, set the two host paths, and run `docker compose up -d`. A fresh local-auth installation also needs `SETUP_TOKEN` set to a random value of at least 24 characters. Remove it after creating the first operator; subsequent starts do not require it. Trusted-header deployments never need `SETUP_TOKEN`.
+For Docker Compose, copy `.env.example` to `.env`, set the two host paths, and run `docker compose up -d`. On a fresh installation the first person to open the app claims the operator account, so create it before exposing the app beyond your network.
 
 The unauthenticated `/api/health` endpoint returns success only after migrations and recovery finish, SQLite responds, and both `/data` and `/prints` accept a write probe. It can be used for container readiness and health checks.
 

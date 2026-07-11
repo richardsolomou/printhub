@@ -27,7 +27,6 @@ describe('authentication guards', () => {
     getCookie.mockReset()
     setCookie.mockReset()
     delete process.env.TRUSTED_PROXY_SECRET
-    delete process.env.SETUP_TOKEN
   })
 
   it('runs the dummy verifier for an unknown user and bounds input', async () => {
@@ -67,21 +66,28 @@ describe('authentication guards', () => {
     const { LocalAuthProvider } = await import('./auth')
     const hash = vi.spyOn(argon2, 'hash')
     const auth = new LocalAuthProvider({ countUsers: () => 1 } as unknown as Repository)
-    await expect(auth.setup({ email: 'new@example.com', name: 'New', password: 'long-enough-password', setupToken: 'anything' })).rejects.toMatchObject({ status: 409 })
+    await expect(auth.setup({ email: 'new@example.com', name: 'New', password: 'long-enough-password' })).rejects.toMatchObject({ status: 409 })
     expect(hash).not.toHaveBeenCalled()
   })
 
   it('allows only one expensive setup hash at a time', async () => {
     const { LocalAuthProvider } = await import('./auth')
-    process.env.SETUP_TOKEN = 'setup-token-at-least-24-characters'
     let release!: (hash: string) => void
     vi.spyOn(argon2, 'hash').mockImplementation(() => new Promise<string>((resolve) => { release = resolve }))
     const setupRepository = { countUsers: () => 0, createFirstUser: () => ({ id: 'first', email: 'first@example.com', name: 'First', role: 'operator' as const }), createSession: vi.fn() } as unknown as Repository
     const auth = new LocalAuthProvider(setupRepository)
-    const first = auth.setup({ email: 'first@example.com', name: 'First', password: 'long-enough-password', setupToken: process.env.SETUP_TOKEN })
-    await expect(auth.setup({ email: 'second@example.com', name: 'Second', password: 'long-enough-password', setupToken: process.env.SETUP_TOKEN })).rejects.toMatchObject({ status: 429 })
+    const first = auth.setup({ email: 'first@example.com', name: 'First', password: 'long-enough-password' })
+    await expect(auth.setup({ email: 'second@example.com', name: 'Second', password: 'long-enough-password' })).rejects.toMatchObject({ status: 429 })
     release('hash')
     await expect(first).resolves.toMatchObject({ email: 'first@example.com' })
+  })
+
+  it('lets the first visitor claim the operator account', async () => {
+    const { LocalAuthProvider } = await import('./auth')
+    vi.spyOn(argon2, 'hash').mockResolvedValue('hash')
+    const setupRepository = { countUsers: () => 0, createFirstUser: () => ({ id: 'first', email: 'first@example.com', name: 'First', role: 'operator' as const }), createSession: vi.fn() } as unknown as Repository
+    const auth = new LocalAuthProvider(setupRepository)
+    await expect(auth.setup({ email: 'first@example.com', name: 'First', password: 'long-enough-password' })).resolves.toMatchObject({ role: 'operator' })
   })
 
   it('bounds password hashes shared by setup, password changes, and user creation', async () => {

@@ -254,6 +254,12 @@ select:focus-visible,
   margin: 0 0 20px;
 }
 
+.auth-intro {
+  color: var(--dim);
+  font-size: 14px;
+  margin: -8px 0 16px;
+}
+
 .column-body {
   padding: 10px;
   display: flex;
@@ -655,6 +661,40 @@ select:focus-visible,
   flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 12px;
+}
+
+.settings-section {
+  margin-bottom: 16px;
+}
+
+.settings-section h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--dim);
+}
+
+.settings-identity {
+  margin: 0 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.settings-dim {
+  color: var(--dim);
+}
+
+.settings-role {
+  text-transform: capitalize;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .modal-source {

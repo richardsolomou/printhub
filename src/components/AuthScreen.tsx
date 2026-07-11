@@ -2,25 +2,23 @@ import { useState } from 'react'
 import { useServerFn } from '@tanstack/react-start'
 import { login, setupOperator } from '../server/fns'
 
-export function AuthScreen({ setupRequired, setupConfigured, trustedHeader }: { setupRequired: boolean; setupConfigured: boolean; trustedHeader: boolean }) {
+export function AuthScreen({ setupRequired, trustedHeader }: { setupRequired: boolean; trustedHeader: boolean }) {
   const callSetup = useServerFn(setupOperator)
   const callLogin = useServerFn(login)
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [password, setPassword] = useState('')
-  const [setupToken, setSetupToken] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
   if (trustedHeader) return <main className="auth"><h1>Print<span className="accent">Hub</span></h1><p>Your identity proxy did not provide an email.</p></main>
-  if (setupRequired && !setupConfigured) return <main className="auth"><div className="dialog auth-card"><h1>Print<span className="accent">Hub</span></h1><h2>Setup needs configuration</h2><p>Set <code>SETUP_TOKEN</code> to a random value of at least 24 characters, then restart PrintHub.</p></div></main>
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
     setBusy(true)
     setError('')
     try {
-      if (setupRequired) await callSetup({ data: { email, name, password, setupToken } })
+      if (setupRequired) await callSetup({ data: { email, name, password } })
       else await callLogin({ data: { email, password } })
       window.location.reload()
     } catch {
@@ -33,9 +31,9 @@ export function AuthScreen({ setupRequired, setupConfigured, trustedHeader }: { 
     <main className="auth">
       <form className="dialog auth-card" onSubmit={submit}>
         <h1>Print<span className="accent">Hub</span></h1>
-        <h2>{setupRequired ? 'Create the first operator' : 'Sign in'}</h2>
+        <h2>{setupRequired ? 'Welcome' : 'Sign in'}</h2>
+        {setupRequired && <p className="auth-intro">Create the operator account to get started. The operator runs the print queue and can invite requesters later.</p>}
         {setupRequired && <div className="field"><label htmlFor="auth-name">Name</label><input id="auth-name" value={name} onChange={(event) => setName(event.target.value)} required /></div>}
-        {setupRequired && <div className="field"><label htmlFor="auth-token">Setup token</label><input id="auth-token" type="password" value={setupToken} onChange={(event) => setSetupToken(event.target.value)} required autoComplete="off" /></div>}
         <div className="field"><label htmlFor="auth-email">Email</label><input id="auth-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" /></div>
         <div className="field"><label htmlFor="auth-password">Password</label><input id="auth-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={setupRequired ? 12 : undefined} autoComplete={setupRequired ? 'new-password' : 'current-password'} /></div>
         {error && <p className="error">{error}</p>}

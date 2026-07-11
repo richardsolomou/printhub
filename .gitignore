@@ -5,6 +5,7 @@ node_modules/
 dist/
 .env
 .env.local
+data-dev/
 prints-dev/
 src/routeTree.gen.ts
 deploy/hexos-app.local.yaml

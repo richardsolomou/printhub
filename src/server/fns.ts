@@ -10,14 +10,13 @@ export const sessionInfo = createServerFn({ method: 'GET' }).handler(async () =>
   return {
     identity,
     setupRequired: process.env.AUTH_PROVIDER !== 'trusted-header' && instance.repository.countUsers() === 0,
-    setupConfigured: (process.env.SETUP_TOKEN?.length ?? 0) >= 24,
     authProvider: process.env.AUTH_PROVIDER ?? 'local',
     workflow,
   }
 })
 
 export const setupOperator = createServerFn({ method: 'POST' })
-  .validator((data: { email: string; name: string; password: string; setupToken: string }) => data)
+  .validator((data: { email: string; name: string; password: string }) => data)
   .handler(async ({ data }) => { requireMutationOrigin(); return (await app()).auth.setup(data) })
 
 export const login = createServerFn({ method: 'POST' })

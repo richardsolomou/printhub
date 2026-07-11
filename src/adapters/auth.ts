@@ -21,7 +21,7 @@ const hashToken = (token: string) => crypto.createHash('sha256').update(token).d
 export interface AuthProvider {
   current(): Identity | undefined
   require(): Identity
-  setup(input: { email: string; name: string; password: string; setupToken: string }): Promise<Identity>
+  setup(input: { email: string; name: string; password: string }): Promise<Identity>
   login(input: { email: string; password: string }): Promise<Identity>
   changePassword(input: { currentPassword: string; newPassword: string }): Promise<void>
   logout(): void
@@ -41,9 +41,10 @@ export class LocalAuthProvider implements AuthProvider {
     return identity
   }
 
-  async setup(input: { email: string; name: string; password: string; setupToken: string }) {
+  // The first person to reach the empty instance claims the operator
+  // account (appliance-style first run); keep it private until then.
+  async setup(input: { email: string; name: string; password: string }) {
     if (this.repository.countUsers() !== 0) throw new Response('setup complete', { status: 409 })
-    verifySecret(input.setupToken, process.env.SETUP_TOKEN)
     validateCredentials(input)
     const now = Date.now()
     if (setupWindow.resetAt <= now) setupWindow = { count: 0, resetAt: now + 60_000 }
