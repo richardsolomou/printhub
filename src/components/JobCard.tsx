@@ -64,7 +64,7 @@ export function JobCard({
           <span className="chip qty">×{job.quantity}</span>
         </div>
         <div className="card-requester" style={{ color: requesterColor(job.requesterEmail) }}>
-          for {requester}
+          {requester}
         </div>
       </div>
     </button>

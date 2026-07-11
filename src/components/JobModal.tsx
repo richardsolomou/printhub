@@ -76,7 +76,7 @@ export function JobModal({
             className="chip"
             style={{ color: requesterColor(job.requesterEmail), borderColor: requesterColor(job.requesterEmail) }}
           >
-            for {job.requesterName ?? job.requesterEmail}
+            {job.requesterName ?? job.requesterEmail}
           </span>
         </div>
 
