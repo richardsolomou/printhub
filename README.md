@@ -1,4 +1,4 @@
-# Print Queue
+# PrintHub
 
 Friends upload STL files; a shared realtime Kanban board (To Do → In Progress → Done) tracks every print. Files land as plain STLs on the NAS, organized by status, so `todo/` is always exactly what's left to print.
 

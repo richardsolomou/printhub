@@ -80,7 +80,7 @@ function Home() {
     <div className="app">
       <header className="header">
         <h1>
-          Print<span className="accent">Queue</span>
+          Print<span className="accent">Hub</span>
         </h1>
         <button type="button" className="btn btn-primary" onClick={() => setUploadOpen(true)}>
           Add a print
