@@ -1,10 +1,11 @@
+import fs from 'node:fs'
 import { createServerFn } from '@tanstack/react-start'
 import type { Id } from '../../convex/_generated/dataModel'
 import { api } from '../../convex/_generated/api'
 import { STATUSES, type Printer, type Status } from '../../convex/statuses'
 import { convex, writeSecret } from './convexServer'
 import { isAdmin, readUserEmail, requireAdmin } from './identity'
-import { moveToStatusFolder } from './files'
+import { absolutePath, moveToStatusFolder } from './files'
 
 export const whoami = createServerFn({ method: 'GET' }).handler(() => {
   const email = readUserEmail()
@@ -68,5 +69,9 @@ export const deleteJob = createServerFn({ method: 'POST' })
   .validator((data: { id: string }) => data)
   .handler(async ({ data }) => {
     requireAdmin()
-    await convex().mutation(api.jobs.remove, { secret: writeSecret(), id: data.id as Id<'jobs'> })
+    const id = data.id as Id<'jobs'>
+    const job = await convex().query(api.jobs.get, { id })
+    if (!job) return
+    await convex().mutation(api.jobs.remove, { secret: writeSecret(), id })
+    await fs.promises.rm(absolutePath(job.filePath), { force: true })
   })

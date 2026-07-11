@@ -54,7 +54,7 @@ export function JobModal({
   }
 
   const remove = async () => {
-    if (!confirm(`Delete "${job.name}" from the board? The file stays on disk.`)) return
+    if (!confirm(`Delete "${job.name}"? This also deletes the STL from the NAS.`)) return
     setBusy(true)
     try {
       await callDelete({ data: { id: job._id } })
