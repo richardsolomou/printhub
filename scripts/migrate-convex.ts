@@ -4,9 +4,11 @@
 //
 //   pnpm exec tsx scripts/migrate-convex.ts \
 //     --export ./convex-export --data /data --prints /prints \
-//     [--operators a@x.com,b@y.com] [--operator a@x.com --operator-password <pw>]
+//     [--operators a@x.com,b@y.com] [--operator a@x.com --operator-password <pw>] [--dry-run]
 //
 // Run it with the app stopped. It refuses a non-empty requests table.
+// --dry-run exercises the full import against an in-memory database and
+// touches nothing on disk — safe to run against a live deployment.
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
@@ -49,8 +51,18 @@ function readJsonl<T>(file: string): T[] {
   return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line) as T)
 }
 
+// Jobs can carry ~300KB inline thumbnails; parse one line at a time instead
+// of materializing every parsed document.
+function* iterateJsonl<T>(file: string): Generator<T> {
+  if (!fs.existsSync(file)) return
+  for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
+    if (line) yield JSON.parse(line) as T
+  }
+}
+
+const dryRun = process.argv.includes('--dry-run')
 const exportDir = arg('export') ?? fail('--export <unzipped convex export directory> is required')
-const dataDir = arg('data') ?? fail('--data <directory mounted at /data> is required')
+const dataDir = dryRun ? undefined : (arg('data') ?? fail('--data <directory mounted at /data> is required'))
 const printsDir = arg('prints') ?? fail('--prints <directory mounted at /prints> is required')
 const operators = (arg('operators') ?? '').split(',').map((value) => value.trim().toLowerCase()).filter(Boolean)
 const operatorEmail = arg('operator')?.toLowerCase()
@@ -58,20 +70,27 @@ const operatorPassword = arg('operator-password')
 if (!!operatorEmail !== !!operatorPassword) fail('--operator and --operator-password go together')
 if (operatorPassword && operatorPassword.length < 8) fail('--operator-password must be at least 8 characters')
 
-const jobs = readJsonl<ConvexJob>(path.join(exportDir, 'jobs', 'documents.jsonl'))
+const jobsFile = path.join(exportDir, 'jobs', 'documents.jsonl')
 const users = readJsonl<ConvexUser>(path.join(exportDir, 'users', 'documents.jsonl'))
-if (!jobs.length && !users.length) fail(`no jobs or users found under ${exportDir} — is this an unzipped convex export?`)
+if (!fs.existsSync(jobsFile) && !users.length) fail(`no jobs or users found under ${exportDir} — is this an unzipped convex export?`)
+const userNames = new Map(users.map((user) => [user.email.toLowerCase(), user.name]))
 
-fs.mkdirSync(dataDir, { recursive: true })
-const db = new Database(path.join(dataDir, 'printhub.sqlite'))
-db.pragma('journal_mode = WAL')
-db.pragma('foreign_keys = ON')
-db.pragma('busy_timeout = 2000')
-try {
-  db.exec('BEGIN IMMEDIATE; COMMIT')
-} catch {
-  fail('database is locked — stop the PrintHub app before importing')
+const started = performance.now()
+let db: InstanceType<typeof Database>
+if (dryRun) {
+  db = new Database(':memory:')
+} else {
+  fs.mkdirSync(dataDir!, { recursive: true })
+  db = new Database(path.join(dataDir!, 'printhub.sqlite'))
+  db.pragma('journal_mode = WAL')
+  db.pragma('busy_timeout = 2000')
+  try {
+    db.exec('BEGIN IMMEDIATE; COMMIT')
+  } catch {
+    fail('database is locked — stop the PrintHub app before importing')
+  }
 }
+db.pragma('foreign_keys = ON')
 
 // Same numbered migrations the app applies on boot.
 const migrationsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'adapters', 'migrations')
@@ -92,35 +111,38 @@ if ((db.prepare('SELECT count(*) count FROM requests').get() as { count: number 
 
 const warnings: string[] = []
 const now = Date.now()
-
-// Record the verified prints location so the instance boots healthy. In
-// containers this matches the default /prints mount.
-db.prepare('INSERT OR REPLACE INTO settings (key,value_json,updated_at) VALUES (?,?,?)')
-  .run('storage', JSON.stringify({ adapter: 'local', root: path.resolve(printsDir) }), now)
+const operatorHash = operatorPassword ? await argon2.hash(operatorPassword) : undefined
 
 const insertUser = db.prepare('INSERT OR IGNORE INTO users (id,email,name,password_hash,role,color,created_at) VALUES (?,?,?,?,?,?,?)')
-for (const user of users) {
-  const email = user.email.toLowerCase()
-  insertUser.run(crypto.randomUUID(), email, user.name, null, operators.includes(email) ? 'operator' : 'requester', user.color ?? null, now)
-}
-if (operatorEmail && operatorPassword) {
-  const hash = await argon2.hash(operatorPassword)
-  const existing = db.prepare('SELECT id FROM users WHERE email=?').get(operatorEmail) as { id: string } | undefined
-  if (existing) {
-    db.prepare("UPDATE users SET password_hash=?, role='operator' WHERE id=?").run(hash, existing.id)
-  } else {
-    db.prepare("INSERT INTO users (id,email,name,password_hash,role,created_at) VALUES (?,?,?,?, 'operator', ?)")
-      .run(crypto.randomUUID(), operatorEmail, operatorEmail.split('@')[0], hash, now)
-  }
-}
-
 const insertRequest = db.prepare(`INSERT INTO requests
   (id,name,file_name,file_path,quantity,requester_email,requester_name,notes,source_url,thumbnail,preview_path,created_at,updated_at)
   VALUES (?,?,?,?,?,?,?,?,NULL,?,?,?,?)`)
 const insertStatus = db.prepare('INSERT INTO request_statuses (request_id,status_id,quantity,sort_order) VALUES (?,?,?,?)')
 
 let imported = 0
-for (const job of jobs) {
+// One transaction: a crash mid-import leaves the database untouched. Preview
+// moves are re-adopted on retry via the already-moved branch below.
+db.transaction(() => {
+// Record the verified prints location so the instance boots healthy. In
+// containers this matches the default /prints mount.
+db.prepare('INSERT OR REPLACE INTO settings (key,value_json,updated_at) VALUES (?,?,?)')
+  .run('storage', JSON.stringify({ adapter: 'local', root: path.resolve(printsDir) }), now)
+
+for (const user of users) {
+  const email = user.email.toLowerCase()
+  insertUser.run(crypto.randomUUID(), email, user.name, null, operators.includes(email) ? 'operator' : 'requester', user.color ?? null, now)
+}
+if (operatorEmail && operatorHash) {
+  const existing = db.prepare('SELECT id FROM users WHERE email=?').get(operatorEmail) as { id: string } | undefined
+  if (existing) {
+    db.prepare("UPDATE users SET password_hash=?, role='operator' WHERE id=?").run(operatorHash, existing.id)
+  } else {
+    db.prepare("INSERT INTO users (id,email,name,password_hash,role,created_at) VALUES (?,?,?,?, 'operator', ?)")
+      .run(crypto.randomUUID(), operatorEmail, operatorEmail.split('@')[0], operatorHash, now)
+  }
+}
+
+for (const job of iterateJsonl<ConvexJob>(jobsFile)) {
   const id = crypto.randomUUID()
   let previewPath: string | null = null
   if (job.previewPath) {
@@ -131,8 +153,10 @@ for (const job of jobs) {
     if (fs.existsSync(newPreview)) {
       previewPath = newRelative
     } else if (fs.existsSync(oldPreview)) {
-      fs.mkdirSync(path.dirname(newPreview), { recursive: true })
-      fs.renameSync(oldPreview, newPreview)
+      if (!dryRun) {
+        fs.mkdirSync(path.dirname(newPreview), { recursive: true })
+        fs.renameSync(oldPreview, newPreview)
+      }
       previewPath = newRelative
     } else {
       warnings.push(`preview missing on disk for "${job.name}" (${job.previewPath}) — viewer will load the full file`)
@@ -142,7 +166,7 @@ for (const job of jobs) {
     warnings.push(`file missing on disk for "${job.name}" (${job.filePath}) — downloads will fail until it is restored`)
   }
   const createdAt = job.createdAt ?? Math.round(job._creationTime)
-  const requesterName = job.requesterName ?? users.find((user) => user.email.toLowerCase() === job.requesterEmail.toLowerCase())?.name
+  const requesterName = job.requesterName ?? userNames.get(job.requesterEmail.toLowerCase())
   insertRequest.run(
     id, job.name, job.fileName, job.filePath, job.quantity, job.requesterEmail.toLowerCase(),
     requesterName ?? null, job.notes ?? null, job.thumbnail ?? null, previewPath,
@@ -153,9 +177,11 @@ for (const job of jobs) {
   }
   imported++
 }
+})()
 
 db.close()
-console.log(`imported ${imported} request(s) and ${users.length} user(s)`)
-if (operatorEmail) console.log(`operator login enabled for ${operatorEmail}`)
+const seconds = ((performance.now() - started) / 1000).toFixed(1)
+console.log(`${dryRun ? '[dry run] would import' : 'imported'} ${imported} request(s) and ${users.length} user(s) in ${seconds}s`)
+if (operatorEmail) console.log(`${dryRun ? '[dry run] would enable' : 'enabled'} operator login for ${operatorEmail}`)
 for (const warning of warnings) console.warn(`warning: ${warning}`)
-console.log('done — start PrintHub and verify the board')
+console.log(dryRun ? '[dry run] no files or databases were modified' : 'done — start PrintHub and verify the board')

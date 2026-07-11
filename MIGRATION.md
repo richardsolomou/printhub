@@ -28,6 +28,7 @@ pnpm migrate:convex -- \
   --operator you@example.com --operator-password <a password of 8+ characters>
 ```
 
+- Add `--dry-run` first (no `--data` needed): it exercises the full import against an in-memory database and verifies every file on disk without touching anything — safe to run while the old app is still live.
 - `--operators` marks the listed emails (your old `ADMIN_EMAILS`) as operators; everyone else imports as a requester.
 - `--operator`/`--operator-password` give one account a built-in login so you can sign in before (or instead of) configuring the proxy. Skip it if you will only ever use trusted-header auth.
 - The importer moves `.previews/*` into the new `.printhub/previews/` layout, verifies every request's file exists on disk (warning if not), records the prints location in settings, and refuses to run against a database that already has requests.
