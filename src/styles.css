@@ -79,17 +79,6 @@ select:focus-visible,
   color: var(--amber);
 }
 
-.header .who {
-  margin-left: auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--dim);
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 12px;
-}
-
 .btn {
   border-radius: var(--radius);
   padding: 8px 14px;
@@ -207,6 +196,7 @@ select:focus-visible,
 
 .card {
   display: flex;
+  align-items: center;
   gap: 10px;
   padding: 10px;
   background: var(--panel-2);

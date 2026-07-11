@@ -31,7 +31,6 @@ function Home() {
         <button type="button" className="btn btn-primary" onClick={() => setUploadOpen(true)}>
           Add a print
         </button>
-        <span className="who">{me.email}</span>
       </header>
 
       <Board jobs={jobs} isAdmin={me.isAdmin} onOpenJob={setOpenJobId} />
