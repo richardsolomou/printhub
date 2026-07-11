@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { draggable } from '@atlaskit/pragmatic-drag-and-drop/element/adapter'
+import { combine } from '@atlaskit/pragmatic-drag-and-drop/combine'
+import { draggable, dropTargetForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter'
+import {
+  attachClosestEdge,
+  extractClosestEdge,
+  type Edge,
+} from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge'
 import type { Doc } from '../../convex/_generated/dataModel'
 
 export function JobCard({
@@ -13,16 +19,29 @@ export function JobCard({
 }) {
   const ref = useRef<HTMLButtonElement>(null)
   const [dragging, setDragging] = useState(false)
+  const [closestEdge, setClosestEdge] = useState<Edge | null>(null)
 
   useEffect(() => {
     const element = ref.current
     if (!element || !canDrag) return
-    return draggable({
-      element,
-      getInitialData: () => ({ jobId: job._id }),
-      onDragStart: () => setDragging(true),
-      onDrop: () => setDragging(false),
-    })
+    return combine(
+      draggable({
+        element,
+        getInitialData: () => ({ jobId: job._id }),
+        onDragStart: () => setDragging(true),
+        onDrop: () => setDragging(false),
+      }),
+      dropTargetForElements({
+        element,
+        getData: ({ input, element: el }) =>
+          attachClosestEdge({ type: 'card', jobId: job._id }, { input, element: el, allowedEdges: ['top', 'bottom'] }),
+        onDrag: ({ self, source }) => {
+          if (source.data.jobId !== job._id) setClosestEdge(extractClosestEdge(self.data))
+        },
+        onDragLeave: () => setClosestEdge(null),
+        onDrop: () => setClosestEdge(null),
+      }),
+    )
   }, [canDrag, job._id])
 
   const requester = job.requesterName ?? job.requesterEmail.split('@')[0]
@@ -32,6 +51,7 @@ export function JobCard({
       ref={ref}
       type="button"
       className={`card${canDrag ? ' draggable' : ''}${dragging ? ' dragging' : ''}`}
+      data-edge={closestEdge ?? undefined}
       onClick={onOpen}
     >
       <div className="thumb">

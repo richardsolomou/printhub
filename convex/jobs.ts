@@ -44,10 +44,21 @@ export const create = mutation({
 })
 
 export const move = mutation({
-  args: { secret: v.string(), id: v.id('jobs'), status: statusValidator, filePath: v.string() },
-  handler: async (ctx, { secret, id, status, filePath }) => {
+  args: {
+    secret: v.string(),
+    id: v.id('jobs'),
+    status: statusValidator,
+    filePath: v.string(),
+    order: v.optional(v.number()),
+  },
+  handler: async (ctx, { secret, id, status, filePath, order }) => {
     assertSecret(secret)
-    await ctx.db.patch(id, { status, filePath, updatedAt: Date.now() })
+    await ctx.db.patch(id, {
+      status,
+      filePath,
+      updatedAt: Date.now(),
+      ...(order !== undefined ? { order } : {}),
+    })
   },
 })
 

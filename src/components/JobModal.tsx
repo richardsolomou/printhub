@@ -9,12 +9,16 @@ const StlViewer = lazy(() => import('./StlViewer'))
 export function JobModal({
   job,
   isAdmin,
+  userEmail,
   onClose,
 }: {
   job: Doc<'jobs'>
   isAdmin: boolean
+  userEmail: string
   onClose: () => void
 }) {
+  // Requesters may adjust copies/notes on their own job until printing starts.
+  const canEdit = isAdmin || (job.requesterEmail === userEmail && job.status === 'todo')
   const callUpdate = useServerFn(updateJob)
   const callDelete = useServerFn(deleteJob)
   const [name, setName] = useState(job.name)
@@ -82,15 +86,17 @@ export function JobModal({
           <span className="chip">for {requester}</span>
         </div>
 
-        {!isAdmin && job.notes && <p>{job.notes}</p>}
+        {!canEdit && job.notes && <p>{job.notes}</p>}
 
-        {isAdmin && (
+        {canEdit && (
           <form onSubmit={save}>
             <div className="field-row">
-              <div className="field">
-                <label htmlFor="job-name">Name</label>
-                <input id="job-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} />
-              </div>
+              {isAdmin && (
+                <div className="field">
+                  <label htmlFor="job-name">Name</label>
+                  <input id="job-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} />
+                </div>
+              )}
               <div className="field">
                 <label htmlFor="job-qty">Copies</label>
                 <input
@@ -102,30 +108,36 @@ export function JobModal({
                   onChange={(e) => setQuantity(Number(e.target.value))}
                 />
               </div>
+              {isAdmin && (
+                <div className="field">
+                  <label htmlFor="job-printer">Printer</label>
+                  <select id="job-printer" value={printer} onChange={(e) => setPrinter(e.target.value as Printer)}>
+                    {PRINTERS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+            {isAdmin && (
               <div className="field">
-                <label htmlFor="job-printer">Printer</label>
-                <select id="job-printer" value={printer} onChange={(e) => setPrinter(e.target.value as Printer)}>
-                  {PRINTERS.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
+                <label htmlFor="job-tags">Tags</label>
+                <input id="job-tags" value={tags} onChange={(e) => setTags(e.target.value)} />
               </div>
-            </div>
-            <div className="field">
-              <label htmlFor="job-tags">Tags</label>
-              <input id="job-tags" value={tags} onChange={(e) => setTags(e.target.value)} />
-            </div>
+            )}
             <div className="field">
               <label htmlFor="job-notes">Notes</label>
               <textarea id="job-notes" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
             </div>
             {error && <p className="error">{error}</p>}
             <div className="dialog-actions">
-              <button type="button" className="btn btn-danger" onClick={remove} disabled={busy}>
-                Delete
-              </button>
+              {isAdmin && (
+                <button type="button" className="btn btn-danger" onClick={remove} disabled={busy}>
+                  Delete
+                </button>
+              )}
               <a className="btn" href={`/api/files/${job._id}`} download>
                 Download STL
               </a>
@@ -136,7 +148,7 @@ export function JobModal({
           </form>
         )}
 
-        {!isAdmin && (
+        {!canEdit && (
           <div className="dialog-actions">
             <a className="btn" href={`/api/files/${job._id}`} download>
               Download STL

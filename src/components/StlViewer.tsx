@@ -6,6 +6,7 @@ import { buildScene, frameCamera, parseStl } from '../lib/stl'
 export default function StlViewer({ jobId, file }: { jobId?: string; file?: File }) {
   const mountRef = useRef<HTMLDivElement>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [statusText, setStatusText] = useState('loading model…')
 
   useEffect(() => {
     const mount = mountRef.current
@@ -18,6 +19,7 @@ export default function StlViewer({ jobId, file }: { jobId?: string; file?: File
     let observer: ResizeObserver | undefined
 
     setStatus('loading')
+    setStatusText('loading model…')
     ;(async () => {
       try {
         let buffer: ArrayBuffer
@@ -26,8 +28,25 @@ export default function StlViewer({ jobId, file }: { jobId?: string; file?: File
         } else {
           const res = await fetch(`/api/files/${jobId}?inline=1`)
           if (!res.ok) throw new Error(`fetch failed: ${res.status}`)
-          buffer = await res.arrayBuffer()
+          const total = Number(res.headers.get('Content-Length')) || 0
+          if (res.body && total) {
+            const reader = res.body.getReader()
+            const data = new Uint8Array(total)
+            let received = 0
+            for (;;) {
+              const { done, value } = await reader.read()
+              if (done) break
+              data.set(value, received)
+              received += value.length
+              setStatusText(`downloading… ${Math.min(100, Math.round((received / total) * 100))}%`)
+            }
+            buffer = data.buffer
+          } else {
+            buffer = await res.arrayBuffer()
+          }
         }
+        setStatusText('preparing model…')
+        await new Promise((r) => setTimeout(r)) // let the status paint before the parse blocks
         const geometry = parseStl(buffer)
         if (disposed) {
           geometry.dispose()
@@ -82,7 +101,7 @@ export default function StlViewer({ jobId, file }: { jobId?: string; file?: File
 
   return (
     <div className="viewer" ref={mountRef}>
-      {status === 'loading' && <div className="viewer-status">loading model…</div>}
+      {status === 'loading' && <div className="viewer-status">{statusText}</div>}
       {status === 'error' && <div className="viewer-status">couldn't load this model</div>}
     </div>
   )

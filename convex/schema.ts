@@ -17,6 +17,7 @@ export default defineSchema({
     status: statusValidator,
     notes: v.optional(v.string()),
     thumbnail: v.optional(v.string()),
+    order: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index('by_status', ['status']),

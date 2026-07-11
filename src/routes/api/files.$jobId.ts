@@ -26,6 +26,8 @@ export const Route = createFileRoute('/api/files/$jobId')({
         const headers = new Headers({
           'Content-Type': 'model/stl',
           'Content-Length': String(size),
+          // A job's file never changes, so let the browser keep it.
+          'Cache-Control': 'private, max-age=31536000, immutable',
         })
         if (new URL(request.url).searchParams.get('inline') !== '1') {
           const safeName = job.fileName.replace(/["\r\n]/g, '')

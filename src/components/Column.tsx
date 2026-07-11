@@ -14,13 +14,11 @@ export function Column({
   status,
   jobs,
   isAdmin,
-  onDropJob,
   onOpenJob,
 }: {
   status: Status
   jobs: Doc<'jobs'>[]
   isAdmin: boolean
-  onDropJob: (jobId: string, status: Status) => void
   onOpenJob: (jobId: string) => void
 }) {
   const ref = useRef<HTMLElement>(null)
@@ -31,15 +29,12 @@ export function Column({
     if (!element || !isAdmin) return
     return dropTargetForElements({
       element,
+      getData: () => ({ type: 'column', status }),
       onDragEnter: () => setIsOver(true),
       onDragLeave: () => setIsOver(false),
-      onDrop: ({ source }) => {
-        setIsOver(false)
-        const jobId = source.data.jobId
-        if (typeof jobId === 'string') onDropJob(jobId, status)
-      },
+      onDrop: () => setIsOver(false),
     })
-  }, [isAdmin, status, onDropJob])
+  }, [isAdmin, status])
 
   return (
     <section ref={ref} className={`column${isOver ? ' drop-target' : ''}`} data-status={status}>

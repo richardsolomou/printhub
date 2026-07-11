@@ -4,7 +4,8 @@ import { STLLoader } from 'three-stdlib'
 export function parseStl(buffer: ArrayBuffer): THREE.BufferGeometry {
   const geometry = new STLLoader().parse(buffer)
   geometry.center()
-  geometry.computeVertexNormals()
+  // STLs carry face normals; recomputing costs seconds on large meshes.
+  if (!geometry.hasAttribute('normal')) geometry.computeVertexNormals()
   return geometry
 }
 

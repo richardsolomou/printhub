@@ -62,7 +62,9 @@ function Home() {
       <Board jobs={jobs} isAdmin={isAdmin} onOpenJob={setOpenJobId} />
 
       {uploadOpen && <UploadForm onClose={() => setUploadOpen(false)} />}
-      {openJob && <JobModal job={openJob} isAdmin={isAdmin} onClose={() => setOpenJobId(null)} />}
+      {openJob && (
+        <JobModal job={openJob} isAdmin={isAdmin} userEmail={me.email} onClose={() => setOpenJobId(null)} />
+      )}
     </div>
   )
 }
