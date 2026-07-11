@@ -3,13 +3,13 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three-stdlib'
 import { buildScene, frameCamera, parseStl } from '../lib/stl'
 
-export default function StlViewer({ jobId }: { jobId: string }) {
+export default function StlViewer({ jobId, file }: { jobId?: string; file?: File }) {
   const mountRef = useRef<HTMLDivElement>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
 
   useEffect(() => {
     const mount = mountRef.current
-    if (!mount) return
+    if (!mount || (!jobId && !file)) return
 
     let disposed = false
     let renderer: THREE.WebGLRenderer | undefined
@@ -17,11 +17,18 @@ export default function StlViewer({ jobId }: { jobId: string }) {
     let frame = 0
     let observer: ResizeObserver | undefined
 
+    setStatus('loading')
     ;(async () => {
       try {
-        const res = await fetch(`/api/files/${jobId}?inline=1`)
-        if (!res.ok) throw new Error(`fetch failed: ${res.status}`)
-        const geometry = parseStl(await res.arrayBuffer())
+        let buffer: ArrayBuffer
+        if (file) {
+          buffer = await file.arrayBuffer()
+        } else {
+          const res = await fetch(`/api/files/${jobId}?inline=1`)
+          if (!res.ok) throw new Error(`fetch failed: ${res.status}`)
+          buffer = await res.arrayBuffer()
+        }
+        const geometry = parseStl(buffer)
         if (disposed) {
           geometry.dispose()
           return
@@ -71,7 +78,7 @@ export default function StlViewer({ jobId }: { jobId: string }) {
         renderer.domElement.remove()
       }
     }
-  }, [jobId])
+  }, [jobId, file])
 
   return (
     <div className="viewer" ref={mountRef}>

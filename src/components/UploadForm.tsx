@@ -1,5 +1,7 @@
-import { useRef, useState } from 'react'
+import { Suspense, lazy, useRef, useState } from 'react'
 import { renderStlThumbnail } from '../lib/thumbnail'
+
+const StlViewer = lazy(() => import('./StlViewer'))
 
 const MAX_FILE_BYTES = 95 * 1024 * 1024
 
@@ -102,6 +104,18 @@ export function UploadForm({ onClose }: { onClose: () => void }) {
           hidden
           onChange={(e) => pickFile(e.target.files?.[0])}
         />
+
+        {file && (
+          <Suspense
+            fallback={
+              <div className="viewer">
+                <div className="viewer-status">loading viewer…</div>
+              </div>
+            }
+          >
+            <StlViewer file={file} />
+          </Suspense>
+        )}
 
         <div className="field">
           <label htmlFor="upload-name">Name</label>

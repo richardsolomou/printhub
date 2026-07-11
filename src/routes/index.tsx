@@ -45,16 +45,18 @@ function Home() {
         <button type="button" className="btn btn-primary" onClick={() => setUploadOpen(true)}>
           Add a print
         </button>
-        {me.isAdmin && (
-          <button
-            type="button"
-            className={`btn${viewAsFriend ? ' preview-active' : ''}`}
-            onClick={togglePreview}
-          >
-            {viewAsFriend ? 'Viewing as friend — switch back' : 'View as friend'}
-          </button>
-        )}
-        <span className="who">{me.email}</span>
+        <div className="header-right">
+          {me.isAdmin && (
+            <button
+              type="button"
+              className={`preview-link${viewAsFriend ? ' active' : ''}`}
+              onClick={togglePreview}
+            >
+              {viewAsFriend ? 'friend view · on' : 'friend view'}
+            </button>
+          )}
+          <span className="who">{me.email}</span>
+        </div>
       </header>
 
       <Board jobs={jobs} isAdmin={isAdmin} onOpenJob={setOpenJobId} />

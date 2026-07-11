@@ -8,7 +8,6 @@ const EMPTY_COPY: Record<Status, string> = {
   todo: 'Nothing queued.',
   in_progress: 'Printers are idle.',
   done: 'Nothing finished yet.',
-  failed: 'No failed prints.',
 }
 
 export function Column({

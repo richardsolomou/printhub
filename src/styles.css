@@ -81,11 +81,33 @@ select:focus-visible,
   color: var(--amber);
 }
 
-.header .who {
+.header-right {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.header .who {
   color: var(--dim);
   font-family: 'IBM Plex Mono', monospace;
   font-size: 12px;
+}
+
+.preview-link {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  color: var(--dim);
+  padding: 2px 4px;
+}
+
+.preview-link:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.preview-link.active {
+  color: var(--amber);
 }
 
 .btn {
@@ -125,7 +147,7 @@ select:focus-visible,
 
 .board {
   display: grid;
-  grid-template-columns: repeat(4, minmax(260px, 1fr));
+  grid-template-columns: repeat(3, minmax(280px, 1fr));
   gap: 14px;
   padding: 16px 20px 20px;
   flex: 1;
@@ -176,10 +198,6 @@ select:focus-visible,
 
 .column[data-status='done'] .dot {
   background: var(--ok);
-}
-
-.column[data-status='failed'] .dot {
-  background: var(--danger);
 }
 
 .column-head .count {
@@ -423,10 +441,6 @@ select:focus-visible,
   transition: width 0.2s;
 }
 
-.btn.preview-active {
-  border-color: var(--amber);
-  color: var(--amber);
-}
 
 .viewer {
   width: 100%;
