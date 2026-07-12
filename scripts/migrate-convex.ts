@@ -4,6 +4,7 @@
 //
 //   pnpm exec tsx scripts/migrate-convex.ts \
 //     --export ./convex-export --data /data --prints /prints \
+//     [--storage-root /prints] \
 //     [--admins a@x.com,b@y.com] [--admin a@x.com --admin-password <pw>] [--dry-run]
 //
 // Run it with the app stopped. It refuses a non-empty requests table.
@@ -42,6 +43,7 @@ type MigrationOptions = {
   export: string
   data?: string
   prints: string
+  storageRoot: string
   admins?: string
   admin?: string
   adminPassword?: string
@@ -78,6 +80,7 @@ const program = new Command()
   .requiredOption('--export <directory>', 'unzipped Convex export directory')
   .option('--data <directory>', 'directory mounted at /data; required unless --dry-run')
   .requiredOption('--prints <directory>', 'directory mounted at /prints')
+  .option('--storage-root <directory>', 'local storage path visible inside the running container', '/prints')
   .option('--admins <emails>', 'comma-separated emails to promote to admins')
   .option('--admin <email>', 'create an admin account')
   .option('--admin-password <password>', 'password for the created admin account')
@@ -89,6 +92,8 @@ const dryRun = options.dryRun
 const exportDir = options.export
 const dataDir = dryRun ? undefined : (options.data ?? fail('--data <directory mounted at /data> is required unless --dry-run is used'))
 const printsDir = options.prints
+const storageRoot = options.storageRoot
+if (!path.isAbsolute(storageRoot)) fail('--storage-root must be an absolute path visible inside the running container')
 const admins = new Set(
   (options.admins ?? '')
     .split(',')
@@ -171,11 +176,11 @@ let imported = 0
 // are re-adopted by the existing-target branch on retry.
 db.exec('BEGIN IMMEDIATE')
 try {
-  // Record the verified prints location so the instance boots healthy. In
-  // containers this matches the default /prints mount.
+  // File operations use the host-side --prints path, while the application
+  // must store the path visible inside its running container.
   db.prepare('INSERT OR REPLACE INTO settings (key,value_json,updated_at) VALUES (?,?,?)').run(
     'storage',
-    JSON.stringify({ adapter: 'local', root: path.resolve(printsDir) }),
+    JSON.stringify({ adapter: 'local', root: storageRoot }),
     now,
   )
 

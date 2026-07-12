@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import Database from 'better-sqlite3'
 import { afterEach, describe, expect, it } from 'vitest'
 
 const execute = promisify(execFile)
@@ -52,6 +53,10 @@ describe('Convex migration scripts', () => {
       { cwd: process.cwd(), env: environment },
     )
     expect(migrated.stdout).toContain('imported 1 request(s) and 1 user(s)')
+    const database = new Database(path.join(dataDir, 'printhub.sqlite'), { readonly: true })
+    const storage = database.prepare("SELECT value_json FROM settings WHERE key='storage'").get() as { value_json: string }
+    expect(JSON.parse(storage.value_json)).toEqual({ adapter: 'local', root: '/prints' })
+    database.close()
 
     const verified = await execute(
       process.execPath,

@@ -71,6 +71,7 @@ pnpm migrate:convex \
 - `--admins` is a comma-separated list of the emails from the old `ADMIN_EMAILS` setting that should have the admin role. Everyone else imports as a requester.
 - `--admin` and `--admin-password` create a working built-in login for one admin. The password must contain at least 12 characters. Do not omit these options, or nobody will initially have a password with which to sign in.
 - The importer writes `printhub.sqlite` into `/path/to/printhub/.printhub`; that host directory is later mounted at `/data`.
+- `--prints` is the host-side path used during import. The database stores `/prints`, the path visible inside the running container; use `--storage-root` only if your container mount differs.
 - Original STL files and their paths remain in the existing NAS print directory. The importer verifies that every referenced file exists there.
 - The importer relocates legacy derived previews from `.previews/` to `.printhub/previews/` inside the same NAS print directory and writes decoded thumbnails under `.printhub/thumbnails/`. It does not relocate the original print files.
 - The importer refuses to run if the target SQLite database already contains requests.
