@@ -50,7 +50,7 @@ HexOS runs on TrueNAS SCALE, so the TrueNAS custom app instructions apply: creat
 
 ### Remote access
 
-How users reach the app is an ingress choice, not an application dependency. [`examples/cloudflare-nas`](examples/cloudflare-nas/README.md) is the reference recipe: PrintHub on a NAS behind a Cloudflare Tunnel, no open router ports. A plain LAN, Tailscale, or any reverse proxy works the same way — the one requirement is a request-body limit of about 74 MB at the proxy (see Upload limits).
+How users reach the app is an ingress choice, not an application dependency: a plain LAN, Tailscale, a Cloudflare Tunnel, or any reverse proxy works. The one requirement is a request-body limit of about 74 MB at the proxy (see Upload limits) — Cloudflare's default 100 MB cap already satisfies it. On a fresh install, create the operator account before exposing the app beyond your network.
 
 ## Configuration
 

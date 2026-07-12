@@ -13,7 +13,7 @@ Stop the old container (and its Cloudflare Tunnel if you plan to reuse the hostn
 
 ## 3. Deploy the new image
 
-Mount a **fresh, empty** directory at `/data` and the **same prints directory** at `/prints` (see the README's Docker section or [`examples/cloudflare-nas`](examples/cloudflare-nas/README.md)). Don't start it yet — or if it started, stop it before importing.
+Mount a **fresh, empty** directory at `/data` and the **same prints directory** at `/prints` (see the README's Install section). Don't start it yet — or if it started, stop it before importing.
 
 ## 4. Import
 
