@@ -214,6 +214,10 @@ export class PrintHubService {
           await this.assets.finalizeUpload(operation.payload.partPath, operation.payload.destinationPath)
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+          // ENOENT normally means a crash-recovery replay whose staged part
+          // was already consumed. If the part is still intact, the
+          // destination failed — surface it instead of dropping the upload.
+          if (await this.staging.size(operation.payload.partPath) > 0) throw error
           await Promise.allSettled([
             this.assets.remove(operation.payload.destinationPath),
             operation.payload.previewDestinationPath ? this.assets.remove(operation.payload.previewDestinationPath) : Promise.resolve(),

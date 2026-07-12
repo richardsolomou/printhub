@@ -206,6 +206,25 @@ describe('PrintHubService crash recovery', () => {
     expect(await fs.promises.readdir(assets.absolute('todo'))).toHaveLength(0)
   })
 
+  it('surfaces an unwritable destination instead of silently dropping the upload', async () => {
+    const part = staging.uploadPart('unwritable-destination-upload')
+    await fs.promises.writeFile(part, 'stl')
+    const enoent = Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' })
+    const failure = vi.spyOn(assets, 'finalizeUpload').mockRejectedValue(enoent)
+    repository.createUploadSession('unwritable-destination-upload', operator.id, Date.now() + 60_000, 3)
+    await expect(service.createUploadedRequest('unwritable-destination-upload', part, {
+      name: 'Model', fileName: 'model.stl', quantity: 1, requesterEmail: 'owner@example.com',
+    }, operator)).rejects.toThrow('ENOENT')
+    // The staged part survives and the journal entry stays, so the upload
+    // completes once storage is reachable again.
+    expect(await fs.promises.readFile(part, 'utf8')).toBe('stl')
+    expect(repository.listOperations()).toHaveLength(1)
+    expect(repository.listRequests()).toHaveLength(0)
+    failure.mockRestore()
+    await service.recoverOperations()
+    expect(repository.listRequests()).toHaveLength(1)
+  })
+
   it('keeps a journaled upload recoverable when metadata insertion fails', async () => {
     const part = staging.uploadPart('metadata-failure-upload')
     await fs.promises.writeFile(part, 'stl')

@@ -25,6 +25,7 @@ export const Route = createFileRoute('/api/upload')({
         if (!validSameOrigin(request)) return bad('cross-origin upload rejected', 403)
         if (!contentLengthAllowed(request, MAX_REQUEST_BYTES)) return bad('a valid Content-Length is required and must be within the request limit', 413)
         const instance = await app()
+        if (!instance.storageReady) return bad('storage is not ready — an operator needs to fix Settings → Storage first', 503)
         const identity = await instance.requireIdentity(request.headers)
         uploadLocks.expire()
         for (const expired of instance.repository.expireUploads(Date.now())) {
