@@ -1,12 +1,25 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { requireMutationOrigin } from './mutationOrigin'
 
 describe('cookie-auth mutation origin guard', () => {
+  afterEach(() => vi.unstubAllEnvs())
+
   it('accepts same-origin mutations', () => {
     expect(() =>
       requireMutationOrigin(
         new Request('https://print.test/_server', {
           headers: { origin: 'https://print.test', 'sec-fetch-site': 'same-origin' },
+        }),
+      ),
+    ).not.toThrow()
+  })
+
+  it('accepts the configured public origin behind a reverse proxy', () => {
+    vi.stubEnv('BETTER_AUTH_URL', 'https://printhub.ras.sh')
+    expect(() =>
+      requireMutationOrigin(
+        new Request('http://localhost:3000/_server', {
+          headers: { origin: 'https://printhub.ras.sh', 'sec-fetch-site': 'same-origin' },
         }),
       ),
     ).not.toThrow()

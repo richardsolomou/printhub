@@ -1,3 +1,5 @@
+import { validSameOriginRequest } from './sameOrigin'
+
 export class UploadRequestLimiter {
   private total = 0
   private owners = new Map<string, number>()
@@ -25,7 +27,5 @@ export class UploadRequestLimiter {
 }
 
 export function validSameOrigin(request: Request) {
-  const origin = request.headers.get('origin')
-  const site = request.headers.get('sec-fetch-site')
-  return origin === new URL(request.url).origin && (!site || site === 'same-origin')
+  return validSameOriginRequest(request)
 }

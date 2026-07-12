@@ -55,7 +55,7 @@ HexOS runs on TrueNAS SCALE, so the TrueNAS custom app instructions apply: creat
 
 ### Remote access
 
-How users reach the app is an ingress choice, not an application dependency: a plain LAN, Tailscale, a Cloudflare Tunnel, or any reverse proxy works. The one requirement is a request-body limit of about 74 MB at the proxy (see Upload limits) — Cloudflare's default 100 MB cap already satisfies it. On a fresh install, create the admin account before exposing the app beyond your network.
+How users reach the app is an ingress choice, not an application dependency: a plain LAN, Tailscale, a Cloudflare Tunnel, or any reverse proxy works. For a reverse proxy, set `BETTER_AUTH_URL` and `BETTER_AUTH_TRUSTED_ORIGINS` to the external origin (for example, `https://printhub.example.com`) and forward the original host and protocol. The proxy must also allow request bodies of about 74 MB (see Upload limits) — Cloudflare's default 100 MB cap already satisfies it. On a fresh install, create the admin account before exposing the app beyond your network.
 
 ## Configuration
 

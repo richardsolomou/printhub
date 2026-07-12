@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { UploadRequestLimiter, validSameOrigin } from './uploadGuards'
 
 describe('upload guards', () => {
+  afterEach(() => vi.unstubAllEnvs())
+
   it('requires the browser request to come from the same origin', () => {
     expect(
       validSameOrigin(
@@ -13,6 +15,17 @@ describe('upload guards', () => {
         new Request('https://print.test/api/upload', { headers: { origin: 'https://evil.test', 'sec-fetch-site': 'cross-site' } }),
       ),
     ).toBe(false)
+  })
+
+  it('accepts uploads from the configured public origin behind a reverse proxy', () => {
+    vi.stubEnv('BETTER_AUTH_TRUSTED_ORIGINS', 'https://printhub.ras.sh')
+    expect(
+      validSameOrigin(
+        new Request('http://localhost:3000/api/upload', {
+          headers: { origin: 'https://printhub.ras.sh', 'sec-fetch-site': 'same-origin' },
+        }),
+      ),
+    ).toBe(true)
   })
 
   it('bounds concurrent upload requests globally and per identity', () => {
