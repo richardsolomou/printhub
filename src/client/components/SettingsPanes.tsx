@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import type { Identity, StorageConfig } from '../../core/types'
-import { updateBoardSettings, updateStorageSettings, updateTelemetrySettings } from '../../server/fns'
+import { createInvite, revokeInvite, updateBoardSettings, updateStorageSettings, updateTelemetrySettings } from '../../server/fns'
 import { authClient } from '../authClient'
-import { boardQuery, storageQuery, telemetryQuery, usersQuery } from '../queries'
+import { boardQuery, invitesQuery, storageQuery, telemetryQuery, usersQuery } from '../queries'
 
 type Pane = 'account' | 'board' | 'users' | 'storage' | 'telemetry' | 'about'
 
@@ -145,6 +145,7 @@ function BoardPane() {
 function UsersPane({ me }: { me: Identity }) {
   const { data: users } = useQuery(usersQuery())
   const [adding, setAdding] = useState(false)
+  const [inviting, setInviting] = useState(false)
   const [resetting, setResetting] = useState<Identity | null>(null)
   return (
     <>
@@ -163,11 +164,92 @@ function UsersPane({ me }: { me: Identity }) {
       </ul>
       {resetting && <SetPasswordForm key={resetting.id} user={resetting} onDone={() => setResetting(null)} />}
       {adding && <CreateUserForm onDone={() => setAdding(false)} />}
-      {!adding && !resetting && (
+      {inviting && <InviteForm onDone={() => setInviting(false)} />}
+      {!adding && !resetting && !inviting && (
         <div className="settings-actions">
+          <button type="button" className="btn btn-primary" onClick={() => setInviting(true)}>Invite with link</button>
           <button type="button" className="btn" onClick={() => setAdding(true)}>Add user</button>
         </div>
       )}
+      <PendingInvites />
+    </>
+  )
+}
+
+function InviteForm({ onDone }: { onDone: () => void }) {
+  const callCreateInvite = useServerFn(createInvite)
+  const queryClient = useQueryClient()
+  const [role, setRole] = useState<'requester' | 'operator'>('requester')
+  const [label, setLabel] = useState('')
+  const [link, setLink] = useState('')
+  const [copied, setCopied] = useState(false)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      const { token } = await callCreateInvite({ data: { role, label: label.trim() || undefined } })
+      setLink(`${window.location.origin}/invite/${token}`)
+      await queryClient.invalidateQueries({ queryKey: ['invites'] })
+    } catch {
+      setError('Could not create the invite.')
+    }
+    setBusy(false)
+  }
+
+  if (link) {
+    return (
+      <div className="settings-form">
+        <div className="field">
+          <label htmlFor="invite-link">Invite link — share it with one person; it works once and expires in 7 days</label>
+          <div className="row-optional">
+            <input id="invite-link" readOnly value={link} onFocus={(event) => event.target.select()} />
+            <button type="button" className="btn" onClick={async () => { await navigator.clipboard.writeText(link); setCopied(true) }}>{copied ? 'Copied' : 'Copy'}</button>
+          </div>
+          <p className="field-hint">This is the only time the link is shown. They pick their own name, email, and password.</p>
+        </div>
+        <div className="settings-actions"><button type="button" className="btn" onClick={onDone}>Done</button></div>
+      </div>
+    )
+  }
+
+  return (
+    <form onSubmit={submit} className="settings-form">
+      <div className="field"><label htmlFor="invite-label">Who is this for? (optional note to yourself)</label><input id="invite-label" value={label} onChange={(event) => setLabel(event.target.value)} maxLength={100} placeholder="etsy order #1042" /></div>
+      <div className="field"><label htmlFor="invite-role">Role</label><select id="invite-role" value={role} onChange={(event) => setRole(event.target.value as typeof role)}><option value="requester">Requester</option><option value="operator">Operator</option></select></div>
+      {error && <p className="error">{error}</p>}
+      <div className="settings-actions"><button type="button" className="btn" onClick={onDone}>Cancel</button><button className="btn btn-primary" disabled={busy}>{busy ? 'Creating…' : 'Create invite link'}</button></div>
+    </form>
+  )
+}
+
+function PendingInvites() {
+  const { data: invites } = useQuery(invitesQuery())
+  const callRevoke = useServerFn(revokeInvite)
+  const queryClient = useQueryClient()
+  if (!invites?.length) return null
+  return (
+    <>
+      <h4 className="settings-subheading">Pending invites</h4>
+      <ul className="settings-users">
+        {invites.map((invite) => (
+          <li key={invite.id}>
+            <span>{invite.label || 'Unlabeled invite'}</span>
+            <span className="settings-dim">expires {new Date(invite.expiresAt).toLocaleDateString()}</span>
+            <span className="chip settings-role">{invite.role}</span>
+            <button
+              type="button"
+              className="btn"
+              onClick={async () => { await callRevoke({ data: { id: invite.id } }); await queryClient.invalidateQueries({ queryKey: ['invites'] }) }}
+            >
+              Revoke
+            </button>
+          </li>
+        ))}
+      </ul>
     </>
   )
 }

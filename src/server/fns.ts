@@ -1,10 +1,14 @@
+import crypto from 'node:crypto'
 import { createServerFn } from '@tanstack/react-start'
 import { getRequest } from '@tanstack/react-start/server'
-import { app, buildAssetStore, resetApp, resolveBoardConfig, resolveTelemetryConfig } from './app'
+import { app, buildAssetStore, hashInviteToken, resetApp, resolveBoardConfig, resolveTelemetryConfig } from './app'
+import { INVITE_HEADER } from './auth'
 import { workflow } from '../core/workflow'
 import { validSourceUrl } from '../core/services'
 import type { StorageConfig } from '../core/types'
 import { requireMutationOrigin } from './mutationOrigin'
+
+const INVITE_TTL = 7 * 24 * 60 * 60 * 1000
 
 // The app throws Response for HTTP handlers, but a Response thrown inside a
 // server fn is delivered as a plain response and the client promise resolves
@@ -52,6 +56,81 @@ export const listUsers = createServerFn({ method: 'GET' }).handler(async () => r
   if ((await me(instance)).role !== 'operator') throw new Response('forbidden', { status: 403 })
   return instance.repository.listUsers()
 }))
+
+export const createInvite = createServerFn({ method: 'POST' })
+  .validator((data: { role: 'requester' | 'operator'; label?: string }) => data)
+  .handler(async ({ data }) => rpc(async () => {
+    const instance = await app()
+    requireMutationOrigin()
+    if ((await me(instance)).role !== 'operator') throw new Response('forbidden', { status: 403 })
+    if (data.role !== 'requester' && data.role !== 'operator') throw new Response('invalid role', { status: 400 })
+    const label = typeof data.label === 'string' ? data.label.trim().slice(0, 100) : ''
+    // The raw token exists only in this response; the database keeps a hash.
+    const token = crypto.randomBytes(32).toString('base64url')
+    instance.repository.createInvite({
+      id: crypto.randomUUID(),
+      tokenHash: hashInviteToken(token),
+      role: data.role,
+      label: label || undefined,
+      expiresAt: Date.now() + INVITE_TTL,
+    })
+    return { token }
+  }))
+
+export const listInvites = createServerFn({ method: 'GET' }).handler(async () => rpc(async () => {
+  const instance = await app()
+  if ((await me(instance)).role !== 'operator') throw new Response('forbidden', { status: 403 })
+  return instance.repository.listInvites().filter((invite) => !invite.usedAt && invite.expiresAt > Date.now())
+}))
+
+export const revokeInvite = createServerFn({ method: 'POST' })
+  .validator((data: { id: string }) => data)
+  .handler(async ({ data }) => rpc(async () => {
+    const instance = await app()
+    requireMutationOrigin()
+    if ((await me(instance)).role !== 'operator') throw new Response('forbidden', { status: 403 })
+    instance.repository.deleteInvite(String(data.id))
+  }))
+
+// Public: the accept page needs to know whether the link is still good
+// before asking anyone to type anything.
+export const inviteInfo = createServerFn({ method: 'GET' })
+  .validator((data: { token: string }) => data)
+  .handler(async ({ data }) => rpc(async () => {
+    const instance = await app()
+    const invite = typeof data.token === 'string' ? instance.repository.findInvite(hashInviteToken(data.token)) : undefined
+    return { valid: !!invite && !invite.usedAt && invite.expiresAt > Date.now() }
+  }))
+
+export const acceptInvite = createServerFn({ method: 'POST' })
+  .validator((data: { token: string; name: string; email: string; password: string }) => data)
+  .handler(async ({ data }) => rpc(async () => {
+    const instance = await app()
+    requireMutationOrigin()
+    if (typeof data.token !== 'string' || data.token.length > 100) throw new Response('invalid invite', { status: 400 })
+    const tokenHash = hashInviteToken(data.token)
+    const invite = instance.repository.findInvite(tokenHash)
+    if (!invite || invite.usedAt || invite.expiresAt <= Date.now()) throw new Response('this invite link is no longer valid', { status: 410 })
+    // Validate everything better-auth would reject before the sign-up hook
+    // consumes the invite, so a typo cannot burn the link.
+    if (typeof data.email !== 'string' || data.email.length > 254 || !/^\S+@\S+\.\S+$/.test(data.email)) throw new Response('use a valid email address', { status: 400 })
+    if (typeof data.name !== 'string' || !data.name.trim() || data.name.length > 100) throw new Response('use a valid name', { status: 400 })
+    if (typeof data.password !== 'string' || data.password.length < 8 || data.password.length > 256) throw new Response('use a password of at least 8 characters', { status: 400 })
+    if (instance.repository.listUsers().some((user) => user.email === data.email.trim().toLowerCase())) {
+      throw new Response('an account with this email already exists — sign in instead', { status: 409 })
+    }
+
+    const headers = new Headers(getRequest().headers)
+    headers.set(INVITE_HEADER, data.token)
+    const created = await instance.auth.api.signUpEmail({
+      body: { email: data.email.trim(), password: data.password, name: data.name.trim() },
+      headers,
+    })
+    instance.repository.completeInvite(invite.id, created.user.id)
+    if (invite.role === 'operator') {
+      instance.repository.database.prepare('UPDATE "user" SET role=? WHERE id=?').run('operator', created.user.id)
+    }
+  }))
 
 function maskStorage(config: StorageConfig) {
   return config.adapter === 's3' ? { ...config, secretAccessKey: '' } : config

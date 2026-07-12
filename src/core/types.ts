@@ -9,6 +9,15 @@ export type Identity = {
 
 export type Person = { name: string; color?: string }
 
+export type Invite = {
+  id: string
+  role: Role
+  label?: string
+  createdAt: number
+  expiresAt: number
+  usedAt?: number
+}
+
 export type PrintRequest = {
   id: string
   name: string
@@ -98,6 +107,12 @@ export interface Repository {
   completeAssetGeneration(id: string, generated: { thumbnailPath?: string; previewPath?: string }): void
   listPeople(): Person[]
   listUsers(): Identity[]
+  createInvite(invite: { id: string; tokenHash: string; role: Role; label?: string; expiresAt: number }): void
+  listInvites(): Invite[]
+  findInvite(tokenHash: string): Invite | undefined
+  claimInvite(tokenHash: string, now: number): Invite | undefined
+  completeInvite(id: string, userId: string): void
+  deleteInvite(id: string): void
   getSetting<T>(key: string): T | undefined
   setSetting(key: string, value: unknown): void
   countUsers(): number

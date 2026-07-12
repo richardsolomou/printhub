@@ -7,6 +7,7 @@ import durableUploadsMigration from './migrations/003_uploads_and_reservations.s
 import settingsMigration from './migrations/004_settings.sql?raw'
 import betterAuthMigration from './migrations/005_better_auth.sql?raw'
 import assetGenerationMigration from './migrations/006_asset_generation.sql?raw'
+import invitesMigration from './migrations/007_invites.sql?raw'
 import type { PrintRequest, NewPrintRequest, OperationPayload, PendingOperation, Repository, Role, UploadOperation } from '../core/types'
 import { initialStatus, workflow } from '../core/workflow'
 
@@ -17,6 +18,7 @@ const migrations = [
   { version: 4, sql: settingsMigration },
   { version: 5, sql: betterAuthMigration },
   { version: 6, sql: assetGenerationMigration },
+  { version: 7, sql: invitesMigration },
 ]
 
 type RequestRow = {
@@ -170,6 +172,38 @@ export class SqliteRepository implements Repository {
   }
 
   countUsers() { return (this.db.prepare('SELECT count(*) count FROM "user"').get() as { count: number }).count }
+
+  createInvite(invite: { id: string; tokenHash: string; role: Role; label?: string; expiresAt: number }) {
+    this.db.prepare('INSERT INTO invites (id,token_hash,role,label,created_at,expires_at) VALUES (?,?,?,?,?,?)')
+      .run(invite.id, invite.tokenHash, invite.role, invite.label ?? null, Date.now(), invite.expiresAt)
+  }
+
+  listInvites() {
+    return (this.db.prepare('SELECT id,role,label,created_at,expires_at,used_at FROM invites ORDER BY created_at DESC').all() as
+      { id: string; role: Role; label: string | null; created_at: number; expires_at: number; used_at: number | null }[])
+      .map((row) => ({ id: row.id, role: row.role, label: row.label ?? undefined, createdAt: row.created_at, expiresAt: row.expires_at, usedAt: row.used_at ?? undefined }))
+  }
+
+  findInvite(tokenHash: string) {
+    const row = this.db.prepare('SELECT id,role,label,created_at,expires_at,used_at FROM invites WHERE token_hash=?').get(tokenHash) as
+      { id: string; role: Role; label: string | null; created_at: number; expires_at: number; used_at: number | null } | undefined
+    return row ? { id: row.id, role: row.role, label: row.label ?? undefined, createdAt: row.created_at, expiresAt: row.expires_at, usedAt: row.used_at ?? undefined } : undefined
+  }
+
+  // Atomic single-use claim: exactly one concurrent accept can win.
+  claimInvite(tokenHash: string, now: number) {
+    const row = this.db.prepare('UPDATE invites SET used_at=? WHERE token_hash=? AND used_at IS NULL AND expires_at>? RETURNING id,role,label,created_at,expires_at,used_at').get(now, tokenHash, now) as
+      { id: string; role: Role; label: string | null; created_at: number; expires_at: number; used_at: number } | undefined
+    return row ? { id: row.id, role: row.role, label: row.label ?? undefined, createdAt: row.created_at, expiresAt: row.expires_at, usedAt: row.used_at } : undefined
+  }
+
+  completeInvite(id: string, userId: string) {
+    this.db.prepare('UPDATE invites SET used_by=? WHERE id=?').run(userId, id)
+  }
+
+  deleteInvite(id: string) {
+    this.db.prepare('DELETE FROM invites WHERE id=? AND used_at IS NULL').run(id)
+  }
 
   beginOperation(id: string, payload: OperationPayload) {
     if (payload.kind === 'upload') return this.beginUploadOperation(id, payload)

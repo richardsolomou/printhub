@@ -1,13 +1,17 @@
+import crypto from 'node:crypto'
 import Database from 'better-sqlite3'
 import { afterEach, describe, expect, it } from 'vitest'
 import { SqliteRepository } from '../adapters/sqlite'
-import { createAuth } from './auth'
+import { INVITE_HEADER, createAuth } from './auth'
 
 const SECRET = 'test-secret-0123456789abcdef0123456789abcdef'
+const hashToken = (token: string) => crypto.createHash('sha256').update(token).digest('hex')
 
 function build() {
   const repository = new SqliteRepository(new Database(':memory:'))
-  const auth = createAuth(repository.database, SECRET)
+  const auth = createAuth(repository.database, SECRET, {
+    claimInvite: (token) => repository.claimInvite(hashToken(token), Date.now()),
+  })
   return { repository, auth }
 }
 
@@ -95,5 +99,57 @@ describe('better-auth integration', () => {
     await expect(auth.api.signInEmail({ body: { email: 'maker@example.com', password: 'first-password' } }))
       .rejects.toMatchObject({ status: 'UNAUTHORIZED' })
     await expect(auth.api.signInEmail({ body: { email: 'maker@example.com', password: 'second-password' } })).resolves.toBeTruthy()
+  })
+
+  it('admits exactly one sign-up per invite and honors expiry and revocation', async () => {
+    const { repository, auth } = build()
+    cleanup = () => repository.close()
+    await auth.api.signUpEmail({ body: { email: 'op@example.com', password: 'password123', name: 'Op' } })
+
+    repository.createInvite({ id: 'inv-1', tokenHash: hashToken('good-token'), role: 'requester', expiresAt: Date.now() + 60_000 })
+    const withInvite = (token: string) => new Headers({ [INVITE_HEADER]: token })
+
+    await expect(auth.api.signUpEmail({
+      body: { email: 'stranger@example.com', password: 'password123', name: 'Stranger' },
+      headers: withInvite('wrong-token'),
+    })).rejects.toMatchObject({ status: 'FORBIDDEN' })
+
+    const { headers } = await auth.api.signUpEmail({
+      body: { email: 'customer@example.com', password: 'password123', name: 'Customer' },
+      headers: withInvite('good-token'),
+      returnHeaders: true,
+    })
+    const session = await auth.api.getSession({ headers: cookieHeaders(headers) })
+    expect(session?.user).toMatchObject({ email: 'customer@example.com', role: 'requester' })
+
+    // Single use: the same token cannot admit a second account.
+    await expect(auth.api.signUpEmail({
+      body: { email: 'tailgater@example.com', password: 'password123', name: 'Tailgater' },
+      headers: withInvite('good-token'),
+    })).rejects.toMatchObject({ status: 'FORBIDDEN' })
+
+    repository.createInvite({ id: 'inv-2', tokenHash: hashToken('expired-token'), role: 'requester', expiresAt: Date.now() - 1 })
+    await expect(auth.api.signUpEmail({
+      body: { email: 'late@example.com', password: 'password123', name: 'Late' },
+      headers: withInvite('expired-token'),
+    })).rejects.toMatchObject({ status: 'FORBIDDEN' })
+
+    repository.createInvite({ id: 'inv-3', tokenHash: hashToken('revoked-token'), role: 'requester', expiresAt: Date.now() + 60_000 })
+    repository.deleteInvite('inv-3')
+    await expect(auth.api.signUpEmail({
+      body: { email: 'revoked@example.com', password: 'password123', name: 'Revoked' },
+      headers: withInvite('revoked-token'),
+    })).rejects.toMatchObject({ status: 'FORBIDDEN' })
+
+    expect(repository.countUsers()).toBe(2)
+  })
+
+  it('does not let a used invite be revoked back to unused', () => {
+    const { repository } = build()
+    cleanup = () => repository.close()
+    repository.createInvite({ id: 'inv-used', tokenHash: hashToken('token-a'), role: 'requester', expiresAt: Date.now() + 60_000 })
+    expect(repository.claimInvite(hashToken('token-a'), Date.now())).toBeTruthy()
+    repository.deleteInvite('inv-used')
+    expect(repository.findInvite(hashToken('token-a'))?.usedAt).toBeTruthy()
   })
 })

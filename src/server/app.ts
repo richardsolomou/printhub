@@ -31,6 +31,10 @@ export function buildAssetStore(config: StorageConfig) {
   return config.adapter === 's3' ? new S3AssetStore(config) : new LocalAssetStore(config.root)
 }
 
+export function hashInviteToken(token: string) {
+  return crypto.createHash('sha256').update(token).digest('hex')
+}
+
 // Session-signing secret for better-auth: generated on first boot and kept in
 // the settings table, because an appliance has no environment to configure.
 function resolveAuthSecret(repository: Repository) {
@@ -51,7 +55,10 @@ async function createApp() {
     await staging.initialize()
     const events = new LocalEventBus()
     const telemetry = new OptionalPostHogTelemetry(() => resolveTelemetryConfig(repository!).enabled)
-    const auth = createAuth(repository.database, resolveAuthSecret(repository), () => events.publish('user.created'))
+    const auth = createAuth(repository.database, resolveAuthSecret(repository), {
+      onUserCreated: () => events.publish('user.created'),
+      claimInvite: (token) => repository!.claimInvite(hashInviteToken(token), Date.now()),
+    })
     const identity = async (headers: Headers): Promise<Identity | undefined> => {
       const session = await auth.api.getSession({ headers })
       if (!session) return undefined

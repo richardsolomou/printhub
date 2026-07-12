@@ -898,3 +898,11 @@ select:focus-visible,
     animation: none !important;
   }
 }
+
+.settings-subheading {
+  margin: 24px 0 8px;
+  font-size: 13px;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}

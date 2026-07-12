@@ -56,7 +56,7 @@ How users reach the app is an ingress choice, not an application dependency: a p
 
 `DATA_DIR` (default `/data`) is the only environment variable the app reads. Everything else — storage backend, board visibility, telemetry — lives in the operator-only **Settings** page and persists in `/data/printhub.sqlite`.
 
-Accounts are built-in email and password: operators add users (and can reset their passwords) under **Settings → Users**. OAuth sign-in (Google, Discord…) is planned; see [VISION.md](VISION.md).
+Accounts are built-in email and password, and joining is by invitation: under **Settings → Users** an operator creates a single-use invite link (7-day expiry, revocable, labelable — "etsy order #1042") and sends it to one person, who picks their own name, email, and password. Fits pay-first print farms: nobody can sign up without a link, and the operator never handles anyone's password. Operators can also create accounts directly or reset a password. OAuth sign-in (Google, Discord…) is planned; see [VISION.md](VISION.md).
 
 The unauthenticated `/api/health` endpoint returns success only after migrations and recovery finish, SQLite responds, and both storage and the upload staging area accept a write probe. The Docker image uses it as its `HEALTHCHECK`, so `docker ps`, Unraid, and TrueNAS all show real readiness.
 

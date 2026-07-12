@@ -51,6 +51,8 @@ Start the container and open the app. Sign in with the `--operator` credentials.
 
 The old deployment authenticated with Cloudflare Access headers; the new app uses built-in email/password accounts. Your teammates' accounts were imported with the same emails, names, and colors, but without passwords. Set one for each under **Settings → Users → Set password** and share it with them directly; they can change it themselves afterwards under Account.
 
+New people never need a password handoff: **Settings → Users → Invite with link** creates a single-use link; whoever opens it picks their own credentials.
+
 If you keep the Cloudflare Tunnel, it now only provides ingress. An Access policy in front still works as an extra gate, but PrintHub no longer reads its identity headers.
 
 ## Rollback

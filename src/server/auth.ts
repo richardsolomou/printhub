@@ -5,8 +5,15 @@ import { admin } from 'better-auth/plugins'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import type { Database } from 'better-sqlite3'
 import { accessControl, accessRoles } from '../core/access'
+import type { Invite } from '../core/types'
 
-export function createAuth(database: Database, secret: string, onUserCreated?: () => void) {
+export const INVITE_HEADER = 'x-printhub-invite'
+
+export function createAuth(
+  database: Database,
+  secret: string,
+  options?: { onUserCreated?: () => void; claimInvite?: (token: string) => Invite | undefined },
+) {
   const countUsers = () => (database.prepare('SELECT count(*) count FROM "user"').get() as { count: number }).count
   return betterAuth({
     database,
@@ -32,14 +39,19 @@ export function createAuth(database: Database, secret: string, onUserCreated?: (
       user: {
         create: {
           before: async (user) => ({ data: { ...user, role: countUsers() === 0 ? 'operator' : ((user as { role?: string }).role ?? 'requester') } }),
-          after: async () => onUserCreated?.(),
+          after: async () => options?.onUserCreated?.(),
         },
       },
     },
     hooks: {
+      // After first run, sign-up only proceeds when the request carries a
+      // valid single-use invite token; the claim is atomic, so the invite is
+      // consumed the moment it lets a sign-up through.
       before: createAuthMiddleware(async (ctx) => {
-        if (ctx.path === '/sign-up/email' && countUsers() > 0) {
-          throw new APIError('FORBIDDEN', { message: 'setup complete' })
+        if (ctx.path !== '/sign-up/email' || countUsers() === 0) return
+        const token = ctx.headers?.get(INVITE_HEADER)
+        if (!token || !options?.claimInvite?.(token)) {
+          throw new APIError('FORBIDDEN', { message: 'sign-up is by invitation' })
         }
       }),
     },
