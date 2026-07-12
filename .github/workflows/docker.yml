@@ -83,7 +83,7 @@ jobs:
           docker run -d --name minio -p 9000:9000 \
             -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
             quay.io/minio/minio:RELEASE.2025-10-15T17-29-55Z server /data
-          for attempt in {1..30}; do curl -fsS http://127.0.0.1:9000/minio/health/live && exit 0; sleep 2; done
+          for _ in {1..30}; do curl -fsS http://127.0.0.1:9000/minio/health/live && exit 0; sleep 2; done
           docker logs minio
           exit 1
       - run: pnpm exec vitest run src/adapters/storeContract.test.ts
@@ -92,17 +92,69 @@ jobs:
           MINIO_TEST_ACCESS_KEY: minioadmin
           MINIO_TEST_SECRET_KEY: minioadmin
 
-  build:
+  build-image:
     if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push')
-    needs: [check, e2e]
-    runs-on: ubuntu-latest
+    name: Build image (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
-      attestations: write
-      id-token: write
     steps:
       - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        id: build
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          push: true
+          sbom: true
+          provenance: mode=max
+          outputs: type=image,name=ghcr.io/${{ github.repository_owner }}/printhub,push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=printhub-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=printhub-${{ matrix.arch }}
+      - name: Export digest
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish-image:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push')
+    needs: [check, e2e, build-image]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: digests-*
+          path: ${{ runner.temp }}/digests
+          merge-multiple: true
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -112,17 +164,21 @@ jobs:
       - name: Read version
         id: version
         run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          sbom: true
-          provenance: mode=max
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/printhub:latest
-            ghcr.io/${{ github.repository_owner }}/printhub:v${{ steps.version.outputs.version }}
-            ghcr.io/${{ github.repository_owner }}/printhub:sha-${{ github.sha }}
+      - name: Create multi-platform image
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          images=()
+          for digest in *; do
+            images+=("${IMAGE}@sha256:${digest}")
+          done
+          docker buildx imagetools create \
+            --tag "${IMAGE}:latest" \
+            --tag "${IMAGE}:v${VERSION}" \
+            --tag "${IMAGE}:sha-${GITHUB_SHA}" \
+            "${images[@]}"
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/printhub
+          VERSION: ${{ steps.version.outputs.version }}
       - uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ghcr.io/${{ github.repository_owner }}/printhub:sha-${{ github.sha }}
