@@ -99,7 +99,7 @@ test('admin setup, upload, viewer, settings, invite, and sign out', async ({ pag
   await expect(page.locator('header').getByText(/^v\d/)).toHaveCount(0)
   await expect(page.locator('[data-slot="settings-page"]')).toBeVisible()
   await expect(page.locator('[data-slot="settings-header"]')).toContainText('Account')
-  await expect(page.locator('[data-slot="settings-section"]')).toHaveCount(2)
+  await expect(page.locator('[data-slot="settings-section"]')).toHaveCount(3)
   await expect(page.getByRole('heading', { name: 'Sign-in methods' })).toBeVisible()
   await expect(page.locator('[data-auth-method="password"]')).toContainText('Linked')
   await expect(page.getByLabel('Current password')).toHaveCount(0)
