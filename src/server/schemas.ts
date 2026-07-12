@@ -37,6 +37,50 @@ export const acceptInviteSchema = z.object({
 export const telemetrySettingsSchema = z.object({ enabled: z.boolean() })
 export const boardSettingsSchema = z.object({ privateRequests: z.boolean() })
 
+const printerProfileSchema = z.object({
+  id: id,
+  name: z.string().trim().min(1).max(100),
+  widthMm: z.number().positive().max(10_000),
+  depthMm: z.number().positive().max(10_000),
+  heightMm: z.number().positive().max(10_000),
+  spacingMm: z.number().nonnegative().max(1_000),
+  supportMarginMm: z.number().nonnegative().max(1_000),
+  adhesionMarginMm: z.number().nonnegative().max(1_000),
+  heightAllowanceMm: z.number().nonnegative().max(10_000),
+  maxHeightDifferenceMm: z.number().nonnegative().max(10_000),
+})
+
+const footprintSchema = z.object({ widthMm: z.number().positive(), depthMm: z.number().positive(), known: z.boolean() })
+const plateCandidateSchema = z.object({
+  copyId: id,
+  requestId: id,
+  name: z.string().max(200),
+  footprint: footprintSchema,
+  estimatedSupportedHeightMm: z.number().nonnegative(),
+})
+const platePlacementSchema = plateCandidateSchema.extend({
+  xMm: z.number().finite(),
+  yMm: z.number().finite(),
+  rotationZDegrees: z.number().finite(),
+})
+
+export const printerProfilesSchema = z.object({ profiles: z.array(printerProfileSchema).min(1).max(50) })
+export const plateModelAnalysesSchema = z.object({
+  analyses: z
+    .array(z.object({ requestId: id, widthMm: z.number().positive(), depthMm: z.number().positive(), heightMm: z.number().positive() }))
+    .max(500),
+})
+export const platePlannerDraftSchema = z.object({
+  draft: z.object({
+    fingerprint: z.string().min(1).max(100_000),
+    printerId: id,
+    candidates: z.array(plateCandidateSchema).max(5_000),
+    placements: z.array(platePlacementSchema).max(5_000),
+    skippedCount: z.number().int().nonnegative(),
+    savedAt: z.number().int().nonnegative(),
+  }),
+})
+
 export const passwordAuthSettingsSchema = z.object({ enabled: z.boolean() })
 export const setOwnPasswordSchema = z.object({ password: z.string().min(PASSWORD_MIN_LENGTH).max(256) })
 const socialProvider = z.enum(['google', 'discord'])

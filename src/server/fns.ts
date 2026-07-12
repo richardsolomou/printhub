@@ -18,6 +18,9 @@ import {
   idSchema,
   inviteInfoSchema,
   moveCopiesSchema,
+  plateModelAnalysesSchema,
+  platePlannerDraftSchema,
+  printerProfilesSchema,
   reorderRequestSchema,
   requestFiltersSchema,
   setOwnPasswordSchema,
@@ -29,6 +32,7 @@ import {
   telemetrySettingsSchema,
   updateRequestSchema,
 } from './schemas'
+import type { PlatePlannerDraft, PrinterProfile } from '../core/platePlanner'
 
 const INVITE_TTL = 7 * 24 * 60 * 60 * 1000
 
@@ -72,6 +76,54 @@ export const sessionInfo = createServerFn({ method: 'GET' }).handler(async () =>
     }
   }),
 )
+
+export const getPlatePlannerState = createServerFn({ method: 'GET' }).handler(async () =>
+  rpc(async () => {
+    const instance = await app()
+    await admin(instance)
+    return {
+      profiles: instance.repository.getSetting<PrinterProfile[]>('plate-planner-profiles'),
+      draft: instance.repository.getSetting<PlatePlannerDraft>('plate-planner-draft'),
+      analyses: instance.repository.listPlateModelAnalyses(),
+    }
+  }),
+)
+
+export const savePlatePlannerProfiles = createServerFn({ method: 'POST' })
+  .validator(printerProfilesSchema)
+  .handler(async ({ data }) =>
+    rpc(async () => {
+      const instance = await app()
+      requireMutationOrigin()
+      await admin(instance)
+      instance.repository.setSetting('plate-planner-profiles', data.profiles)
+      return { saved: true }
+    }),
+  )
+
+export const savePlateModelAnalyses = createServerFn({ method: 'POST' })
+  .validator(plateModelAnalysesSchema)
+  .handler(async ({ data }) =>
+    rpc(async () => {
+      const instance = await app()
+      requireMutationOrigin()
+      await admin(instance)
+      instance.repository.upsertPlateModelAnalyses(data.analyses)
+      return { saved: data.analyses.length }
+    }),
+  )
+
+export const savePlatePlannerDraft = createServerFn({ method: 'POST' })
+  .validator(platePlannerDraftSchema)
+  .handler(async ({ data }) =>
+    rpc(async () => {
+      const instance = await app()
+      requireMutationOrigin()
+      await admin(instance)
+      instance.repository.setSetting('plate-planner-draft', data.draft)
+      return { saved: true }
+    }),
+  )
 
 export const getAccountMethods = createServerFn({ method: 'GET' }).handler(async () =>
   rpc(async () => {

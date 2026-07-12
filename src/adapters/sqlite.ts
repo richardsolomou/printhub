@@ -10,6 +10,7 @@ import assetGenerationMigration from './migrations/006_asset_generation.sql?raw'
 import invitesMigration from './migrations/007_invites.sql?raw'
 import authRateLimitMigration from './migrations/008_auth_rate_limit.sql?raw'
 import adminRoleMigration from './migrations/009_admin_role.sql?raw'
+import platePlannerMigration from './migrations/010_plate_planner.sql?raw'
 import type {
   NewPrintRequest,
   OperationPayload,
@@ -33,6 +34,7 @@ const migrations = [
   { version: 7, sql: invitesMigration },
   { version: 8, sql: authRateLimitMigration },
   { version: 9, sql: adminRoleMigration },
+  { version: 10, sql: platePlannerMigration },
 ]
 
 type RequestRow = {
@@ -313,6 +315,39 @@ export class SqliteRepository implements Repository {
         'UPDATE requests SET thumbnail_path=COALESCE(?, thumbnail_path), preview_path=COALESCE(?, preview_path), assets_generated_at=?, updated_at=? WHERE id=?',
       )
       .run(generated.thumbnailPath ?? null, generated.previewPath ?? null, now, now, id)
+  }
+
+  listPlateModelAnalyses() {
+    return this.db
+      .prepare('SELECT request_id,width_mm,depth_mm,height_mm FROM plate_model_analysis ORDER BY request_id')
+      .all()
+      .map((row) => {
+        const analysis = row as { request_id: string; width_mm: number; depth_mm: number; height_mm: number }
+        return {
+          requestId: analysis.request_id,
+          widthMm: analysis.width_mm,
+          depthMm: analysis.depth_mm,
+          heightMm: analysis.height_mm,
+        }
+      })
+  }
+
+  upsertPlateModelAnalyses(analyses: import('../core/platePlanner').PlateModelAnalysis[]) {
+    const statement = this.db.prepare(
+      `INSERT INTO plate_model_analysis(request_id,width_mm,depth_mm,height_mm,analyzed_at)
+       VALUES(?,?,?,?,?)
+       ON CONFLICT(request_id) DO UPDATE SET
+         width_mm=excluded.width_mm,
+         depth_mm=excluded.depth_mm,
+         height_mm=excluded.height_mm,
+         analyzed_at=excluded.analyzed_at`,
+    )
+    this.db.transaction(() => {
+      const now = Date.now()
+      for (const analysis of analyses) {
+        statement.run(analysis.requestId, analysis.widthMm, analysis.depthMm, analysis.heightMm, now)
+      }
+    })()
   }
 
   // better-auth owns the user/session/account tables; this class only reads them.

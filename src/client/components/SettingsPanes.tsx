@@ -7,16 +7,28 @@ import { AboutPane } from './settings/AboutPane'
 import { BoardPane } from './settings/BoardPane'
 import { DiagnosticsPane } from './settings/DiagnosticsPane'
 import { IntegrationsPane } from './settings/IntegrationsPane'
+import { PrintersPane } from './settings/PrintersPane'
 import { StoragePane } from './settings/StoragePane'
 import { TelemetryPane } from './settings/TelemetryPane'
 import { UsersPane } from './settings/UsersPane'
 
-export const settingsSections = ['account', 'board', 'users', 'storage', 'integrations', 'telemetry', 'diagnostics', 'about'] as const
+export const settingsSections = [
+  'account',
+  'board',
+  'printers',
+  'users',
+  'storage',
+  'integrations',
+  'telemetry',
+  'diagnostics',
+  'about',
+] as const
 export type SettingsSection = (typeof settingsSections)[number]
 
 const panes: { id: SettingsSection; label: string }[] = [
   { id: 'account', label: 'Account' },
   { id: 'board', label: 'Board' },
+  { id: 'printers', label: 'Printers' },
   { id: 'users', label: 'Users' },
   { id: 'storage', label: 'Storage' },
   { id: 'integrations', label: 'Integrations' },
@@ -55,6 +67,7 @@ export function SettingsPanes({ me, section }: { me: Identity; section: Settings
       <div className="min-w-0">
         {section === 'account' && <AccountPane me={me} />}
         {me.role === 'admin' && section === 'board' && <BoardPane />}
+        {me.role === 'admin' && section === 'printers' && <PrintersPane />}
         {me.role === 'admin' && section === 'users' && <UsersPane me={me} />}
         {me.role === 'admin' && section === 'storage' && <StoragePane />}
         {me.role === 'admin' && section === 'integrations' && <IntegrationsPane />}

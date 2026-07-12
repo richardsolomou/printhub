@@ -1,11 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, createFileRoute } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { usePostHog } from '@posthog/react'
-import { Settings } from 'lucide-react'
-import { Button, buttonVariants } from '@/components/ui/button'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { AppHeader } from '../client/components/AppHeader'
 import { Board } from '../client/components/Board'
 import { RequestModal } from '../client/components/RequestModal'
 import { UploadForm } from '../client/components/UploadForm'
@@ -157,37 +155,17 @@ function AuthenticatedHome() {
   const selectedRequest = requests.find((request) => request.id === openRequestId)
   return (
     <div className="relative flex h-dvh flex-col">
-      <header className="flex items-center gap-4 border-b px-5 py-3.5 max-sm:flex-wrap max-sm:gap-x-3 max-sm:gap-y-2 max-sm:px-3 max-sm:py-2.5">
-        <Brand />
-        <span className="flex-1 max-sm:hidden" />
-        <div className="flex gap-4 max-sm:w-full max-sm:flex-wrap max-sm:justify-end max-sm:gap-2">
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Link
-                  to="/settings/$section"
-                  params={{ section: 'account' }}
-                  className={cn(buttonVariants({ variant: 'outline', size: 'icon' }))}
-                  aria-label="Settings"
-                />
-              }
-            >
-              <Settings />
-            </TooltipTrigger>
-            <TooltipContent>Settings</TooltipContent>
-          </Tooltip>
-          <Button
-            type="button"
-            className="max-sm:ml-auto"
-            onClick={() => {
-              posthog.capture('upload_opened', { source: 'button' })
-              setUploadOpen(true)
-            }}
-          >
-            Add a print
-          </Button>
-        </div>
-      </header>
+      <AppHeader active="board" isAdmin={isAdmin}>
+        <Button
+          type="button"
+          onClick={() => {
+            posthog.capture('upload_opened', { source: 'button' })
+            setUploadOpen(true)
+          }}
+        >
+          Add a print
+        </Button>
+      </AppHeader>
       <BoardFilters
         search={search}
         facets={facets}

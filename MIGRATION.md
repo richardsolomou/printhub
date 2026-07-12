@@ -1,51 +1,96 @@
 # Migrating from the Convex-backed PrintHub
 
-The standalone build keeps your STL files exactly where they are and imports the Convex metadata (requests, per-status copy counts, users, thumbnails) into SQLite under `/data`. Nothing is deleted from Convex, so you can roll back until you decommission it.
+The standalone build keeps the existing NAS print directory mounted in the same place and imports the Convex metadata (requests, per-status copy counts, users, thumbnails) into SQLite. Create a new `.printhub` directory alongside the application and mount it at `/data`; the existing NAS print directory remains mounted at `/prints`.
+
+For example:
+
+```text
+/path/to/printhub/
+├── .printhub/          # new application data, including printhub.sqlite
+└── docker-compose.yml
+
+/existing/NAS/prints/   # existing print storage; remains in place
+├── todo/
+├── in-progress/
+├── done/
+└── .previews/
+```
+
+Nothing is deleted from Convex, so you can roll back until you decommission it.
 
 ## 1. Back up
 
 - Export Convex data: `npx convex export --path printhub-export.zip` in the old app's checkout, then unzip it.
-- Snapshot or copy the prints directory on your NAS (the folder mounted at `/prints`, containing `todo/`, `in-progress/`, `done/`, `.previews/`).
+- Snapshot or copy the existing prints directory on your NAS (the folder mounted at `/prints`, containing `todo/`, `in-progress/`, `done/`, and `.previews/`). The original STL files remain in this directory throughout the migration.
 
 ## 2. Stop the old app
 
 Stop the old container (and its Cloudflare Tunnel if you plan to reuse the hostname). Convex stays untouched.
 
-## 3. Deploy the new image
+## 3. Prepare the new deployment
 
-Mount a **fresh, empty** directory at `/data` and the **same prints directory** at `/prints` (see the README's Install section). Don't start it yet — or if it started, stop it before importing.
+Create a fresh, empty `.printhub` directory alongside the application. Configure the new container with these mounts:
+
+```yaml
+volumes:
+  - /path/to/printhub/.printhub:/data
+  - /existing/NAS/prints:/prints
+```
+
+The first mount is new application data. The second is the same NAS print directory used by the Convex-backed deployment; do not copy or relocate it. Don't start the new container yet — or, if it has already started, stop it before importing.
 
 ## 4. Import
 
-Run the importer from a checkout of this repository (Node 22+, `pnpm install` first), pointing at the unzipped export and both mounts:
+Run the importer from a checkout of this repository using Node 22 and `pnpm install --frozen-lockfile`. Point `--data` at the new host-side `.printhub` directory and `--prints` at the existing host-side NAS print directory.
+
+First, rehearse the complete import without changing the database or filesystem:
 
 ```sh
-pnpm migrate:convex -- \
+pnpm migrate:convex \
   --export ./printhub-export \
-  --data /mnt/HDDs/STL/.printhub-data \
-  --prints /mnt/HDDs/STL \
-  --operators you@example.com \
-  --operator you@example.com --operator-password <a password of 8+ characters>
+  --prints /existing/NAS/prints \
+  --admins you@example.com \
+  --admin you@example.com \
+  --admin-password '<a password of at least 12 characters>' \
+  --dry-run
 ```
 
-- Add `--dry-run` first (no `--data` needed): it exercises the full import against an in-memory database and verifies every file on disk without touching anything — safe to run while the old app is still live.
-- `--operators` marks the listed emails (your old `ADMIN_EMAILS`) as operators; everyone else imports as a requester.
-- `--operator`/`--operator-password` give one account a password. PrintHub signs in with built-in email/password accounts only, so pass it — without it nobody can sign in after the import.
-- The importer moves `.previews/*` into the new `.printhub/previews/` layout, verifies every request's file exists on disk (warning if not), records the prints location in settings, and refuses to run against a database that already has requests.
+After stopping the old application, run the real import:
+
+```sh
+pnpm migrate:convex \
+  --export ./printhub-export \
+  --data /path/to/printhub/.printhub \
+  --prints /existing/NAS/prints \
+  --admins you@example.com \
+  --admin you@example.com \
+  --admin-password '<a password of at least 12 characters>'
+```
+
+- `--dry-run` exercises the complete import against an in-memory database and checks every referenced file without modifying anything. It is safe to run while the old app is live, and it does not require `--data`.
+- `--admins` is a comma-separated list of the emails from the old `ADMIN_EMAILS` setting that should have the admin role. Everyone else imports as a requester.
+- `--admin` and `--admin-password` create a working built-in login for one admin. The password must contain at least 12 characters. Do not omit these options, or nobody will initially have a password with which to sign in.
+- The importer writes `printhub.sqlite` into `/path/to/printhub/.printhub`; that host directory is later mounted at `/data`.
+- Original STL files and their paths remain in the existing NAS print directory. The importer verifies that every referenced file exists there.
+- The importer relocates legacy derived previews from `.previews/` to `.printhub/previews/` inside the same NAS print directory and writes decoded thumbnails under `.printhub/thumbnails/`. It does not relocate the original print files.
+- The importer refuses to run if the target SQLite database already contains requests.
 
 ## 5. Verify the import
 
 Before starting the app, run the independent verifier — it compares every exported field against the imported database and the files on disk:
 
 ```sh
-pnpm exec tsx scripts/verify-convex-import.ts ./printhub-export /mnt/HDDs/STL/.printhub-data /mnt/HDDs/STL
+pnpm verify:convex \
+  --export ./printhub-export \
+  --data /path/to/printhub/.printhub \
+  --prints /existing/NAS/prints
 ```
 
 It must end with `NO METADATA MISMATCHES` and full file counts; anything else lists the exact request and field that differs.
 
 ## 6. First start
 
-Start the container and open the app. Sign in with the `--operator` credentials. Verify the board: columns and copy counts should match the old app, thumbnails render, and downloads work.
+Start the container with `/path/to/printhub/.printhub` mounted at `/data` and the unchanged NAS print directory mounted at `/prints`. Open the app and sign in with the `--admin` credentials. Verify that the board columns and copy counts match the old app, thumbnails and previews render, and downloads work.
 
 ## 7. Let teammates back in
 

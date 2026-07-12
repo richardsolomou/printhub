@@ -31,12 +31,17 @@ export function DialogShell({
     >
       <DialogContent
         showCloseButton={!preventClose}
-        className={cn('max-h-[calc(100dvh-2.5rem)] overflow-y-auto sm:max-w-[560px]', className)}
+        className={cn(
+          'top-4 bottom-4 flex max-h-none translate-y-0 flex-col overflow-hidden sm:top-1/2 sm:bottom-auto sm:max-h-[calc(100dvh-2.5rem)] sm:max-w-[560px] sm:-translate-y-1/2',
+          className,
+        )}
       >
-        <DialogHeader>
+        <DialogHeader className="shrink-0">
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        {children}
+        <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
+          {children}
+        </div>
       </DialogContent>
     </Dialog>
   )

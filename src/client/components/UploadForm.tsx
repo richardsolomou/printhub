@@ -202,7 +202,7 @@ export function UploadForm({
           <FieldError>{error}</FieldError>
           {progress !== null && <Progress value={progress * 100} aria-label="Upload progress" />}
 
-          <div className="mt-2 flex justify-end gap-2.5">
+          <div className="mt-2 flex flex-col-reverse gap-2.5 sm:flex-row sm:justify-end [&>*]:w-full sm:[&>*]:w-auto">
             <Button type="button" variant="outline" onClick={requestClose}>
               Cancel
             </Button>

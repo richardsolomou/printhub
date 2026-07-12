@@ -10,6 +10,7 @@ import {
   listRequests,
   listPeople,
   listUsers,
+  getPlatePlannerState,
   sessionInfo,
 } from '../server/fns'
 import type { RequestFilters } from '../core/types'
@@ -26,3 +27,4 @@ export const telemetryQuery = () => queryOptions({ queryKey: ['telemetry'], quer
 export const boardQuery = () => queryOptions({ queryKey: ['board-settings'], queryFn: () => getBoardSettings() })
 export const diagnosticsQuery = () => queryOptions({ queryKey: ['diagnostics'], queryFn: () => getDiagnostics(), refetchInterval: 30_000 })
 export const integrationsQuery = () => queryOptions({ queryKey: ['integrations'], queryFn: () => getIntegrationSettings() })
+export const platePlannerQuery = () => queryOptions({ queryKey: ['plate-planner'], queryFn: () => getPlatePlannerState() })

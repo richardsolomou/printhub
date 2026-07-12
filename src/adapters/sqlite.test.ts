@@ -157,6 +157,22 @@ describe('SqliteRepository contract', () => {
     expect(repository.getSetting('storage')).toEqual({ adapter: 's3', bucket: 'prints' })
   })
 
+  it('persists plate model dimensions and cascades them with requests', () => {
+    const id = repository.createRequest({
+      name: 'Cached model',
+      fileName: 'cached.stl',
+      filePath: 'todo/cached.stl',
+      quantity: 1,
+      requesterEmail: 'owner@example.com',
+    })
+    repository.upsertPlateModelAnalyses([{ requestId: id, widthMm: 12, depthMm: 18, heightMm: 42 }])
+    expect(repository.listPlateModelAnalyses()).toEqual([{ requestId: id, widthMm: 12, depthMm: 18, heightMm: 42 }])
+    repository.upsertPlateModelAnalyses([{ requestId: id, widthMm: 13, depthMm: 19, heightMm: 43 }])
+    expect(repository.listPlateModelAnalyses()).toEqual([{ requestId: id, widthMm: 13, depthMm: 19, heightMm: 43 }])
+    repository.deleteRequest(id)
+    expect(repository.listPlateModelAnalyses()).toEqual([])
+  })
+
   it('maintains integrity, exposes database information, and installs the auth limiter table', () => {
     const maintenance = repository.maintain()
     expect(maintenance.integrity).toBe('ok')

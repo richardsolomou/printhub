@@ -117,7 +117,7 @@ export function RequestModal({
 
         {canEdit && (
           <form onSubmit={save}>
-            <div className="flex gap-3 [&>[data-slot=field]]:flex-1">
+            <div className="mb-3 grid gap-3 sm:grid-cols-3 [&>[data-slot=field]]:min-w-0">
               {isAdmin && (
                 <Field>
                   <FieldLabel htmlFor="request-name">Name</FieldLabel>
@@ -216,13 +216,13 @@ export function RequestModal({
               </div>
             )}
             {(!notesOpen || !sourceOpen) && (
-              <div className="mb-3 flex gap-3">
+              <div className="mb-3 grid gap-1 sm:flex sm:flex-wrap sm:gap-x-3">
                 {!notesOpen && (
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-auto px-0 text-xs text-muted-foreground"
+                    className="h-8 w-full justify-start px-2 text-xs text-muted-foreground sm:h-auto sm:w-auto sm:px-0"
                     onClick={() => setNotesOpen(true)}
                   >
                     <Plus />
@@ -234,7 +234,7 @@ export function RequestModal({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-auto px-0 text-xs text-muted-foreground"
+                    className="h-8 w-full justify-start px-2 text-xs text-muted-foreground sm:h-auto sm:w-auto sm:px-0"
                     onClick={() => setSourceOpen(true)}
                   >
                     <Plus />
@@ -244,7 +244,7 @@ export function RequestModal({
               </div>
             )}
             <FieldError>{error}</FieldError>
-            <div className="mt-2 flex flex-wrap justify-end gap-2">
+            <div className="mt-2 flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end [&>*]:w-full sm:[&>*]:w-auto">
               {request.canDelete && (
                 <Button type="button" variant="destructive" onClick={remove} disabled={busy}>
                   Delete
@@ -267,7 +267,7 @@ export function RequestModal({
         )}
 
         {!canEdit && (
-          <div className="mt-2 flex flex-wrap justify-end gap-2">
+          <div className="mt-2 flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end [&>*]:w-full sm:[&>*]:w-auto">
             <a
               className={cn(buttonVariants({ variant: 'outline' }))}
               href={`/api/files/${request.id}`}

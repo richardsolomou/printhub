@@ -17,16 +17,16 @@ export function UploadRow({
   onRemove: () => void
 }) {
   return (
-    <Item variant="muted" className={cn('items-start', entry.state === 'error' && 'ring-1 ring-destructive')}>
-      <ItemMedia className="grid size-12 place-items-center overflow-hidden rounded-md border bg-background [background-image:var(--grid)] [background-size:12px_12px]">
+    <Item variant="muted" className={cn('items-start max-sm:flex-col', entry.state === 'error' && 'ring-1 ring-destructive')}>
+      <ItemMedia className="grid size-12 place-items-center overflow-hidden rounded-md border bg-background [background-image:var(--grid)] [background-size:12px_12px] max-sm:size-16">
         {entry.thumbnail ? (
           <img className="size-full object-contain" src={entry.thumbnail} alt="" />
         ) : (
           <span className="font-mono text-[10px] text-muted-foreground">stl</span>
         )}
       </ItemMedia>
-      <ItemContent className="min-w-0 gap-1.5">
-        <div className="flex items-center gap-2">
+      <ItemContent className="min-w-0 gap-1.5 max-sm:w-full">
+        <div className="grid grid-cols-[minmax(0,1fr)_4rem_auto] items-center gap-2 max-sm:grid-cols-[minmax(0,1fr)_auto]">
           <Input
             aria-label="Name"
             value={entry.name}
@@ -37,7 +37,7 @@ export function UploadRow({
           />
           <Input
             aria-label="Copies"
-            className="w-16 shrink-0"
+            className="w-16 shrink-0 max-sm:row-start-2"
             type="number"
             inputMode="numeric"
             min={1}
@@ -47,7 +47,7 @@ export function UploadRow({
             disabled={entry.state === 'done'}
           />
           {entry.state === 'done' ? (
-            <span className="shrink-0 font-mono text-sm text-[var(--chart-2)]">added</span>
+            <span className="shrink-0 font-mono text-sm text-[var(--chart-2)] max-sm:col-start-2 max-sm:row-start-2">added</span>
           ) : (
             <Tooltip>
               <TooltipTrigger
@@ -56,7 +56,7 @@ export function UploadRow({
                     type="button"
                     variant="ghost"
                     size="icon-sm"
-                    className="shrink-0 text-muted-foreground hover:text-destructive"
+                    className="shrink-0 text-muted-foreground hover:text-destructive max-sm:col-start-2 max-sm:row-start-1"
                     aria-label={`Remove ${entry.name}`}
                     onClick={onRemove}
                   />
@@ -133,13 +133,13 @@ export function UploadRow({
           </div>
         )}
         {entry.state === 'pending' && (!entry.noteOpen || !entry.linkOpen) && (
-          <div className="flex gap-3">
+          <div className="grid gap-1 sm:flex sm:flex-wrap sm:gap-x-3">
             {!entry.noteOpen && (
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-auto px-0 text-xs text-muted-foreground"
+                className="h-8 w-full justify-start px-2 text-xs text-muted-foreground sm:h-auto sm:w-auto sm:px-0"
                 onClick={() => onPatch({ noteOpen: true })}
               >
                 <Plus />
@@ -151,7 +151,7 @@ export function UploadRow({
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-auto px-0 text-xs text-muted-foreground"
+                className="h-8 w-full justify-start px-2 text-xs text-muted-foreground sm:h-auto sm:w-auto sm:px-0"
                 onClick={() => onPatch({ linkOpen: true })}
               >
                 <Plus />

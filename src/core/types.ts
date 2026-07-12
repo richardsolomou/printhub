@@ -156,6 +156,8 @@ export interface Repository {
   deleteRequest(id: string): void
   requestsNeedingAssets(): string[]
   completeAssetGeneration(id: string, generated: { thumbnailPath?: string; previewPath?: string }): void
+  listPlateModelAnalyses(): import('./platePlanner').PlateModelAnalysis[]
+  upsertPlateModelAnalyses(analyses: import('./platePlanner').PlateModelAnalysis[]): void
   listPeople(): Person[]
   listUsers(): Identity[]
   createInvite(invite: { id: string; tokenHash: string; role: Role; label?: string; expiresAt: number }): void
