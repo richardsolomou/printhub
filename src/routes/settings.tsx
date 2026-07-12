@@ -1,6 +1,6 @@
 import { Link, createFileRoute, getRouteApi, useNavigate } from '@tanstack/react-router'
-import { SettingsPanes } from '../components/SettingsPanes'
-import { useEscape } from '../lib/useEscape'
+import { SettingsPanes } from '../client/components/SettingsPanes'
+import { useEscape } from '../client/useEscape'
 
 const rootRoute = getRouteApi('__root__')
 

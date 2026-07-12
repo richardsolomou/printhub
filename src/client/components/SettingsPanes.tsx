@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
-import type { Identity, StorageConfig } from '../core/types'
-import { updateBoardSettings, updateStorageSettings, updateTelemetrySettings } from '../server/fns'
-import { authClient } from '../lib/authClient'
-import { boardQuery, storageQuery, telemetryQuery, usersQuery } from '../lib/queries'
+import type { Identity, StorageConfig } from '../../core/types'
+import { updateBoardSettings, updateStorageSettings, updateTelemetrySettings } from '../../server/fns'
+import { authClient } from '../authClient'
+import { boardQuery, storageQuery, telemetryQuery, usersQuery } from '../queries'
 
 type Pane = 'account' | 'board' | 'users' | 'storage' | 'telemetry' | 'about'
 

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { usePostHog } from '@posthog/react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three-stdlib'
-import { buildScene, frameCamera, parseStl } from '../lib/stl'
+import { buildScene, frameCamera, parseStl } from '../stl'
 
 export default function StlViewer({
   requestId,

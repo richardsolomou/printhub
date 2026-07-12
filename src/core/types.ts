@@ -164,9 +164,21 @@ export type StorageConfig =
       forcePathStyle: boolean
     }
 
+// The stable lifecycle vocabulary. Server-side extensions (notifications,
+// webhooks, printer integrations) subscribe to these; additions are fine,
+// renames and removals are breaking.
+export type AppEvent =
+  | 'request.created'
+  | 'request.updated'
+  | 'request.copiesMoved'
+  | 'request.reordered'
+  | 'request.deleted'
+  | 'user.created'
+  | 'board.changed'
+
 export interface EventBus {
-  publish(event: string): void
-  subscribe(listener: (event: string) => void): () => void
+  publish(event: AppEvent): void
+  subscribe(listener: (event: AppEvent) => void): () => void
 }
 
 export interface Telemetry {

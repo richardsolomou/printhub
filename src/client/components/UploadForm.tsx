@@ -1,11 +1,11 @@
 import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { usePostHog } from '@posthog/react'
-import { peopleQuery } from '../lib/queries'
-import { prepareUploadAssets } from '../lib/uploadAssets'
-import { isIOS, isPhone } from '../lib/device'
-import { useEscape } from '../lib/useEscape'
-import { retryOffset } from '../lib/uploadProtocol'
+import { peopleQuery } from '../queries'
+import { prepareUploadAssets } from '../uploadAssets'
+import { isIOS, isPhone } from '../device'
+import { useEscape } from '../useEscape'
+import { retryOffset } from '../uploadProtocol'
 
 const StlViewer = lazy(() => import('./StlViewer'))
 

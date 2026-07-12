@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { authClient } from '../lib/authClient'
+import { authClient } from '../authClient'
 
 export function AuthScreen({ setupRequired }: { setupRequired: boolean }) {
   const [email, setEmail] = useState('')

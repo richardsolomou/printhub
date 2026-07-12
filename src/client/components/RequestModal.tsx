@@ -2,12 +2,12 @@ import { Suspense, lazy, useState } from 'react'
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { usePostHog } from '@posthog/react'
-import type { PublicPrintRequest } from '../core/types'
-import type { WorkflowDefinition } from '../core/workflow'
-import { peopleQuery } from '../lib/queries'
-import { requesterColor, requesterLabel } from '../lib/requester'
-import { useEscape } from '../lib/useEscape'
-import { deleteRequest, updateRequest } from '../server/fns'
+import type { PublicPrintRequest } from '../../core/types'
+import type { WorkflowDefinition } from '../../core/workflow'
+import { peopleQuery } from '../queries'
+import { requesterColor, requesterLabel } from '../requester'
+import { useEscape } from '../useEscape'
+import { deleteRequest, updateRequest } from '../../server/fns'
 
 const StlViewer = lazy(() => import('./StlViewer'))
 

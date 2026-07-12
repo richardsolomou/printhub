@@ -1,4 +1,4 @@
-import type { AssetStore, DeleteOperation, EventBus, Identity, MoveOperation, NewPrintRequest, PendingOperation, Repository, Telemetry, UploadOperation, UploadStagingArea } from './types'
+import type { AppEvent, AssetStore, DeleteOperation, EventBus, Identity, MoveOperation, NewPrintRequest, PendingOperation, Repository, Telemetry, UploadOperation, UploadStagingArea } from './types'
 import { thumbnailKey } from './assetKeys'
 import { initialStatus, statusById, workflow } from './workflow'
 
@@ -252,7 +252,7 @@ export class PrintHubService {
     if (identity.role !== 'operator') throw new Response('forbidden', { status: 403 })
   }
 
-  private changed(event: string) {
+  private changed(event: AppEvent) {
     this.events.publish(event)
   }
 

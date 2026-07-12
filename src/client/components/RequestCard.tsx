@@ -7,11 +7,11 @@ import {
   type Edge,
 } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import type { StatusId } from '../core/workflow'
-import { peopleQuery } from '../lib/queries'
-import type { PublicPrintRequest } from '../core/types'
+import type { StatusId } from '../../core/workflow'
+import { peopleQuery } from '../queries'
+import type { PublicPrintRequest } from '../../core/types'
 import { LazyThumb } from './LazyThumb'
-import { requesterColor, requesterLabel } from '../lib/requester'
+import { requesterColor, requesterLabel } from '../requester'
 
 export function RequestCard({
   request,

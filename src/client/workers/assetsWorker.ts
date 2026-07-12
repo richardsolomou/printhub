@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { generateAssets } from '../lib/assetPipeline'
+import { generateAssets } from '../assetPipeline'
 
 // One file at a time: parsing several 200 MB meshes concurrently would blow
 // the worker's memory, and sequential work is what keeps the queue smooth.

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useEscape } from '../lib/useEscape'
+import { useEscape } from '../useEscape'
 
 export function MoveDialog({
   requestName,

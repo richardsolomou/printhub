@@ -12,7 +12,7 @@ const workerSupported = () => typeof Worker !== 'undefined' && typeof OffscreenC
 
 function getWorker(): Worker {
   if (!worker) {
-    worker = new Worker(new URL('../workers/assetsWorker.ts', import.meta.url), { type: 'module' })
+    worker = new Worker(new URL('./workers/assetsWorker.ts', import.meta.url), { type: 'module' })
     worker.onmessage = (event: MessageEvent<WorkerReply>) => {
       pending.get(event.data.id)?.(event.data)
       pending.delete(event.data.id)

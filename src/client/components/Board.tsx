@@ -4,9 +4,9 @@ import { extractClosestEdge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/clo
 import { useServerFn } from '@tanstack/react-start'
 import { usePostHog } from '@posthog/react'
 import { useQueryClient } from '@tanstack/react-query'
-import type { PublicPrintRequest } from '../core/types'
-import type { StatusId, WorkflowDefinition } from '../core/workflow'
-import { moveCopies, reorderRequest } from '../server/fns'
+import type { PublicPrintRequest } from '../../core/types'
+import type { StatusId, WorkflowDefinition } from '../../core/workflow'
+import { moveCopies, reorderRequest } from '../../server/fns'
 import { Column } from './Column'
 import { MoveDialog } from './MoveDialog'
 

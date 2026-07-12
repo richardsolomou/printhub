@@ -4,7 +4,7 @@ import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { admin } from 'better-auth/plugins'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import type { Database } from 'better-sqlite3'
-import { accessControl, accessRoles } from '../lib/access'
+import { accessControl, accessRoles } from '../core/access'
 
 export function createAuth(database: Database, secret: string, onUserCreated?: () => void) {
   const countUsers = () => (database.prepare('SELECT count(*) count FROM "user"').get() as { count: number }).count

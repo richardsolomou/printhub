@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { dropTargetForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter'
-import type { StatusId, WorkflowStatus } from '../core/workflow'
-import type { PublicPrintRequest } from '../core/types'
+import type { StatusId, WorkflowStatus } from '../../core/workflow'
+import type { PublicPrintRequest } from '../../core/types'
 import { RequestCard } from './RequestCard'
 
 export function Column({

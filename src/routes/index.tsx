@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, createFileRoute, getRouteApi } from '@tanstack/react-router'
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { usePostHog } from '@posthog/react'
-import { Board } from '../components/Board'
-import { RequestModal } from '../components/RequestModal'
-import { UploadForm } from '../components/UploadForm'
-import { AuthScreen } from '../components/AuthScreen'
-import { requestsQuery, peopleQuery } from '../lib/queries'
+import { Board } from '../client/components/Board'
+import { RequestModal } from '../client/components/RequestModal'
+import { UploadForm } from '../client/components/UploadForm'
+import { AuthScreen } from '../client/components/AuthScreen'
+import { requestsQuery, peopleQuery } from '../client/queries'
 
 const rootRoute = getRouteApi('__root__')
 
