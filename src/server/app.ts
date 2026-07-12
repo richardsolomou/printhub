@@ -107,5 +107,7 @@ export function app() {
 export async function resetApp() {
   const running = singleton.__printhub
   delete singleton.__printhub
-  if (running) (await running.catch(() => undefined))?.repository.close()
+  const instance = running ? await running.catch(() => undefined) : undefined
+  instance?.events.close()
+  instance?.repository.close()
 }
