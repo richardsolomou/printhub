@@ -1,12 +1,12 @@
 # PrintHub Vision
 
-> PrintHub is a hackable, self-hosted intake and queue for 3D print requests. Run it beside your files, choose your authentication and ingress, and adapt the workflow to your workshop.
+> PrintHub is a hackable, self-hosted intake and queue for 3D print requests. Run it beside your files, choose your ingress, and adapt the workflow to your workshop.
 
 Three promises:
 
 - **Files stay useful:** models remain ordinary files on storage the operator controls.
 - **Defaults work:** pulling the image and mounting a directory produces a functional print queue.
-- **The harness adapts:** authentication, storage, workflow, and integrations can change without replacing the core application.
+- **The harness adapts:** storage, workflow, and integrations can change without replacing the core application.
 
 The guiding principle: PrintHub should not tunnel into the user's storage. PrintHub should run next to the user's storage. Cloudflare, Tailscale, or a plain LAN are ingress recipes, never application dependencies.
 
@@ -25,16 +25,16 @@ services:
       - /mnt/my-print-files:/prints
 ```
 
-A fresh instance shows a welcome form and the first visitor claims the operator account — no environment variables, tokens, or restarts required (`DATA_DIR` is the only env var, and it has a default). Everything else is configured in the app: the settings modal covers accounts, users, authentication (built-in or trusted-header), storage (local folder by default, S3-compatible object storage as the first alternative), and telemetry; workflow configuration will live there as it arrives.
+A fresh instance shows a welcome form and the first visitor claims the operator account — no environment variables, tokens, or restarts required (`DATA_DIR` is the only env var, and it has a default). Everything else is configured in the app: the settings pages cover accounts, users, board visibility, storage (local folder by default, S3-compatible object storage as the first alternative), and telemetry; workflow configuration will live there as it arrives.
 
 What ships by default:
 
 - SQLite metadata under `/data`, ordinary STL files arranged by status under `/prints`.
-- Requester and operator roles with built-in accounts, or trusted-header identity behind an authenticating proxy.
+- Requester and operator roles with built-in email/password accounts; OAuth sign-in (Google, Discord, …) is the planned next step.
 - A `To Do → In Progress → Done` board with per-copy movement.
 - Quantity, notes, requester, and source URL fields.
 - Chunked uploads to 1 GB, browser-generated thumbnails and previews, SSE live updates.
-- Optional PostHog telemetry, off unless configured.
+- Anonymous usage telemetry, on by default with an in-app opt-out.
 
 ## Architecture
 
@@ -44,9 +44,9 @@ React interface
 PrintHub core (PrintRequest, workflow, services)
   |-- Repository      (SQLite)
   |-- AssetStore      (local filesystem | S3-compatible, operator-selectable)
-  |-- AuthProvider    (built-in accounts | trusted header)
+  |-- AuthProvider    (built-in accounts; OAuth planned)
   |-- EventBus        (in-process SSE fan-out)
-  `-- Telemetry       (no-op | PostHog)
+  `-- Telemetry       (PostHog, opt-out)
 ```
 
 Routes and UI code stay independent of deployment-specific infrastructure. These boundaries are deliberately internal until real extension use cases stabilize them; the current implementations are single-process by design. Chunked uploads always stage on local disk under `/data`; only finished files sit behind the storage adapter. Supporting interchangeable databases is not a goal — the boundary exists so a future need has somewhere to land, not to promise portability.

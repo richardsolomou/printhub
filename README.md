@@ -8,11 +8,10 @@ PrintHub is a self-hosted STL request board for a small group. It runs as one No
 - Full-detail downloads while previews keep initial browser downloads small.
 - Copy-level movement through a runtime-defined To Do → In Progress → Done workflow.
 - Built-in first-run operator setup, password login and self-service password changes, with secure HttpOnly sessions.
-- Optional trusted-header identity for Cloudflare Access and other authenticated proxies.
 - Live board refresh across browsers through Server-Sent Events.
 - Quantity, notes, requester, and source URL fields on every request.
 - A board visibility setting: shared (everyone sees every request) or private (requesters see, reorder, and withdraw only their own — suits print farms and paid work).
-- Optional PostHog telemetry; no external telemetry is enabled by default.
+- Anonymous usage telemetry, on by default, with a one-click opt-out in Settings.
 
 PrintHub is MIT licensed. Where the project is headed lives in [VISION.md](VISION.md).
 
@@ -70,13 +69,13 @@ services:
 
 For Docker Compose, copy `.env.example` to `.env`, set the two host paths, and run `docker compose up -d`. On a fresh installation the first person to open the app claims the operator account, so create it before exposing the app beyond your network.
 
-`DATA_DIR` (default `/data`) is the only environment variable the app reads. Everything else — storage backend, authentication mode, telemetry — lives in **Settings** and persists in `/data/printhub.sqlite`.
+`DATA_DIR` (default `/data`) is the only environment variable the app reads. Everything else — storage backend, board visibility, telemetry — lives in **Settings** and persists in `/data/printhub.sqlite`.
 
 The unauthenticated `/api/health` endpoint returns success only after migrations and recovery finish, SQLite responds, and both storage and the upload staging area accept a write probe. It can be used for container readiness and health checks.
 
-How users reach the app is an ingress choice, not an application dependency. [`examples/cloudflare-nas`](examples/cloudflare-nas/README.md) is the reference recipe: PrintHub on a NAS (Compose or TrueNAS Custom App) behind a Cloudflare Tunnel, with either built-in login or Cloudflare Access identity.
+How users reach the app is an ingress choice, not an application dependency. [`examples/cloudflare-nas`](examples/cloudflare-nas/README.md) is the reference recipe: PrintHub on a NAS (Compose or TrueNAS Custom App) behind a Cloudflare Tunnel with the built-in login.
 
-To delegate identity to Cloudflare Access or another trusted proxy, open **Settings → Authentication**, pick trusted-header mode, and set the email header, a proxy secret of at least 24 characters, and the operator emails. The proxy must overwrite `X-PrintHub-Proxy-Secret` with that secret on every request; PrintHub fails closed without it. As a lockout safeguard, the switch only saves when the request making it already arrived through the proxy. Recovery, if you ever do lock the instance: `sqlite3 /data/printhub.sqlite "DELETE FROM settings WHERE key='auth'"` and restart.
+Accounts are built-in email and password only: operators add users (and can reset their passwords) under **Settings → Users**. OAuth sign-in (Google, Discord…) is planned; see [VISION.md](VISION.md).
 
 ## Releases, upgrades, and rollback
 
@@ -96,8 +95,8 @@ SQLite WAL files next to `printhub.sqlite` are part of a live database. Do not c
 
 PrintHub accepts sequential multipart chunks up to 64 MB and an assembled STL up to 1 GB. It requires a valid `Content-Length` and rejects oversized declared request bodies before multipart parsing, limits concurrent multipart parsing, persists ownership and quotas for incomplete uploads across restarts, limits each identity to three incomplete uploads and 1 GB of incomplete data, expires abandoned ownership after 24 hours, and removes stale managed `.part` files. The framework multipart parser still buffers an individual request, so deployments must also enforce a request-body limit of about 74 MB at the ingress proxy. An ingress limit remains required because a malicious client can lie about `Content-Length` or stream differently at a proxy/runtime boundary.
 
-## Optional telemetry
+## Telemetry
 
-Telemetry is off unless an operator sets a PostHog project token under **Settings → Telemetry** (with an optional self-hosted or regional host). The browser SDK initializes from that runtime setting, so no telemetry is baked into the published image.
+PrintHub reports anonymous usage events to its developers' PostHog instance so we can see how installs are used. Telemetry is on by default; operators can turn it off under **Settings → Telemetry**, which stops server events immediately and browser events on the next page load.
 
 Telemetry uses the internal user ID as its pseudonymous identity and records operational event metadata such as request IDs, quantities, status transitions, file counts, sizes, and errors. It does not intentionally send email addresses, user names, request names, or file names.

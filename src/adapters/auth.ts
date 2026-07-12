@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 import argon2 from 'argon2'
-import { deleteCookie, getCookie, getRequestHeader, getRequestProtocol, setCookie } from '@tanstack/react-start/server'
-import type { AuthConfig, Identity, Repository } from '../core/types'
+import { deleteCookie, getCookie, getRequestProtocol, setCookie } from '@tanstack/react-start/server'
+import type { Identity, Repository } from '../core/types'
 
 const COOKIE = 'printhub_session'
 const SESSION_SECONDS = 30 * 24 * 60 * 60
@@ -159,35 +159,8 @@ async function runArgon<T>(work: () => Promise<T>) {
   try { return await work() } finally { activeArgon-- }
 }
 
-export class TrustedHeaderAuthProvider implements AuthProvider {
-  constructor(private repository: Repository, private config: Extract<AuthConfig, { provider: 'trusted-header' }>) {}
-  current() {
-    verifySecret(getRequestHeader('X-PrintHub-Proxy-Secret') ?? '', this.config.proxySecret)
-    const email = getRequestHeader(this.config.emailHeader)?.toLowerCase()
-    if (!email) return undefined
-    if (email.length > 254 || !/^\S+@\S+\.\S+$/.test(email)) throw new Response('invalid proxy identity', { status: 401 })
-    const existing = this.repository.findUserByEmail(email)
-    if (existing) return existing
-    const operators = this.config.operatorEmails.map((value) => value.toLowerCase().trim())
-    return this.repository.createUser({ email, name: email.split('@')[0], role: operators.includes(email) ? 'operator' : 'requester' })
-  }
-  require() { const identity = this.current(); if (!identity) throw new Response('unauthenticated', { status: 401 }); return identity }
-  setup(): Promise<Identity> { throw new Response('disabled', { status: 404 }) }
-  login(): Promise<Identity> { throw new Response('disabled', { status: 404 }) }
-  changePassword(): Promise<void> { throw new Response('disabled', { status: 404 }) }
-  logout() {}
-}
-
 function validateCredentials(input: { email: string; name: string; password: string }) {
   if (typeof input.email !== 'string' || typeof input.name !== 'string' || typeof input.password !== 'string' || input.email.length > 254 || input.name.length > 100 || input.password.length > 256 || !/^\S+@\S+\.\S+$/.test(input.email) || !input.name.trim() || input.password.length < 8) {
     throw new Response('use a valid email, name, and password of at least 8 characters', { status: 400 })
   }
-}
-
-function verifySecret(provided: string, configured: string | undefined) {
-  if (!configured || configured.length < 24 || configured === 'replace-with-at-least-24-random-characters') throw new Response('authentication is not configured', { status: 503 })
-  if (typeof provided !== 'string' || provided.length > 512) throw new Response('forbidden', { status: 403 })
-  const left = Buffer.from(provided)
-  const right = Buffer.from(configured)
-  if (left.length !== right.length || !crypto.timingSafeEqual(left, right)) throw new Response('forbidden', { status: 403 })
 }

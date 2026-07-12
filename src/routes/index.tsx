@@ -14,7 +14,7 @@ export const Route = createFileRoute('/')({ component: Home })
 
 function Home() {
   const session = rootRoute.useLoaderData()
-  if (!session.identity) return <AuthScreen setupRequired={session.setupRequired} trustedHeader={session.authProvider === 'trusted-header'} />
+  if (!session.identity) return <AuthScreen setupRequired={session.setupRequired} />
   return <AuthenticatedHome />
 }
 

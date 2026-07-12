@@ -2,11 +2,11 @@ import { SqliteRepository } from '../adapters/sqlite'
 import { LocalAssetStore } from '../adapters/filesystem'
 import { S3AssetStore } from '../adapters/s3'
 import { UploadStaging } from '../adapters/staging'
-import { LocalAuthProvider, TrustedHeaderAuthProvider } from '../adapters/auth'
+import { LocalAuthProvider } from '../adapters/auth'
 import { LocalEventBus } from '../adapters/events'
 import { OptionalPostHogTelemetry } from '../adapters/telemetry'
 import { PrintHubService } from '../core/services'
-import type { AuthConfig, BoardConfig, Repository, StorageConfig, TelemetryConfig } from '../core/types'
+import type { BoardConfig, Repository, StorageConfig, TelemetryConfig } from '../core/types'
 
 const singleton = globalThis as typeof globalThis & { __printhub?: ReturnType<typeof createApp> }
 
@@ -14,12 +14,10 @@ export function resolveStorageConfig(repository: Repository): StorageConfig {
   return repository.getSetting<StorageConfig>('storage') ?? { adapter: 'local', root: '/prints' }
 }
 
-export function resolveAuthConfig(repository: Repository): AuthConfig {
-  return repository.getSetting<AuthConfig>('auth') ?? { provider: 'local' }
-}
-
-export function resolveTelemetryConfig(repository: Repository): TelemetryConfig | undefined {
-  return repository.getSetting<TelemetryConfig>('telemetry')
+// Read per call, not at boot: flipping the setting applies instantly on the
+// server, and the browser picks it up on its next page load.
+export function resolveTelemetryConfig(repository: Repository): TelemetryConfig {
+  return { enabled: repository.getSetting<TelemetryConfig>('telemetry')?.enabled !== false }
 }
 
 // Read per call, not at boot: flipping visibility applies instantly.
@@ -40,12 +38,8 @@ async function createApp() {
     const staging = new UploadStaging()
     await staging.initialize()
     const events = new LocalEventBus()
-    const telemetryConfig = resolveTelemetryConfig(repository)
-    const telemetry = new OptionalPostHogTelemetry(telemetryConfig)
-    const authConfig = resolveAuthConfig(repository)
-    const auth = authConfig.provider === 'trusted-header'
-      ? new TrustedHeaderAuthProvider(repository, authConfig)
-      : new LocalAuthProvider(repository)
+    const telemetry = new OptionalPostHogTelemetry(() => resolveTelemetryConfig(repository!).enabled)
+    const auth = new LocalAuthProvider(repository)
     const service = new PrintHubService(repository, assets, staging, events, telemetry)
     // Unreachable storage must not stop boot: the app has to come up so the
     // operator can fix the storage settings. Health stays red until then.
@@ -66,7 +60,7 @@ async function createApp() {
       ])
     }
     await staging.sweepUploads(repository.activeUploadIds(Date.now()))
-    return { repository, assets, staging, events, telemetry, auth, service, storage, authConfig, telemetryConfig, storageReady }
+    return { repository, assets, staging, events, telemetry, auth, service, storage, storageReady }
   } catch (error) {
     repository?.close()
     throw error

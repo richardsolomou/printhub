@@ -49,8 +49,10 @@ describe('SqliteRepository contract', () => {
     expect(repository.passwordHash(user.id)).toBe('hash')
     repository.deleteSession('token')
     expect(repository.findSession('token')).toBeUndefined()
+    repository.createSession({ tokenHash: 'live-token', userId: user.id, expiresAt: Date.now() + 1000 })
     repository.updatePassword(user.id, 'new-hash')
     expect(repository.passwordHash(user.id)).toBe('new-hash')
+    expect(repository.findSession('live-token')).toBeUndefined()
   })
 
   it('rolls back a password rotation when replacement-session insertion fails', () => {

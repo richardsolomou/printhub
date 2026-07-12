@@ -4,13 +4,11 @@ import Database from 'better-sqlite3'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Repository } from '../core/types'
 
-const getRequestHeader = vi.fn<(name: string) => string | undefined>()
 const getCookie = vi.fn<() => string | undefined>()
 const setCookie = vi.fn()
 vi.mock('@tanstack/react-start/server', () => ({
   deleteCookie: vi.fn(),
   getCookie,
-  getRequestHeader,
   getRequestProtocol: () => 'https',
   setCookie,
 }))
@@ -23,7 +21,6 @@ const repository = {
 describe('authentication guards', () => {
   afterEach(() => {
     vi.restoreAllMocks()
-    getRequestHeader.mockReset()
     getCookie.mockReset()
     setCookie.mockReset()
   })
@@ -244,29 +241,4 @@ describe('authentication guards', () => {
     sqlite.close()
   })
 
-  it('fails trusted-header authentication closed without the proxy proof', async () => {
-    const { TrustedHeaderAuthProvider } = await import('./auth')
-    const config = { provider: 'trusted-header' as const, emailHeader: 'Cf-Access-Authenticated-User-Email', proxySecret: 'configured-secret-at-least-24', operatorEmails: ['operator@example.com'] }
-    getRequestHeader.mockImplementation((name) => name === 'X-PrintHub-Proxy-Secret' ? 'spoofed' : 'attacker@example.com')
-    expect(() => new TrustedHeaderAuthProvider(repository, config).current()).toThrow(expect.objectContaining({ status: 403 }))
-  })
-
-  it('rejects the documented trusted-proxy placeholder', async () => {
-    const { TrustedHeaderAuthProvider } = await import('./auth')
-    const config = { provider: 'trusted-header' as const, emailHeader: 'Cf-Access-Authenticated-User-Email', proxySecret: 'replace-with-at-least-24-random-characters', operatorEmails: ['operator@example.com'] }
-    getRequestHeader.mockImplementation((name) => name === 'X-PrintHub-Proxy-Secret' ? config.proxySecret : 'operator@example.com')
-    expect(() => new TrustedHeaderAuthProvider(repository, config).current()).toThrow(expect.objectContaining({ status: 503 }))
-  })
-
-  it('assigns operator role from the configured email list', async () => {
-    const { TrustedHeaderAuthProvider } = await import('./auth')
-    const { SqliteRepository } = await import('./sqlite')
-    const sqlite = new SqliteRepository(new Database(':memory:'))
-    const config = { provider: 'trusted-header' as const, emailHeader: 'X-Auth-Email', proxySecret: 'configured-secret-at-least-24', operatorEmails: ['boss@example.com'] }
-    getRequestHeader.mockImplementation((name) => name === 'X-PrintHub-Proxy-Secret' ? config.proxySecret : name === 'X-Auth-Email' ? 'boss@example.com' : undefined)
-    expect(new TrustedHeaderAuthProvider(sqlite, config).current()).toMatchObject({ email: 'boss@example.com', role: 'operator' })
-    getRequestHeader.mockImplementation((name) => name === 'X-PrintHub-Proxy-Secret' ? config.proxySecret : name === 'X-Auth-Email' ? 'guest@example.com' : undefined)
-    expect(new TrustedHeaderAuthProvider(sqlite, config).current()).toMatchObject({ email: 'guest@example.com', role: 'requester' })
-    sqlite.close()
-  })
 })

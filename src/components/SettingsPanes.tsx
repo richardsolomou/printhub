@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
-import type { AuthConfig, Identity, StorageConfig, TelemetryConfig } from '../core/types'
-import { changePassword, createUser, logout, updateAuthSettings, updateBoardSettings, updateStorageSettings, updateTelemetrySettings } from '../server/fns'
-import { authQuery, boardQuery, storageQuery, telemetryQuery, usersQuery } from '../lib/queries'
+import type { Identity, StorageConfig } from '../core/types'
+import { changePassword, createUser, logout, setUserPassword, updateBoardSettings, updateStorageSettings, updateTelemetrySettings } from '../server/fns'
+import { boardQuery, storageQuery, telemetryQuery, usersQuery } from '../lib/queries'
 
-type Pane = 'account' | 'board' | 'users' | 'auth' | 'storage' | 'telemetry' | 'about'
+type Pane = 'account' | 'board' | 'users' | 'storage' | 'telemetry' | 'about'
 
-export function SettingsPanes({ me, localAuth }: { me: Identity; localAuth: boolean }) {
+export function SettingsPanes({ me }: { me: Identity }) {
   const [pane, setPane] = useState<Pane>('account')
   const operator = me.role === 'operator'
   const panes: { id: Pane; label: string }[] = [
@@ -15,7 +15,6 @@ export function SettingsPanes({ me, localAuth }: { me: Identity; localAuth: bool
     ...(operator ? [
       { id: 'board' as const, label: 'Board' },
       { id: 'users' as const, label: 'Users' },
-      { id: 'auth' as const, label: 'Authentication' },
       { id: 'storage' as const, label: 'Storage' },
       { id: 'telemetry' as const, label: 'Telemetry' },
     ] : []),
@@ -37,19 +36,18 @@ export function SettingsPanes({ me, localAuth }: { me: Identity; localAuth: bool
         ))}
       </nav>
       <div className="settings-pane">
-        {pane === 'account' && <AccountPane me={me} localAuth={localAuth} />}
+        {pane === 'account' && <AccountPane me={me} />}
         {pane === 'board' && operator && <BoardPane />}
-        {pane === 'users' && operator && <UsersPane />}
-        {pane === 'auth' && operator && <AuthPane />}
+        {pane === 'users' && operator && <UsersPane me={me} />}
         {pane === 'storage' && operator && <StoragePane />}
         {pane === 'telemetry' && operator && <TelemetryPane />}
-        {pane === 'about' && <AboutPane localAuth={localAuth} />}
+        {pane === 'about' && <AboutPane />}
       </div>
     </div>
   )
 }
 
-function AccountPane({ me, localAuth }: { me: Identity; localAuth: boolean }) {
+function AccountPane({ me }: { me: Identity }) {
   const callLogout = useServerFn(logout)
   return (
     <>
@@ -58,16 +56,10 @@ function AccountPane({ me, localAuth }: { me: Identity; localAuth: boolean }) {
         {me.name} <span className="settings-dim">({me.email})</span>
         <span className="chip settings-role">{me.role}</span>
       </p>
-      {localAuth ? (
-        <>
-          <ChangePasswordForm />
-          <div className="settings-actions">
-            <button type="button" className="btn sign-out" onClick={async () => { await callLogout(); window.location.reload() }}>Sign out</button>
-          </div>
-        </>
-      ) : (
-        <p className="settings-dim">Your identity is managed by the authentication proxy in front of PrintHub.</p>
-      )}
+      <ChangePasswordForm />
+      <div className="settings-actions">
+        <button type="button" className="btn sign-out" onClick={async () => { await callLogout(); window.location.reload() }}>Sign out</button>
+      </div>
     </>
   )
 }
@@ -153,9 +145,10 @@ function BoardPane() {
   )
 }
 
-function UsersPane() {
+function UsersPane({ me }: { me: Identity }) {
   const { data: users } = useQuery(usersQuery())
   const [adding, setAdding] = useState(false)
+  const [resetting, setResetting] = useState<Identity | null>(null)
   return (
     <>
       <h3>Users</h3>
@@ -165,15 +158,49 @@ function UsersPane() {
             <span>{user.name}</span>
             <span className="settings-dim">{user.email}</span>
             <span className="chip settings-role">{user.role}</span>
+            {user.id !== me.id && (
+              <button type="button" className="btn" onClick={() => { setAdding(false); setResetting(user) }}>Set password</button>
+            )}
           </li>
         ))}
       </ul>
-      {adding ? <CreateUserForm onDone={() => setAdding(false)} /> : (
+      {resetting && <SetPasswordForm key={resetting.id} user={resetting} onDone={() => setResetting(null)} />}
+      {adding && <CreateUserForm onDone={() => setAdding(false)} />}
+      {!adding && !resetting && (
         <div className="settings-actions">
           <button type="button" className="btn" onClick={() => setAdding(true)}>Add user</button>
         </div>
       )}
     </>
+  )
+}
+
+function SetPasswordForm({ user, onDone }: { user: Identity; onDone: () => void }) {
+  const callSetPassword = useServerFn(setUserPassword)
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      await callSetPassword({ data: { userId: user.id, password } })
+      onDone()
+    } catch {
+      setError('Could not set the password. Use at least 8 characters.')
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="settings-form">
+      <div className="field"><label htmlFor="set-password">New password for {user.name}</label><input id="set-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} maxLength={256} autoComplete="new-password" required /></div>
+      <p className="field-hint">Signs {user.name} out everywhere; share the new password with them directly.</p>
+      {error && <p className="error">{error}</p>}
+      <div className="settings-actions"><button type="button" className="btn" onClick={onDone}>Cancel</button><button className="btn btn-primary" disabled={busy}>{busy ? 'Setting…' : 'Set password'}</button></div>
+    </form>
   )
 }
 
@@ -212,66 +239,6 @@ function CreateUserForm({ onDone }: { onDone: () => void }) {
       <div className="field"><label htmlFor="user-role">Role</label><select id="user-role" value={role} onChange={(event) => setRole(event.target.value as typeof role)}><option value="requester">Requester</option><option value="operator">Operator</option></select></div>
       {error && <p className="error">{error}</p>}
       <div className="settings-actions"><button type="button" className="btn" onClick={onDone}>Cancel</button><button className="btn btn-primary" disabled={busy}>{busy ? 'Creating…' : 'Create user'}</button></div>
-    </form>
-  )
-}
-
-function AuthPane() {
-  const { data: current } = useQuery(authQuery())
-  if (!current) return <h3>Authentication</h3>
-  return <AuthForm key={current.provider} current={current} />
-}
-
-function AuthForm({ current }: { current: AuthConfig }) {
-  const callUpdate = useServerFn(updateAuthSettings)
-  const queryClient = useQueryClient()
-  const trusted = current.provider === 'trusted-header' ? current : undefined
-  const [provider, setProvider] = useState<AuthConfig['provider']>(current.provider)
-  const [emailHeader, setEmailHeader] = useState(trusted?.emailHeader ?? 'Cf-Access-Authenticated-User-Email')
-  const [proxySecret, setProxySecret] = useState('')
-  const [operatorEmails, setOperatorEmails] = useState(trusted?.operatorEmails.join(', ') ?? '')
-  const [error, setError] = useState('')
-  const [saved, setSaved] = useState(false)
-  const [busy, setBusy] = useState(false)
-
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault()
-    setBusy(true)
-    setError('')
-    setSaved(false)
-    try {
-      await callUpdate({ data: { provider, emailHeader, proxySecret, operatorEmails } })
-      await queryClient.invalidateQueries()
-      setProxySecret('')
-      setSaved(true)
-    } catch (err) {
-      const message = err instanceof Error && err.message ? err.message : ''
-      setError(message || 'Could not save authentication settings.')
-    }
-    setBusy(false)
-  }
-
-  return (
-    <form onSubmit={submit} className="settings-form">
-      <h3>Authentication</h3>
-      <p className="settings-dim">How people sign in. Trusted-header mode delegates identity to an authenticating proxy (Cloudflare Access, Authentik…) and can only be enabled from a session that already runs through that proxy.</p>
-      <div className="field">
-        <label htmlFor="auth-provider">Mode</label>
-        <select id="auth-provider" value={provider} onChange={(event) => setProvider(event.target.value as AuthConfig['provider'])}>
-          <option value="local">Built-in accounts</option>
-          <option value="trusted-header">Trusted header (authenticating proxy)</option>
-        </select>
-      </div>
-      {provider === 'trusted-header' && (
-        <>
-          <div className="field"><label htmlFor="auth-header">Email header</label><input id="auth-header" value={emailHeader} onChange={(event) => setEmailHeader(event.target.value)} required /></div>
-          <div className="field"><label htmlFor="auth-secret">Proxy secret</label><input id="auth-secret" type="password" value={proxySecret} onChange={(event) => setProxySecret(event.target.value)} placeholder={trusted ? 'leave blank to keep current' : 'at least 24 characters'} autoComplete="off" required={!trusted} /><p className="field-hint">The proxy must overwrite <code>X-PrintHub-Proxy-Secret</code> with this value on every request.</p></div>
-          <div className="field"><label htmlFor="auth-operators">Operator emails</label><textarea id="auth-operators" rows={2} value={operatorEmails} onChange={(event) => setOperatorEmails(event.target.value)} placeholder="you@example.com, teammate@example.com" required /></div>
-        </>
-      )}
-      {error && <p className="error">{error}</p>}
-      {saved && <p className="settings-saved">Authentication settings saved and applied.</p>}
-      <button className="btn btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Save authentication settings'}</button>
     </form>
   )
 }
@@ -361,26 +328,19 @@ function StorageForm({ current }: { current: StorageConfig }) {
 
 function TelemetryPane() {
   const { data: current } = useQuery(telemetryQuery())
-  if (!current) return <h3>Telemetry</h3>
-  return <TelemetryForm key={current.token} current={current} />
-}
-
-function TelemetryForm({ current }: { current: TelemetryConfig }) {
   const callUpdate = useServerFn(updateTelemetrySettings)
   const queryClient = useQueryClient()
-  const [token, setToken] = useState(current.token)
-  const [host, setHost] = useState(current.host || 'https://us.i.posthog.com')
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
   const [busy, setBusy] = useState(false)
+  if (!current) return <h3>Telemetry</h3>
 
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault()
+  const save = async (enabled: boolean) => {
     setBusy(true)
     setError('')
     setSaved(false)
     try {
-      await callUpdate({ data: { token, host } })
+      await callUpdate({ data: { enabled } })
       await queryClient.invalidateQueries({ queryKey: ['telemetry'] })
       setSaved(true)
     } catch (err) {
@@ -391,23 +351,24 @@ function TelemetryForm({ current }: { current: TelemetryConfig }) {
   }
 
   return (
-    <form onSubmit={submit} className="settings-form">
+    <>
       <h3>Telemetry</h3>
-      <p className="settings-dim">Optional PostHog analytics for this instance. Leave the token blank for no telemetry at all.</p>
-      <div className="field"><label htmlFor="telemetry-token">Project token</label><input id="telemetry-token" value={token} onChange={(event) => setToken(event.target.value)} placeholder="phc_…" autoComplete="off" /></div>
-      <div className="field"><label htmlFor="telemetry-host">Host</label><input id="telemetry-host" type="url" value={host} onChange={(event) => setHost(event.target.value)} /></div>
+      <p className="settings-dim">PrintHub sends anonymous usage events to its developers so we can see how the app is used. It never sends email addresses, user names, request names, or file names.</p>
+      <label className="settings-check">
+        <input type="checkbox" checked={current.enabled} disabled={busy} onChange={(event) => save(event.target.checked)} />
+        Share anonymous usage data
+      </label>
       {error && <p className="error">{error}</p>}
-      {saved && <p className="settings-saved">Telemetry settings saved and applied.</p>}
-      <button className="btn btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Save telemetry settings'}</button>
-    </form>
+      {saved && <p className="settings-saved">Telemetry settings saved. The server applies them immediately; browsers on their next page load.</p>}
+    </>
   )
 }
 
-function AboutPane({ localAuth }: { localAuth: boolean }) {
+function AboutPane() {
   return (
     <>
       <h3>About</h3>
-      <p className="settings-dim">PrintHub v{__APP_VERSION__} · {localAuth ? 'built-in accounts' : 'trusted-header identity'}</p>
+      <p className="settings-dim">PrintHub v{__APP_VERSION__}</p>
     </>
   )
 }

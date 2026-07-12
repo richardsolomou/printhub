@@ -1,6 +1,6 @@
 # Cloudflare Tunnel on a NAS
 
-The reference PrintHub deployment: the app runs next to the print files on a NAS, a Cloudflare Tunnel provides ingress without opening router ports, and identity comes from either the built-in login or Cloudflare Access. Cloudflare is one supported recipe here, not an application dependency; PrintHub itself never talks to Cloudflare.
+The reference PrintHub deployment: the app runs next to the print files on a NAS, a Cloudflare Tunnel provides ingress without opening router ports, and everyone signs in with PrintHub's built-in accounts. Cloudflare is one supported recipe here, not an application dependency; PrintHub itself never talks to Cloudflare.
 
 ## Prerequisites
 
@@ -17,19 +17,11 @@ cp .env.example .env
 docker compose up -d
 ```
 
-### Option A: built-in login (default)
+### First sign-in
 
-Open your tunnel hostname and create the first operator; whoever submits the welcome form first claims the account. The tunnel makes a fresh instance publicly reachable, so do this right after `docker compose up` — or start with the tunnel service stopped, create the operator on the LAN, then start it.
+Open your tunnel hostname and create the first operator; whoever submits the welcome form first claims the account. The tunnel makes a fresh instance publicly reachable, so do this right after `docker compose up` — or start with the tunnel service stopped, create the operator on the LAN, then start it. Add everyone else under **Settings → Users**.
 
-### Option B: Cloudflare Access identity
-
-Let Cloudflare Access authenticate users and have PrintHub trust the identity header instead of managing passwords:
-
-1. Add an Access application for your hostname under **Zero Trust → Access → Applications** with a policy for your users.
-2. Create a request-header Transform Rule on the zone that sets `X-PrintHub-Proxy-Secret` to a random value of at least 24 characters. This proves requests came through Cloudflare; PrintHub fails closed without it.
-3. While signed in as an operator **through the tunnel**, open **Settings → Authentication**, pick trusted-header mode, and enter the email header, the same secret, and the operator emails. The save only succeeds when the request already carries the proxy headers, which protects you from locking yourself out.
-
-Access populates `Cf-Access-Authenticated-User-Email` on authenticated requests, which matches the default `AUTH_EMAIL_HEADER`.
+An optional Cloudflare Access policy in front of the hostname works as an extra gate, but PrintHub does not read its identity headers — people still sign in with their PrintHub accounts.
 
 ## TrueNAS Custom App
 
@@ -37,7 +29,7 @@ The same deployment without Compose, using **Apps → Discover Apps → Custom A
 
 - Image: `ghcr.io/richardsolomou/printhub:latest`, pull policy **Always**, restart **Unless Stopped**.
 - Host path for `/data` (for example `/mnt/HDDs/STL/.printhub-data`) and host path for `/prints` (for example `/mnt/HDDs/STL`).
-- Environment variables as in the options above.
+- Environment variables as in the Compose file above.
 - Port: container `3000`, host `3010`, and run `cloudflared` separately (another Custom App or a plain container) pointing at `http://<nas-ip>:3010`.
 
 TrueNAS can monitor the `latest` tag for updates. The unauthenticated `/api/health` endpoint suits its health checks: it returns success only after migrations and recovery finish and both mounts accept writes.

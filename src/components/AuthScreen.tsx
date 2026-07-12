@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useServerFn } from '@tanstack/react-start'
 import { login, setupOperator } from '../server/fns'
 
-export function AuthScreen({ setupRequired, trustedHeader }: { setupRequired: boolean; trustedHeader: boolean }) {
+export function AuthScreen({ setupRequired }: { setupRequired: boolean }) {
   const callSetup = useServerFn(setupOperator)
   const callLogin = useServerFn(login)
   const [email, setEmail] = useState('')
@@ -10,18 +10,6 @@ export function AuthScreen({ setupRequired, trustedHeader }: { setupRequired: bo
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-
-  if (trustedHeader) {
-    return (
-      <main className="auth">
-        <div className="auth-hero">
-          <h1 className="logo">Print<span className="accent">Hub</span></h1>
-          <p className="auth-tagline">self-hosted print queue</p>
-        </div>
-        <p>Your identity proxy did not provide an email.</p>
-      </main>
-    )
-  }
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()

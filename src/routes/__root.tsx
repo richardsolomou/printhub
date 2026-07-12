@@ -3,6 +3,7 @@ import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from '@tanst
 import { PostHogErrorBoundary, PostHogProvider, usePostHog } from '@posthog/react'
 import { useEffect } from 'react'
 import { sessionInfo } from '../server/fns'
+import { TELEMETRY_TOKEN } from '../core/telemetry'
 import appCss from '../styles.css?url'
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
@@ -39,7 +40,7 @@ function PostHogIdentify() {
 }
 
 function RootComponent() {
-  const { telemetry } = Route.useLoaderData()
+  const { telemetryEnabled } = Route.useLoaderData()
   const content = <Outlet />
   return (
     <html lang="en">
@@ -47,11 +48,11 @@ function RootComponent() {
         <HeadContent />
       </head>
       <body>
-        {telemetry ? <PostHogProvider
-          apiKey={telemetry.token}
+        {telemetryEnabled ? <PostHogProvider
+          apiKey={TELEMETRY_TOKEN}
           options={{
             api_host: '/ingest',
-            ui_host: telemetry.host || 'https://us.posthog.com',
+            ui_host: 'https://us.posthog.com',
             defaults: '2025-05-24',
             autocapture: false,
             disable_session_recording: true,

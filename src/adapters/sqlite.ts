@@ -145,9 +145,6 @@ export class SqliteRepository implements Repository {
 
   findUserByEmail(email: string) { return this.user(this.db.prepare('SELECT * FROM users WHERE email=?').get(email.toLowerCase())) }
   countUsers() { return (this.db.prepare('SELECT count(*) count FROM users').get() as { count: number }).count }
-  countOperatorsWithPassword() {
-    return (this.db.prepare("SELECT count(*) count FROM users WHERE role='operator' AND password_hash IS NOT NULL").get() as { count: number }).count
-  }
 
   createUser(input: { email: string; name: string; passwordHash?: string; role: Role }) {
     const id = crypto.randomUUID()
@@ -181,8 +178,13 @@ export class SqliteRepository implements Repository {
     return this.user(this.db.prepare('SELECT users.* FROM sessions JOIN users ON users.id=sessions.user_id WHERE token_hash=? AND expires_at>?').get(tokenHash, Date.now()))
   }
   deleteSession(tokenHash: string) { this.db.prepare('DELETE FROM sessions WHERE token_hash=?').run(tokenHash) }
+  // An operator-set password evicts every session: the account may be
+  // changing hands, so nothing issued under the old credentials survives.
   updatePassword(userId: string, passwordHash: string) {
-    this.db.prepare('UPDATE users SET password_hash=? WHERE id=?').run(passwordHash, userId)
+    this.db.transaction(() => {
+      this.db.prepare('UPDATE users SET password_hash=? WHERE id=?').run(passwordHash, userId)
+      this.db.prepare('DELETE FROM sessions WHERE user_id=?').run(userId)
+    })()
   }
   rotatePasswordSession(input: { userId: string; expectedPasswordHash: string; passwordHash: string; tokenHash: string; expiresAt: number }) {
     return this.db.transaction(() => {

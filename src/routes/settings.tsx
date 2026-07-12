@@ -25,7 +25,7 @@ function SettingsPage() {
         </div>
       </header>
       <main className="settings-page">
-        <SettingsPanes me={session.identity} localAuth={session.authProvider === 'local'} />
+        <SettingsPanes me={session.identity} />
       </main>
     </div>
   )
