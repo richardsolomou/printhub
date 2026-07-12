@@ -1,20 +1,23 @@
-FROM node:22-alpine AS build
+FROM node:24-alpine AS build
 WORKDIR /app
 RUN npm i -g pnpm@10.33.0
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY . .
-ARG VITE_CONVEX_URL
-ARG VITE_POSTHOG_PROJECT_TOKEN
-ARG VITE_POSTHOG_HOST=https://us.i.posthog.com
-ENV VITE_CONVEX_URL=$VITE_CONVEX_URL
-ENV VITE_POSTHOG_PROJECT_TOKEN=$VITE_POSTHOG_PROJECT_TOKEN
-ENV VITE_POSTHOG_HOST=$VITE_POSTHOG_HOST
 RUN pnpm build
 
-FROM node:22-alpine
+FROM node:24-alpine
+LABEL org.opencontainers.image.title="PrintHub" \
+      org.opencontainers.image.description="Self-hosted 3D print request queue" \
+      org.opencontainers.image.source="https://github.com/richardsolomou/printhub" \
+      org.opencontainers.image.licenses="MIT"
 WORKDIR /app
-COPY --from=build /app/.output ./.output
-ENV NODE_ENV=production PORT=3000
+RUN mkdir -p /data /prints && chown -R node:node /app /data /prints
+COPY --from=build --chown=node:node /app/.output ./.output
+ENV NODE_ENV=production PORT=3000 DATA_DIR=/data PRINTS_DIR=/prints
+VOLUME ["/data", "/prints"]
 EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD wget -q --spider http://127.0.0.1:3000/api/health || exit 1
+USER node
 CMD ["node", ".output/server/index.mjs"]

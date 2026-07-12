@@ -5,6 +5,14 @@ node_modules/
 dist/
 .env
 .env.local
+data-dev/
 prints-dev/
 src/routeTree.gen.ts
-deploy/hexos-app.local.yaml
+deploy/*.local.*
+.pnpm-store/
+.DS_Store
+.claude/settings.local.json
+/local/
+.playwright/
+playwright-report/
+test-results/

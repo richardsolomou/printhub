@@ -1,17 +1,32 @@
 services:
-  app:
+  printhub:
     image: ghcr.io/richardsolomou/printhub:latest
     build:
       context: .
-      args:
-        VITE_CONVEX_URL: ${VITE_CONVEX_URL}
-        VITE_POSTHOG_PROJECT_TOKEN: ${VITE_POSTHOG_PROJECT_TOKEN}
-        VITE_POSTHOG_HOST: ${VITE_POSTHOG_HOST}
     restart: unless-stopped
+    user: '${PUID:-1000}:${PGID:-1000}'
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
     ports:
       - '3010:3000'
     environment:
-      CONVEX_ACTION_SECRET: ${CONVEX_ACTION_SECRET}
-      ADMIN_EMAILS: ${ADMIN_EMAILS}
+      # Password authentication is enabled by default. Set false only after
+      # configuring at least one social provider below.
+      AUTH_PASSWORD_ENABLED: ${AUTH_PASSWORD_ENABLED:-true}
+      AUTH_GOOGLE_CLIENT_ID: ${AUTH_GOOGLE_CLIENT_ID:-}
+      AUTH_GOOGLE_CLIENT_SECRET: ${AUTH_GOOGLE_CLIENT_SECRET:-}
+      AUTH_DISCORD_CLIENT_ID: ${AUTH_DISCORD_CLIENT_ID:-}
+      AUTH_DISCORD_CLIENT_SECRET: ${AUTH_DISCORD_CLIENT_SECRET:-}
+      # Optional SMTP delivery for invitation and password-reset email.
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
     volumes:
-      - ${PRINTS_HOST_DIR}:/prints
+      # App data: SQLite database, settings, in-flight uploads.
+      - ${DATA_HOST_DIR:-./printhub-data}:/data
+      # Your print files: todo/, in-progress/, done/ live here as plain files.
+      - ${PRINTS_HOST_DIR:-./prints}:/prints
