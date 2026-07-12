@@ -62,7 +62,6 @@ export function createAuth(
       enabled: auth.password,
       minPasswordLength: 8,
       maxPasswordLength: 256,
-      // Argon2id keeps every hash from earlier builds and the Convex importer valid.
       password: {
         hash: (password) => argon2.hash(password),
         verify: ({ hash, password }) => argon2.verify(hash, password),

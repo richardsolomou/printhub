@@ -24,9 +24,7 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install chromium",
-    "check:cli": "node --import tsx scripts/migrate-convex.ts --help && node --import tsx scripts/verify-convex-import.ts --help && node --import tsx scripts/backup.ts --help",
-    "migrate:convex": "tsx scripts/migrate-convex.ts",
-    "verify:convex": "tsx scripts/verify-convex-import.ts",
+    "check:cli": "node --import tsx scripts/backup.ts --help",
     "backup": "tsx scripts/backup.ts"
   },
   "dependencies": {
