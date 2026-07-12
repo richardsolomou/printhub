@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import Database from 'better-sqlite3'
+import { build } from 'esbuild'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LocalAssetStore } from '../../adapters/filesystem'
 import { LocalEventBus } from '../../adapters/events'
@@ -104,10 +105,19 @@ describe('asset generation queue', () => {
     expect(capped.stats().concurrency).toBe(8)
   })
 
-  it('can execute mesh analysis in an isolated TypeScript worker', async () => {
+  it('can execute mesh analysis in the isolated production worker', async () => {
+    const workerPath = path.join(root, 'assets-worker.mjs')
+    await build({
+      entryPoints: [path.resolve('src/server/assets/worker.ts')],
+      bundle: true,
+      platform: 'node',
+      format: 'esm',
+      target: 'node22',
+      outfile: workerPath,
+      logLevel: 'silent',
+    })
     const isolated = new AssetGenerationQueue(repository, assets, events, telemetry, 1, {
-      path: path.resolve('src/server/assets/worker.ts'),
-      execArgv: ['--import', 'tsx'],
+      path: workerPath,
     })
     const id = await requestWithFile()
     expect(isolated.stats().worker).toBe(true)
