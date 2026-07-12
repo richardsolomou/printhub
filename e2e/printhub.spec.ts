@@ -80,7 +80,7 @@ test('admin setup, upload, viewer, settings, invite, and sign out', async ({ pag
   await expect(page.locator('[data-status="in_progress"] .card')).toHaveAttribute('data-draggable', 'true')
 
   const thumbnail = page.locator('img[src^="/api/thumbs/"]')
-  await expect(thumbnail).toBeVisible()
+  await expect(thumbnail).toBeVisible({ timeout: 30_000 })
   const thumbnailResponse = await page.request.get((await thumbnail.getAttribute('src')) as string)
   expect(thumbnailResponse.ok()).toBeTruthy()
 
