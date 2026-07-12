@@ -46,7 +46,7 @@ endsolid probe`)
   })
 
   it('rejects garbage input', () => {
-    expect(() => parseStl(new TextEncoder().encode('not an stl at all'))).toThrow()
+    expect(() => parseStl(new TextEncoder().encode('not an stl at all'))).toThrow('Offset is outside the bounds')
   })
 
   it('skips previews for small meshes and decimates heavy ones under the byte cap', async () => {

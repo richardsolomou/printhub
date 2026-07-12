@@ -9,8 +9,9 @@ const { file, wants } = workerData as { file: Uint8Array; wants: { thumbnail: bo
 
 generateAssets(file, wants).then(
   (generated) => {
-    const transfers = [generated.thumbnailPng?.buffer, generated.previewStl?.buffer]
-      .filter((buffer): buffer is ArrayBuffer => buffer instanceof ArrayBuffer)
+    const transfers = [generated.thumbnailPng?.buffer, generated.previewStl?.buffer].filter(
+      (buffer): buffer is ArrayBuffer => buffer instanceof ArrayBuffer,
+    )
     parentPort!.postMessage({ ok: true as const, ...generated }, transfers)
   },
   (error: unknown) => {

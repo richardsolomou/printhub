@@ -1,9 +1,10 @@
-export type Role = 'operator' | 'requester'
+export type Role = 'admin' | 'requester'
 
 export type Identity = {
   id: string
   email: string
   name: string
+  image?: string
   role: Role
 }
 
@@ -43,6 +44,49 @@ export type PublicPrintRequest = Omit<PrintRequest, 'fileName' | 'filePath' | 'r
   canDelete: boolean
   hasPreview: boolean
 }
+
+export type RequestSort =
+  | 'board'
+  | 'updated-desc'
+  | 'updated-asc'
+  | 'created-desc'
+  | 'created-asc'
+  | 'name-asc'
+  | 'name-desc'
+  | 'quantity-desc'
+  | 'quantity-asc'
+
+export type RequestFilters = {
+  query?: string
+  requester?: string
+  minQuantity?: number
+  maxQuantity?: number
+  createdAfter?: number
+  createdBefore?: number
+  updatedAfter?: number
+  updatedBefore?: number
+  hasNotes?: boolean
+  hasSource?: boolean
+  hasThumbnail?: boolean
+  hasPreview?: boolean
+  sort?: RequestSort
+}
+
+export type RequestFacets = {
+  requesters: { value: string; label: string; count: number }[]
+  total: number
+  available: number
+}
+
+export type RequestQuery = {
+  filters?: RequestFilters
+  visibleToEmail?: string
+  ownerEmail?: string
+  searchPrivateMetadata?: boolean
+}
+
+export type RequestQueryResult = { requests: PrintRequest[]; facets: RequestFacets }
+export type PublicRequestQueryResult = { requests: PublicPrintRequest[]; facets: RequestFacets }
 
 export type BoardConfig = { privateRequests: boolean }
 
@@ -92,12 +136,19 @@ export type PendingOperation = { id: string; state: 'prepared' | 'assets_moved' 
 
 export interface Repository {
   listRequests(): PrintRequest[]
+  queryRequests(query?: RequestQuery): RequestQueryResult
   getRequest(id: string): PrintRequest | undefined
   createRequest(request: NewPrintRequest): string
-  createUploadSession(uploadId: string, ownerId: string, expiresAt: number, maxIncomplete: number): { fresh: boolean; completedRequestId?: string }
+  createUploadSession(
+    uploadId: string,
+    ownerId: string,
+    expiresAt: number,
+    maxIncomplete: number,
+  ): { fresh: boolean; completedRequestId?: string }
   reserveUpload(uploadId: string, ownerId: string, bytes: number, expiresAt: number, limits: { count: number; bytes: number }): boolean
   expireUploads(now: number): string[]
   activeUploadIds(now: number): Set<string>
+  incompleteUploadStats(now: number): { count: number; bytes: number }
   getCompletedUpload(uploadId: string, ownerId: string): string | undefined
   moveCopies(input: { id: string; from: string; to: string; count: number; filePath: string; order?: number }): void
   reorderRequest(id: string, status: string, order: number): void
@@ -116,6 +167,9 @@ export interface Repository {
   getSetting<T>(key: string): T | undefined
   setSetting(key: string, value: unknown): void
   countUsers(): number
+  databaseInfo(): { path: string; sizeBytes: number; integrity: string; lastCheckedAt: number }
+  maintain(): { integrity: string; checkedAt: number }
+  backup(destination: string): Promise<{ totalPages: number; remainingPages: number }>
   beginOperation(id: string, payload: OperationPayload): void
   beginUploadOperation(id: string, payload: UploadOperation): void
   markOperationAssetsMoved(id: string): void
@@ -154,6 +208,7 @@ export interface UploadStagingArea {
   initialize(): Promise<void>
   uploadPart(uploadId: string): string
   writeUploadPart(filePath: string, bytes: Uint8Array): Promise<void>
+  copyUploadPart(sourcePath: string, filePath: string): Promise<void>
   size(filePath: string): Promise<number>
   remove(filePath: string): Promise<void>
   sweepUploads(exclude?: ReadonlySet<string>): Promise<void>

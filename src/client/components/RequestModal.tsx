@@ -1,23 +1,25 @@
-import { Suspense, lazy, useState } from 'react'
-import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { usePostHog } from '@posthog/react'
+import { Plus, X } from 'lucide-react'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { Field, FieldError, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import { Spinner } from '@/components/ui/spinner'
+import { Textarea } from '@/components/ui/textarea'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { cn } from '@/lib/utils'
 import type { PublicPrintRequest } from '../../core/types'
 import type { WorkflowDefinition } from '../../core/workflow'
 import { peopleQuery } from '../queries'
-import { requesterColor, requesterLabel } from '../requester'
-import { useEscape } from '../useEscape'
+import { requesterLabel } from '../requester'
 import { deleteRequest, updateRequest } from '../../server/fns'
-
-const StlViewer = lazy(() => import('./StlViewer'))
-
-function sourceLabel(url: string) {
-  try {
-    return new URL(url).hostname.replace(/^www\./, '')
-  } catch {
-    return url
-  }
-}
+import { DialogShell } from './DialogShell'
+import { ConfirmDialog } from './ConfirmDialog'
+import { LazyStlViewer } from './LazyStlViewer'
+import { PeopleCombobox } from './PeopleCombobox'
+import { RequestDetails } from './RequestDetails'
 
 export function RequestModal({
   request,
@@ -44,8 +46,35 @@ export function RequestModal({
   const [forName, setForName] = useState(requesterLabel(request))
   const [notes, setNotes] = useState(request.notes ?? '')
   const [sourceUrl, setSourceUrl] = useState(request.sourceUrl ?? '')
+  const [notesOpen, setNotesOpen] = useState(Boolean(request.notes))
+  const [sourceOpen, setSourceOpen] = useState(Boolean(request.sourceUrl))
   const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
+  const [confirmation, setConfirmation] = useState<'discard' | 'delete' | null>(null)
+
+  const updateMutation = useMutation({
+    mutationFn: callUpdate,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['requests'] })
+      posthog.capture('request_updated', { request_id: request.id })
+      onClose()
+    },
+    onError: (failure) => {
+      posthog.captureException(failure, { action: 'update_request', request_id: request.id })
+      setError("Couldn't save changes. Try again.")
+    },
+  })
+  const deleteMutation = useMutation({
+    mutationFn: callDelete,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['requests'] })
+      onClose()
+    },
+    onError: (failure) => {
+      posthog.captureException(failure, { action: 'delete_request', request_id: request.id })
+      setError("Couldn't delete this request.")
+    },
+  })
+  const busy = updateMutation.isPending || deleteMutation.isPending
 
   const dirty =
     canEdit &&
@@ -56,100 +85,48 @@ export function RequestModal({
       sourceUrl !== (request.sourceUrl ?? ''))
 
   const requestClose = () => {
-    if (!dirty || confirm('Discard unsaved changes?')) onClose()
+    if (dirty) setConfirmation('discard')
+    else onClose()
   }
-  useEscape(requestClose)
 
   const save = async (event: React.FormEvent) => {
     event.preventDefault()
-    setBusy(true)
     setError('')
-    try {
-      await callUpdate({
-        data: {
-          id: request.id,
-          name: name.trim() || request.name,
-          quantity: Math.min(50, Math.max(1, Math.round(Number(quantity) || request.quantity))),
-          requesterName: forName.trim(),
-          notes: notes.trim(),
-          sourceUrl: sourceUrl.trim(),
-        },
-      })
-      await queryClient.invalidateQueries({ queryKey: ['requests'] })
-      posthog.capture('request_updated', {
-        request_id: request.id,
-      })
-      onClose()
-    } catch (error) {
-      posthog.captureException(error, { action: 'update_request', request_id: request.id })
-      setError("Couldn't save changes. Try again.")
-      setBusy(false)
-    }
+    updateMutation.mutate({
+      data: {
+        id: request.id,
+        name: name.trim() || request.name,
+        quantity: Math.min(50, Math.max(1, Math.round(Number(quantity) || request.quantity))),
+        requesterName: forName.trim(),
+        notes: notes.trim(),
+        sourceUrl: sourceUrl.trim(),
+      },
+    })
   }
 
-  const remove = async () => {
-    if (!confirm(`Delete "${request.name}"? This also deletes the STL from the NAS.`)) return
-    setBusy(true)
-    try {
-      await callDelete({ data: { id: request.id } })
-      await queryClient.invalidateQueries({ queryKey: ['requests'] })
-      onClose()
-    } catch (error) {
-      posthog.captureException(error, { action: 'delete_request', request_id: request.id })
-      setError("Couldn't delete this request.")
-      setBusy(false)
-    }
-  }
+  const remove = () => setConfirmation('delete')
 
   return (
-    <div className="overlay" onClick={(e) => e.target === e.currentTarget && requestClose()}>
-      <div className="dialog">
-        <h2>{request.name}</h2>
+    <>
+      <DialogShell onClose={requestClose} title={request.name} preventClose={busy}>
+        <LazyStlViewer requestId={request.id} hasPreview={request.hasPreview} />
 
-        <Suspense fallback={<div className="viewer"><div className="viewer-status">loading viewer…</div></div>}>
-          <StlViewer requestId={request.id} hasPreview={request.hasPreview} />
-        </Suspense>
-
-        <div className="modal-meta">
-          <span className="chip qty">×{request.quantity}</span>
-          {workflow.statuses.filter((status) => request.counts[status.id] > 0).map((status) => (
-            <span key={status.id} className="chip">
-              {request.counts[status.id]} {status.label.toLowerCase()}
-            </span>
-          ))}
-          {!hideRequester && (
-            <span
-              className="chip"
-              style={{ color: requesterColor(request, people), borderColor: requesterColor(request, people) }}
-            >
-              {requesterLabel(request)}
-            </span>
-          )}
-        </div>
-
-        {request.sourceUrl && (
-          <p className="modal-source">
-            Source:{' '}
-            <a href={request.sourceUrl} target="_blank" rel="noopener noreferrer">
-              {sourceLabel(request.sourceUrl)}
-            </a>
-          </p>
-        )}
+        <RequestDetails request={request} workflow={workflow} people={people} hideRequester={hideRequester} showSource={!canEdit} />
 
         {!canEdit && request.notes && <p>{request.notes}</p>}
 
         {canEdit && (
           <form onSubmit={save}>
-            <div className="field-row">
+            <div className="flex gap-3 [&>[data-slot=field]]:flex-1">
               {isAdmin && (
-                <div className="field">
-                  <label htmlFor="request-name">Name</label>
-                  <input id="request-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} />
-                </div>
+                <Field>
+                  <FieldLabel htmlFor="request-name">Name</FieldLabel>
+                  <Input id="request-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} />
+                </Field>
               )}
-              <div className="field">
-                <label htmlFor="request-qty">Copies</label>
-                <input
+              <Field>
+                <FieldLabel htmlFor="request-qty">Copies</FieldLabel>
+                <Input
                   id="request-qty"
                   type="number"
                   inputMode="numeric"
@@ -158,77 +135,162 @@ export function RequestModal({
                   value={quantity}
                   onChange={(e) => setQuantity(e.target.value)}
                 />
-              </div>
+              </Field>
               {isAdmin && (
-                <div className="field">
-                  <label htmlFor="request-for">For</label>
-                  <select id="request-for" value={forName} onChange={(e) => setForName(e.target.value)}>
-                    {!people.some((person) => person.name === forName) && (
-                      <option value={forName}>{forName}</option>
-                    )}
-                    {people.map((person) => (
-                      <option key={person.name} value={person.name}>
-                        {person.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <Field>
+                  <FieldLabel htmlFor="request-for">For</FieldLabel>
+                  <PeopleCombobox
+                    id="request-for"
+                    value={forName}
+                    onChange={setForName}
+                    options={[
+                      ...(!people.some((person) => person.name === forName) ? [{ value: forName, label: forName }] : []),
+                      ...people.map((person) => ({ value: person.name, label: person.name })),
+                    ]}
+                  />
+                </Field>
               )}
             </div>
-            <div className="field">
-              <label htmlFor="request-notes">Notes</label>
-              <textarea id="request-notes" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
-            </div>
-            <div className="field">
-              <label htmlFor="request-source">Source URL</label>
-              <input
-                id="request-source"
-                type="url"
-                inputMode="url"
-                value={sourceUrl}
-                onChange={(e) => setSourceUrl(e.target.value)}
-                placeholder="https://… where this model came from"
-                maxLength={500}
-              />
-            </div>
-            {error && <p className="error">{error}</p>}
-            <div className="dialog-actions">
+            {notesOpen && (
+              <div className="mb-2.5 flex items-start gap-2">
+                <Textarea
+                  aria-label="Notes"
+                  rows={3}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="scale, supports, colour — anything the printer should know"
+                />
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="shrink-0 text-muted-foreground hover:text-destructive"
+                        aria-label="Remove note"
+                        onClick={() => {
+                          setNotesOpen(false)
+                          setNotes('')
+                        }}
+                      />
+                    }
+                  >
+                    <X />
+                  </TooltipTrigger>
+                  <TooltipContent>Remove note</TooltipContent>
+                </Tooltip>
+              </div>
+            )}
+            {sourceOpen && (
+              <div className="mb-2.5 flex items-start gap-2">
+                <Input
+                  aria-label="Source URL"
+                  type="url"
+                  inputMode="url"
+                  value={sourceUrl}
+                  onChange={(e) => setSourceUrl(e.target.value)}
+                  placeholder="https://… where this model came from"
+                  maxLength={500}
+                />
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="shrink-0 text-muted-foreground hover:text-destructive"
+                        aria-label="Remove link"
+                        onClick={() => {
+                          setSourceOpen(false)
+                          setSourceUrl('')
+                        }}
+                      />
+                    }
+                  >
+                    <X />
+                  </TooltipTrigger>
+                  <TooltipContent>Remove link</TooltipContent>
+                </Tooltip>
+              </div>
+            )}
+            {(!notesOpen || !sourceOpen) && (
+              <div className="mb-3 flex gap-3">
+                {!notesOpen && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-auto px-0 text-xs text-muted-foreground"
+                    onClick={() => setNotesOpen(true)}
+                  >
+                    <Plus />
+                    Add note
+                  </Button>
+                )}
+                {!sourceOpen && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-auto px-0 text-xs text-muted-foreground"
+                    onClick={() => setSourceOpen(true)}
+                  >
+                    <Plus />
+                    Add link
+                  </Button>
+                )}
+              </div>
+            )}
+            <FieldError>{error}</FieldError>
+            <div className="mt-2 flex flex-wrap justify-end gap-2">
               {request.canDelete && (
-                <button type="button" className="btn btn-danger" onClick={remove} disabled={busy}>
+                <Button type="button" variant="destructive" onClick={remove} disabled={busy}>
                   Delete
-                </button>
+                </Button>
               )}
               <a
-                className="btn"
+                className={cn(buttonVariants({ variant: 'outline' }))}
                 href={`/api/files/${request.id}`}
                 download
                 onClick={() => posthog.capture('stl_downloaded', { request_id: request.id })}
               >
                 Download STL
               </a>
-              <button type="submit" className="btn btn-primary" disabled={busy}>
+              <Button type="submit" disabled={busy}>
+                {busy && <Spinner />}
                 {busy ? 'Saving…' : 'Save changes'}
-              </button>
+              </Button>
             </div>
           </form>
         )}
 
         {!canEdit && (
-          <div className="dialog-actions">
+          <div className="mt-2 flex flex-wrap justify-end gap-2">
             <a
-              className="btn"
+              className={cn(buttonVariants({ variant: 'outline' }))}
               href={`/api/files/${request.id}`}
               download
               onClick={() => posthog.capture('stl_downloaded', { request_id: request.id })}
             >
               Download STL
             </a>
-            <button type="button" className="btn" onClick={onClose}>
+            <Button type="button" variant="outline" onClick={onClose}>
               Close
-            </button>
+            </Button>
           </div>
         )}
-      </div>
-    </div>
+      </DialogShell>
+      <ConfirmDialog
+        open={confirmation !== null}
+        title={confirmation === 'delete' ? `Delete “${request.name}”?` : 'Discard changes?'}
+        description={confirmation === 'delete' ? 'This also deletes the STL from storage.' : 'Your unsaved edits will be lost.'}
+        confirmLabel={confirmation === 'delete' ? 'Delete request' : 'Discard'}
+        destructive
+        onCancel={() => setConfirmation(null)}
+        onConfirm={() => (confirmation === 'delete' ? deleteMutation.mutate({ data: { id: request.id } }) : onClose())}
+      />
+    </>
   )
 }

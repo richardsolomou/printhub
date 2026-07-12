@@ -1,4 +1,19 @@
-import type { AppEvent, AssetStore, DeleteOperation, EventBus, Identity, MoveOperation, NewPrintRequest, PendingOperation, Repository, Telemetry, UploadOperation, UploadStagingArea } from './types'
+import type {
+  AppEvent,
+  AssetStore,
+  DeleteOperation,
+  EventBus,
+  Identity,
+  MoveOperation,
+  NewPrintRequest,
+  PendingOperation,
+  PublicRequestQueryResult,
+  Repository,
+  RequestFilters,
+  Telemetry,
+  UploadOperation,
+  UploadStagingArea,
+} from './types'
 import { initialStatus, statusById, workflow } from './workflow'
 
 export class PrintHubService {
@@ -10,21 +25,29 @@ export class PrintHubService {
     private telemetry: Telemetry,
   ) {}
 
-  listRequests(identity: Identity, privateRequests = false) {
-    const operator = identity.role === 'operator'
-    return this.repository.listRequests()
-      .filter((request) => operator || !privateRequests || request.requesterEmail === identity.email)
-      .map(({ fileName: _fileName, filePath: _filePath, requesterEmail, thumbnailPath: _thumbnailPath, previewPath, ...request }) => {
-        const mine = requesterEmail === identity.email
-        const started = workflow.statuses.slice(1).some((status) => request.counts[status.id] > 0)
-        return {
-          ...request,
-          mine,
-          hasPreview: !!previewPath,
-          canEdit: operator || (mine && !started),
-          canDelete: operator || (mine && !started),
-        }
-      })
+  listRequests(identity: Identity, privateRequests = false, filters: RequestFilters = {}): PublicRequestQueryResult {
+    const admin = identity.role === 'admin'
+    const result = this.repository.queryRequests({
+      filters,
+      visibleToEmail: !admin && privateRequests ? identity.email : undefined,
+      searchPrivateMetadata: admin,
+    })
+    return {
+      facets: result.facets,
+      requests: result.requests.map(
+        ({ fileName: _fileName, filePath: _filePath, requesterEmail, thumbnailPath: _thumbnailPath, previewPath, ...request }) => {
+          const mine = requesterEmail === identity.email
+          const started = workflow.statuses.slice(1).some((status) => request.counts[status.id] > 0)
+          return {
+            ...request,
+            mine,
+            hasPreview: !!previewPath,
+            canEdit: admin || (mine && !started),
+            canDelete: admin || (mine && !started),
+          }
+        },
+      ),
+    }
   }
 
   listPeople() {
@@ -52,11 +75,18 @@ export class PrintHubService {
     if (completed) return completed
     const filePath = this.assets.createPath(input.fileName)
     const operation: UploadOperation = {
-      kind: 'upload', uploadId, ownerId: identity.id, requestId: crypto.randomUUID(), partPath,
-      destinationPath: filePath, request: input,
+      kind: 'upload',
+      uploadId,
+      ownerId: identity.id,
+      requestId: crypto.randomUUID(),
+      partPath,
+      destinationPath: filePath,
+      request: input,
     }
     this.repository.beginUploadOperation(crypto.randomUUID(), operation)
-    const pending = this.repository.listOperations().find((candidate) => candidate.payload.kind === 'upload' && candidate.payload.uploadId === uploadId)
+    const pending = this.repository
+      .listOperations()
+      .find((candidate) => candidate.payload.kind === 'upload' && candidate.payload.uploadId === uploadId)
     if (!pending) {
       const result = this.repository.getCompletedUpload(uploadId, identity.id)
       if (result) return result
@@ -69,22 +99,39 @@ export class PrintHubService {
   }
 
   async moveCopies(input: { id: string; from: string; to: string; count: number; order?: number }, identity: Identity) {
-    this.requireOperator(identity)
+    this.requireAdmin(identity)
     statusById(input.from)
     statusById(input.to)
     const request = this.requiredRequest(input.id)
-    if (!(input.from in request.counts) || !(input.to in request.counts) || input.from === input.to || !Number.isInteger(input.count) || input.count < 1 || request.counts[input.from] < input.count) {
+    if (
+      !(input.from in request.counts) ||
+      !(input.to in request.counts) ||
+      input.from === input.to ||
+      !Number.isInteger(input.count) ||
+      input.count < 1 ||
+      request.counts[input.from] < input.count
+    ) {
       throw new Response('invalid move', { status: 409 })
     }
-    const counts = { ...request.counts, [input.from]: request.counts[input.from] - input.count, [input.to]: request.counts[input.to] + input.count }
+    const counts = {
+      ...request.counts,
+      [input.from]: request.counts[input.from] - input.count,
+      [input.to]: request.counts[input.to] + input.count,
+    }
     const target = workflow.statuses.find((status) => counts[status.id] > 0)?.id ?? workflow.statuses.at(-1)!.id
     const current = workflow.statuses.find((status) => request.counts[status.id] > 0)?.id ?? initialStatus().id
     const filePath = target === current ? request.filePath : this.assets.destinationPath(request.filePath, target)
     if (filePath !== request.filePath) {
       const operationId = crypto.randomUUID()
       const operation: MoveOperation = {
-        kind: 'move', requestId: input.id, fromStatus: input.from, toStatus: input.to, count: input.count,
-        order: input.order, sourcePath: request.filePath, destinationPath: filePath,
+        kind: 'move',
+        requestId: input.id,
+        fromStatus: input.from,
+        toStatus: input.to,
+        count: input.count,
+        order: input.order,
+        sourcePath: request.filePath,
+        destinationPath: filePath,
       }
       this.repository.beginOperation(operationId, operation)
       await this.resumeOperation({ id: operationId, state: 'prepared', payload: operation })
@@ -99,23 +146,32 @@ export class PrintHubService {
     statusById(status)
     if (!Number.isFinite(order)) throw new Error('invalid order')
     const request = this.requiredRequest(id)
-    // Requesters may rearrange their own cards; only operators touch others'.
-    if (identity.role !== 'operator' && request.requesterEmail !== identity.email) throw new Response('forbidden', { status: 403 })
+    // Requesters may rearrange their own cards; only admins touch others'.
+    if (identity.role !== 'admin' && request.requesterEmail !== identity.email) throw new Response('forbidden', { status: 403 })
     this.repository.reorderRequest(id, status, order)
     this.changed('request.reordered')
   }
 
-  update(id: string, fields: { name?: string; quantity?: number; requesterName?: string; notes?: string; sourceUrl?: string }, identity: Identity) {
-    if (typeof id !== 'string' || id.length > 100 ||
+  update(
+    id: string,
+    fields: { name?: string; quantity?: number; requesterName?: string; notes?: string; sourceUrl?: string },
+    identity: Identity,
+  ) {
+    if (
+      typeof id !== 'string' ||
+      id.length > 100 ||
       (fields.name !== undefined && (typeof fields.name !== 'string' || !fields.name.trim() || fields.name.length > 120)) ||
       (fields.requesterName !== undefined && (typeof fields.requesterName !== 'string' || fields.requesterName.length > 60)) ||
       (fields.notes !== undefined && (typeof fields.notes !== 'string' || fields.notes.length > 2000)) ||
-      (fields.sourceUrl !== undefined && (typeof fields.sourceUrl !== 'string' || (fields.sourceUrl.trim() !== '' && !validSourceUrl(fields.sourceUrl.trim())))) ||
-      (fields.quantity !== undefined && (typeof fields.quantity !== 'number' || !Number.isInteger(fields.quantity) || fields.quantity < 1 || fields.quantity > 50))) {
+      (fields.sourceUrl !== undefined &&
+        (typeof fields.sourceUrl !== 'string' || (fields.sourceUrl.trim() !== '' && !validSourceUrl(fields.sourceUrl.trim())))) ||
+      (fields.quantity !== undefined &&
+        (typeof fields.quantity !== 'number' || !Number.isInteger(fields.quantity) || fields.quantity < 1 || fields.quantity > 50))
+    ) {
       throw new Response('invalid update', { status: 400 })
     }
     const request = this.requiredRequest(id)
-    if (identity.role !== 'operator') {
+    if (identity.role !== 'admin') {
       const started = workflow.statuses.slice(1).some((status) => request.counts[status.id] > 0)
       if (request.requesterEmail !== identity.email || started) throw new Response('forbidden', { status: 403 })
       fields = { quantity: fields.quantity, notes: fields.notes, sourceUrl: fields.sourceUrl }
@@ -132,7 +188,7 @@ export class PrintHubService {
 
   async remove(id: string, identity: Identity) {
     const request = this.requiredRequest(id)
-    if (identity.role !== 'operator') {
+    if (identity.role !== 'admin') {
       // Requesters may withdraw their own request until a copy starts.
       const started = workflow.statuses.slice(1).some((status) => request.counts[status.id] > 0)
       if (request.requesterEmail !== identity.email || started) throw new Response('forbidden', { status: 403 })
@@ -141,7 +197,8 @@ export class PrintHubService {
     const operation: DeleteOperation = {
       kind: 'delete',
       requestId: id,
-      assets: [request.filePath, request.previewPath, request.thumbnailPath].filter((value): value is string => !!value)
+      assets: [request.filePath, request.previewPath, request.thumbnailPath]
+        .filter((value): value is string => !!value)
         .map((originalPath) => ({ originalPath, trashPath: this.assets.trashPath(operationId, originalPath) })),
     }
     this.repository.beginOperation(operationId, operation)
@@ -157,10 +214,14 @@ export class PrintHubService {
   private async resumeOperation(operation: PendingOperation) {
     if (operation.payload.kind === 'move') {
       const request = this.repository.getRequest(operation.payload.requestId)
-      if (!request) { this.repository.abandonOperation(operation.id); return }
+      if (!request) {
+        this.repository.abandonOperation(operation.id)
+        return
+      }
       if (operation.state !== 'committed' && (request.counts[operation.payload.fromStatus] ?? 0) < operation.payload.count) {
         const [sourceExists, destinationExists] = await Promise.all([
-          this.assets.exists(operation.payload.sourcePath), this.assets.exists(operation.payload.destinationPath),
+          this.assets.exists(operation.payload.sourcePath),
+          this.assets.exists(operation.payload.destinationPath),
         ])
         if (!sourceExists && destinationExists && request.filePath === operation.payload.sourcePath) {
           await this.assets.ensureMoved(operation.payload.destinationPath, operation.payload.sourcePath)
@@ -195,7 +256,7 @@ export class PrintHubService {
           // ENOENT normally means a crash-recovery replay whose staged part
           // was already consumed. If the part is still intact, the
           // destination failed — surface it instead of dropping the upload.
-          if (await this.staging.size(operation.payload.partPath) > 0) throw error
+          if ((await this.staging.size(operation.payload.partPath)) > 0) throw error
           await this.assets.remove(operation.payload.destinationPath).catch(() => undefined)
           this.repository.abandonOperation(operation.id)
           return
@@ -209,7 +270,10 @@ export class PrintHubService {
 
     if (operation.state === 'prepared') {
       for (const asset of operation.payload.assets) {
-        const [originalExists, trashExists] = await Promise.all([this.assets.exists(asset.originalPath), this.assets.exists(asset.trashPath)])
+        const [originalExists, trashExists] = await Promise.all([
+          this.assets.exists(asset.originalPath),
+          this.assets.exists(asset.trashPath),
+        ])
         if (!originalExists && !trashExists) continue
         await this.assets.ensureMoved(asset.originalPath, asset.trashPath)
       }
@@ -226,8 +290,8 @@ export class PrintHubService {
     return request
   }
 
-  private requireOperator(identity: Identity) {
-    if (identity.role !== 'operator') throw new Response('forbidden', { status: 403 })
+  private requireAdmin(identity: Identity) {
+    if (identity.role !== 'admin') throw new Response('forbidden', { status: 403 })
   }
 
   private changed(event: AppEvent) {
@@ -247,4 +311,3 @@ export function validSourceUrl(value: string) {
     return false
   }
 }
-

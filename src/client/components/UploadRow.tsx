@@ -1,0 +1,166 @@
+import { Plus, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Item, ItemContent, ItemMedia } from '@/components/ui/item'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { cn } from '@/lib/utils'
+import type { UploadEntry } from './uploadTypes'
+
+export function UploadRow({
+  entry,
+  onPatch,
+  onRemove,
+}: {
+  entry: UploadEntry
+  onPatch: (patch: Partial<UploadEntry>) => void
+  onRemove: () => void
+}) {
+  return (
+    <Item variant="muted" className={cn('items-start', entry.state === 'error' && 'ring-1 ring-destructive')}>
+      <ItemMedia className="grid size-12 place-items-center overflow-hidden rounded-md border bg-background [background-image:var(--grid)] [background-size:12px_12px]">
+        {entry.thumbnail ? (
+          <img className="size-full object-contain" src={entry.thumbnail} alt="" />
+        ) : (
+          <span className="font-mono text-[10px] text-muted-foreground">stl</span>
+        )}
+      </ItemMedia>
+      <ItemContent className="min-w-0 gap-1.5">
+        <div className="flex items-center gap-2">
+          <Input
+            aria-label="Name"
+            value={entry.name}
+            onChange={(event) => onPatch({ name: event.target.value })}
+            maxLength={120}
+            required
+            disabled={entry.state === 'done'}
+          />
+          <Input
+            aria-label="Copies"
+            className="w-16 shrink-0"
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={50}
+            value={entry.quantity}
+            onChange={(event) => onPatch({ quantity: event.target.value })}
+            disabled={entry.state === 'done'}
+          />
+          {entry.state === 'done' ? (
+            <span className="shrink-0 font-mono text-sm text-[var(--chart-2)]">added</span>
+          ) : (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="shrink-0 text-muted-foreground hover:text-destructive"
+                    aria-label={`Remove ${entry.name}`}
+                    onClick={onRemove}
+                  />
+                }
+              >
+                <X />
+              </TooltipTrigger>
+              <TooltipContent>Remove print</TooltipContent>
+            </Tooltip>
+          )}
+        </div>
+        {entry.noteOpen && (
+          <div className="flex items-start gap-2">
+            <Textarea
+              aria-label="Notes"
+              rows={2}
+              value={entry.notes}
+              onChange={(event) => onPatch({ notes: event.target.value })}
+              placeholder="scale, supports, colour — anything the printer should know"
+              disabled={entry.state === 'done'}
+            />
+            {entry.state === 'pending' && (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      className="shrink-0 text-muted-foreground hover:text-destructive"
+                      aria-label="Remove note"
+                      onClick={() => onPatch({ noteOpen: false, notes: '' })}
+                    />
+                  }
+                >
+                  <X />
+                </TooltipTrigger>
+                <TooltipContent>Remove note</TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+        )}
+        {entry.linkOpen && (
+          <div className="flex items-start gap-2">
+            <Input
+              aria-label="Source URL"
+              type="url"
+              inputMode="url"
+              value={entry.sourceUrl}
+              onChange={(event) => onPatch({ sourceUrl: event.target.value })}
+              placeholder="https://… where this model came from"
+              maxLength={500}
+              disabled={entry.state === 'done'}
+            />
+            {entry.state === 'pending' && (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      className="shrink-0 text-muted-foreground hover:text-destructive"
+                      aria-label="Remove link"
+                      onClick={() => onPatch({ linkOpen: false, sourceUrl: '' })}
+                    />
+                  }
+                >
+                  <X />
+                </TooltipTrigger>
+                <TooltipContent>Remove link</TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+        )}
+        {entry.state === 'pending' && (!entry.noteOpen || !entry.linkOpen) && (
+          <div className="flex gap-3">
+            {!entry.noteOpen && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-auto px-0 text-xs text-muted-foreground"
+                onClick={() => onPatch({ noteOpen: true })}
+              >
+                <Plus />
+                Add note
+              </Button>
+            )}
+            {!entry.linkOpen && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-auto px-0 text-xs text-muted-foreground"
+                onClick={() => onPatch({ linkOpen: true })}
+              >
+                <Plus />
+                Add link
+              </Button>
+            )}
+          </div>
+        )}
+      </ItemContent>
+    </Item>
+  )
+}

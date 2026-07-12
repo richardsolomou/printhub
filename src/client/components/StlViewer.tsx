@@ -2,17 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { usePostHog } from '@posthog/react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three-stdlib'
+import { Button } from '@/components/ui/button'
 import { buildScene, frameCamera, parseStl } from '../stl'
 
-export default function StlViewer({
-  requestId,
-  file,
-  hasPreview = false,
-}: {
-  requestId?: string
-  file?: File
-  hasPreview?: boolean
-}) {
+export default function StlViewer({ requestId, file, hasPreview = false }: { requestId?: string; file?: File; hasPreview?: boolean }) {
   const posthog = usePostHog()
   const mountRef = useRef<HTMLDivElement>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
@@ -33,7 +26,7 @@ export default function StlViewer({
 
     setStatus('loading')
     setStatusText('loading model…')
-    ;(async () => {
+    void (async () => {
       try {
         let buffer: ArrayBuffer
         if (file) {
@@ -122,20 +115,29 @@ export default function StlViewer({
   }, [requestId, file, showingPreview, posthog])
 
   return (
-    <div className="viewer" ref={mountRef}>
-      {status === 'loading' && <div className="viewer-status">{statusText}</div>}
-      {status === 'error' && <div className="viewer-status">couldn't load this model</div>}
+    <div
+      className="viewer relative mb-3.5 aspect-4/3 w-full overflow-hidden rounded-lg border bg-background [background-image:var(--grid)] [&_canvas]:block [&_canvas]:size-full"
+      ref={mountRef}
+    >
+      {status === 'loading' && (
+        <div className="absolute inset-0 grid place-items-center font-mono text-xs text-muted-foreground">{statusText}</div>
+      )}
+      {status === 'error' && (
+        <div className="absolute inset-0 grid place-items-center font-mono text-xs text-muted-foreground">couldn't load this model</div>
+      )}
       {status === 'ready' && showingPreview && (
-        <button
+        <Button
           type="button"
-          className="load-full"
+          variant="secondary"
+          size="xs"
+          className="absolute right-2 bottom-2 font-mono opacity-90"
           onClick={() => {
             posthog.capture('stl_full_detail_requested', { request_id: requestId })
             setFullRequested(true)
           }}
         >
           preview · load full detail
-        </button>
+        </Button>
       )}
     </div>
   )

@@ -2,7 +2,10 @@ export class ConnectionLimiter {
   private total = 0
   private identities = new Map<string, number>()
 
-  constructor(private maxTotal = 100, private maxPerIdentity = 5) {}
+  constructor(
+    private maxTotal = 100,
+    private maxPerIdentity = 5,
+  ) {}
 
   enter(identity: string) {
     const current = this.identities.get(identity) ?? 0
@@ -18,5 +21,9 @@ export class ConnectionLimiter {
       if (remaining) this.identities.set(identity, remaining)
       else this.identities.delete(identity)
     }
+  }
+
+  stats() {
+    return { total: this.total, identities: this.identities.size }
   }
 }

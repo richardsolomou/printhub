@@ -2,47 +2,52 @@ import zlib from 'node:zlib'
 import { Readable } from 'node:stream'
 import { createFileRoute } from '@tanstack/react-router'
 import { app } from '../../server/app'
+import { withRequestContext } from '../../server/requestContext'
 
 export const Route = createFileRoute('/api/files/$requestId')({
   server: {
     handlers: {
-      GET: async ({ request, params }) => {
-        const instance = await app()
-        await instance.requireIdentity(request.headers)
-        const printRequest = instance.service.getRequest(params.requestId)
-        if (!printRequest) return new Response('not found', { status: 404 })
+      GET: ({ request, params }) =>
+        withRequestContext(request, '/api/files/:requestId', async () => {
+          const instance = await app()
+          await instance.requireIdentity(request.headers)
+          const printRequest = instance.service.getRequest(params.requestId)
+          if (!printRequest) return new Response('not found', { status: 404 })
 
-        const url = new URL(request.url)
-        const wantPreview = url.searchParams.get('preview') === '1'
-        const relativePath = wantPreview && printRequest.previewPath ? printRequest.previewPath : printRequest.filePath
-        let asset: { stream: ReadableStream; size: number }
-        try {
-          asset = await instance.assets.read(relativePath)
-        } catch {
-          return new Response('file missing in storage', { status: 404 })
-        }
+          const url = new URL(request.url)
+          const wantPreview = url.searchParams.get('preview') === '1'
+          const relativePath = wantPreview && printRequest.previewPath ? printRequest.previewPath : printRequest.filePath
+          let asset: { stream: ReadableStream; size: number }
+          try {
+            asset = await instance.assets.read(relativePath)
+          } catch {
+            return new Response('file missing in storage', { status: 404 })
+          }
 
-        const headers = new Headers({
-          'Content-Type': 'model/stl',
-          // A request's file never changes, so let the browser keep it.
-          'Cache-Control': 'private, max-age=31536000, immutable',
-          // Uncompressed size, so the client can show progress across gzip.
-          'X-File-Size': String(asset.size),
-        })
-        if (url.searchParams.get('inline') !== '1') {
-          const safeName = printRequest.fileName.replace(/["\r\n]/g, '')
-          headers.set('Content-Disposition', `attachment; filename="${safeName}"`)
-        }
+          const headers = new Headers({
+            'Content-Type': 'model/stl',
+            // A request's file never changes, so let the browser keep it.
+            'Cache-Control': 'private, max-age=31536000, immutable',
+            // Uncompressed size, so the client can show progress across gzip.
+            'X-File-Size': String(asset.size),
+          })
+          if (url.searchParams.get('inline') !== '1') {
+            const safeName = printRequest.fileName.replace(/["\r\n]/g, '')
+            headers.set('Content-Disposition', `attachment; filename="${safeName}"`)
+          }
 
-        // STL binary gzips ~2-3x; fastest level keeps NAS CPU cheap.
-        if ((request.headers.get('accept-encoding') ?? '').includes('gzip')) {
-          headers.set('Content-Encoding', 'gzip')
-          const gzip = zlib.createGzip({ level: zlib.constants.Z_BEST_SPEED })
-          return new Response(Readable.toWeb(Readable.fromWeb(asset.stream as Parameters<typeof Readable.fromWeb>[0]).pipe(gzip)) as ReadableStream, { headers })
-        }
-        headers.set('Content-Length', String(asset.size))
-        return new Response(asset.stream, { headers })
-      },
+          // STL binary gzips ~2-3x; fastest level keeps NAS CPU cheap.
+          if ((request.headers.get('accept-encoding') ?? '').includes('gzip')) {
+            headers.set('Content-Encoding', 'gzip')
+            const gzip = zlib.createGzip({ level: zlib.constants.Z_BEST_SPEED })
+            return new Response(
+              Readable.toWeb(Readable.fromWeb(asset.stream as Parameters<typeof Readable.fromWeb>[0]).pipe(gzip)) as ReadableStream,
+              { headers },
+            )
+          }
+          headers.set('Content-Length', String(asset.size))
+          return new Response(asset.stream, { headers })
+        }),
     },
   },
 })

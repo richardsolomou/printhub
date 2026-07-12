@@ -8,5 +8,4 @@ export const isPhone = () =>
 // recognised UTI), so leave the picker unrestricted there; we validate anyway.
 export const isIOS = () =>
   typeof navigator !== 'undefined' &&
-  (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
+  (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))

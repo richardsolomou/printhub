@@ -16,10 +16,7 @@ const ERROR_BUDGETS = [0.02, 0.05, 0.1]
 export type GeneratedAssets = { thumbnailPng?: Uint8Array; previewStl?: Uint8Array }
 
 /** Parse the STL once and derive the requested card thumbnail and, for heavy meshes, a decimated preview. */
-export async function generateAssets(
-  file: Uint8Array,
-  wants: { thumbnail: boolean; preview: boolean },
-): Promise<GeneratedAssets> {
+export async function generateAssets(file: Uint8Array, wants: { thumbnail: boolean; preview: boolean }): Promise<GeneratedAssets> {
   const positions = parseStl(file)
   const thumbnailPng = wants.thumbnail ? encodePng(rasterize(positions, THUMB_SIZE), THUMB_SIZE, THUMB_SIZE) : undefined
   const previewStl = wants.preview ? await buildPreview(positions, file.byteLength) : undefined

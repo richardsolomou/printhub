@@ -4,8 +4,27 @@ services:
     build:
       context: .
     restart: unless-stopped
+    user: '${PUID:-1000}:${PGID:-1000}'
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
     ports:
       - '3010:3000'
+    environment:
+      # Password authentication is enabled by default. Set false only after
+      # configuring at least one social provider below.
+      AUTH_PASSWORD_ENABLED: ${AUTH_PASSWORD_ENABLED:-true}
+      AUTH_GOOGLE_CLIENT_ID: ${AUTH_GOOGLE_CLIENT_ID:-}
+      AUTH_GOOGLE_CLIENT_SECRET: ${AUTH_GOOGLE_CLIENT_SECRET:-}
+      AUTH_DISCORD_CLIENT_ID: ${AUTH_DISCORD_CLIENT_ID:-}
+      AUTH_DISCORD_CLIENT_SECRET: ${AUTH_DISCORD_CLIENT_SECRET:-}
+      # Optional SMTP delivery for invitation and password-reset email.
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
     volumes:
       # App data: SQLite database, settings, in-flight uploads.
       - ${DATA_HOST_DIR:-./printhub-data}:/data

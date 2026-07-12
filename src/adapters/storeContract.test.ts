@@ -20,7 +20,13 @@ async function localHarness(): Promise<Harness> {
   const store = new LocalAssetStore(root)
   const staging = new UploadStaging(data)
   await Promise.all([store.initialize(), staging.initialize()])
-  return { store, staging, cleanup: async () => { await Promise.all([fs.promises.rm(root, { recursive: true }), fs.promises.rm(data, { recursive: true })]) } }
+  return {
+    store,
+    staging,
+    cleanup: async () => {
+      await Promise.all([fs.promises.rm(root, { recursive: true }), fs.promises.rm(data, { recursive: true })])
+    },
+  }
 }
 
 async function s3Harness(): Promise<Harness> {
@@ -34,7 +40,12 @@ async function s3Harness(): Promise<Harness> {
     secretAccessKey: process.env.MINIO_TEST_SECRET_KEY ?? 'minioadmin',
     forcePathStyle: true,
   }
-  const client = new S3Client({ endpoint: config.endpoint, region: config.region, credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey }, forcePathStyle: true })
+  const client = new S3Client({
+    endpoint: config.endpoint,
+    region: config.region,
+    credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
+    forcePathStyle: true,
+  })
   await client.send(new CreateBucketCommand({ Bucket: MINIO_BUCKET })).catch((error: { name?: string }) => {
     if (error.name !== 'BucketAlreadyOwnedByYou' && error.name !== 'BucketAlreadyExists') throw error
   })
@@ -42,7 +53,14 @@ async function s3Harness(): Promise<Harness> {
   const store = new S3AssetStore(config)
   const staging = new UploadStaging(data)
   await Promise.all([store.initialize(), staging.initialize()])
-  return { store, staging, cleanup: async () => { await store.sweepTrash(); await fs.promises.rm(data, { recursive: true }) } }
+  return {
+    store,
+    staging,
+    cleanup: async () => {
+      await store.sweepTrash()
+      await fs.promises.rm(data, { recursive: true })
+    },
+  }
 }
 
 function contractSuite(name: string, harness: () => Promise<Harness>, enabled: boolean) {
@@ -51,7 +69,9 @@ function contractSuite(name: string, harness: () => Promise<Harness>, enabled: b
     let staging: UploadStaging
     let cleanup: () => Promise<void>
 
-    beforeEach(async () => { ({ store, staging, cleanup } = await harness()) })
+    beforeEach(async () => {
+      ;({ store, staging, cleanup } = await harness())
+    })
     afterEach(async () => cleanup())
 
     it('publishes a staged upload, reads it back, and replays finalize quietly', async () => {

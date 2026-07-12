@@ -13,3 +13,6 @@ deploy/*.local.*
 .DS_Store
 .claude/settings.local.json
 /local/
+.playwright/
+playwright-report/
+test-results/

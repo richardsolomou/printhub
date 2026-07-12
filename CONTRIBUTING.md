@@ -11,24 +11,30 @@ pnpm install
 DATA_DIR=./data-dev pnpm dev
 ```
 
-The first visitor to `http://localhost:3000` claims the operator account. Point **Settings → Storage** at a writable folder like `$PWD/prints-dev`.
+The first visitor to `http://localhost:3000` claims the admin account. Point **Settings → Storage** at a writable folder like `$PWD/prints-dev`.
 
 ## Checks
 
 Every pull request must pass:
 
 ```sh
+pnpm format:check
+pnpm lint
 pnpm build      # also regenerates src/routeTree.gen.ts, which typecheck needs
 pnpm typecheck
 pnpm test
+pnpm check:cli
+pnpm test:e2e   # install Chromium once with pnpm test:e2e:install
 ```
 
-The storage contract tests run against a real S3 endpoint when `MINIO_TEST_URL` is set (for example a local MinIO container); they skip otherwise.
+The storage contract tests run against a real S3 endpoint when `MINIO_TEST_URL`, `MINIO_TEST_ACCESS_KEY`, and `MINIO_TEST_SECRET_KEY` are set; they skip otherwise. CI runs this contract weekly and on manual workflow dispatch against the pinned MinIO image.
+
+Smoke-test the online backup command against disposable data with `DATA_DIR=/tmp/printhub-test pnpm backup --output /tmp/printhub-backup.sqlite`. CLI help for backup and migration utilities is covered by `pnpm check:cli`.
 
 ## Layout
 
 - `src/core` — isomorphic domain code: types, the request service, workflow, asset keys, access roles, and pure mesh code (`mesh/`: STL codec, software rasterizer) shared by server and browser. No IO, no framework imports.
-- `src/adapters` — implementations of the core boundaries: SQLite repository (+ numbered migrations), local/S3 asset stores, upload staging, event bus, telemetry.
+- `src/adapters` — implementations of the core boundaries: SQLite repository (+ numbered migrations), local/S3 asset stores, authentication configuration, outbound email, upload staging, event bus, telemetry.
 - `src/server` — composition root (`app.ts`), better-auth config, server functions, HTTP guards, and the asset pipeline (`assets/`: preview decimation, PNG encoding, the generation queue, and the worker_thread entry that `pnpm build` bundles next to the server).
 - `src/client` — React components, hooks, and client utilities.
 - `src/routes` — TanStack Start file routes; keep them thin.
@@ -36,7 +42,7 @@ The storage contract tests run against a real S3 endpoint when `MINIO_TEST_URL` 
 ## Conventions
 
 - Database changes are new numbered files in `src/adapters/migrations/`; never edit an applied migration.
-- Anything an operator configures belongs in **Settings** (the `settings` table), not in environment variables. `DATA_DIR` is the only env var.
+- Anything an admin configures belongs in **Settings** (the `settings` table), not in environment variables. `DATA_DIR` is the only env var.
 - Server-side state changes publish a typed `AppEvent` (see `src/core/types.ts`); additions are fine, renames are breaking.
 - New functionality comes with tests. Test behavior through the public surface (service methods, HTTP routes), not implementation details.
 - Commit messages: present-tense imperative summary line, body explaining the why.

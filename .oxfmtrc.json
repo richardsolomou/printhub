@@ -1,0 +1,7 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "singleQuote": true,
+  "semi": false,
+  "printWidth": 140,
+  "ignorePatterns": ["src/routeTree.gen.ts", ".output/**", "pnpm-lock.yaml", "deploy/**", "VISION.md"]
+}

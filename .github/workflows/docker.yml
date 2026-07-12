@@ -5,9 +5,12 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  schedule:
+    - cron: '23 3 * * 1'
 
 jobs:
   check:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,10 +22,60 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm lint
       # Build first: it generates src/routeTree.gen.ts, which typecheck needs.
       - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm test
+      - run: pnpm check:cli
+      - uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - run: pnpm exec playwright install-deps chromium
+      - if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install chromium
+      - run: pnpm test:e2e
+
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: high
+
+  minio-contract:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Start pinned MinIO
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+            quay.io/minio/minio:RELEASE.2025-10-15T17-29-55Z server /data
+          for attempt in {1..30}; do curl -fsS http://127.0.0.1:9000/minio/health/live && exit 0; sleep 2; done
+          docker logs minio
+          exit 1
+      - run: pnpm exec vitest run src/adapters/storeContract.test.ts
+        env:
+          MINIO_TEST_URL: http://127.0.0.1:9000
+          MINIO_TEST_ACCESS_KEY: minioadmin
+          MINIO_TEST_SECRET_KEY: minioadmin
 
   build:
     if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push')
@@ -31,6 +84,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      attestations: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -47,7 +102,15 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
+          sbom: true
+          provenance: mode=max
           tags: |
             ghcr.io/${{ github.repository_owner }}/printhub:latest
             ghcr.io/${{ github.repository_owner }}/printhub:v${{ steps.version.outputs.version }}
             ghcr.io/${{ github.repository_owner }}/printhub:sha-${{ github.sha }}
+      - uses: docker/scout-action@v1
+        with:
+          command: cves
+          image: registry://ghcr.io/${{ github.repository_owner }}/printhub:sha-${{ github.sha }}
+          only-severities: critical,high
+          exit-code: true

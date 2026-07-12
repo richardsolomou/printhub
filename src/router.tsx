@@ -10,10 +10,12 @@ export function getRouter() {
     context: { queryClient },
     defaultPreload: 'intent',
     defaultNotFoundComponent: () => (
-      <main className="fatal-error">
+      <main className="mx-auto mt-[15vh] p-6 text-center">
         <h1>Page not found</h1>
         <p>
-          <a href="/">Back to the board</a>
+          <a className="text-muted-foreground underline hover:text-foreground" href="/">
+            Back to the board
+          </a>
         </p>
       </main>
     ),
@@ -23,5 +25,7 @@ export function getRouter() {
 }
 
 declare module '@tanstack/react-router' {
-  interface Register { router: ReturnType<typeof getRouter> }
+  interface Register {
+    router: ReturnType<typeof getRouter>
+  }
 }

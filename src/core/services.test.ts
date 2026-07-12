@@ -11,7 +11,7 @@ import type { Identity, Telemetry } from './types'
 import { PrintHubService } from './services'
 
 const telemetry: Telemetry = { capture: async () => undefined, exception: async () => undefined }
-const operator: Identity = { id: 'operator', email: 'op@example.com', name: 'Operator', role: 'operator' }
+const admin: Identity = { id: 'admin', email: 'op@example.com', name: 'Admin', role: 'admin' }
 
 describe('PrintHubService crash recovery', () => {
   let root: string
@@ -38,14 +38,22 @@ describe('PrintHubService crash recovery', () => {
 
   async function request() {
     await assets.write('todo/model.stl', new TextEncoder().encode('stl'))
-    const id = repository.createRequest({ name: 'Model', fileName: 'model.stl', filePath: 'todo/model.stl', quantity: 1, requesterEmail: 'owner@example.com' })
+    const id = repository.createRequest({
+      name: 'Model',
+      fileName: 'model.stl',
+      filePath: 'todo/model.stl',
+      quantity: 1,
+      requesterEmail: 'owner@example.com',
+    })
     return id
   }
 
   it('finishes a delete after restarting between the filesystem and database phases', async () => {
     const id = await request()
-    const failure = vi.spyOn(repository, 'deleteRequest').mockImplementationOnce(() => { throw new Error('database unavailable') })
-    await expect(service.remove(id, operator)).rejects.toThrow('database unavailable')
+    const failure = vi.spyOn(repository, 'deleteRequest').mockImplementationOnce(() => {
+      throw new Error('database unavailable')
+    })
+    await expect(service.remove(id, admin)).rejects.toThrow('database unavailable')
     expect(repository.getRequest(id)).toBeTruthy()
     expect(repository.listOperations()).toHaveLength(1)
     failure.mockRestore()
@@ -58,11 +66,17 @@ describe('PrintHubService crash recovery', () => {
     await assets.write('todo/with-preview.stl', new TextEncoder().encode('original'))
     await assets.write('.printhub/previews/with-preview.stl', new TextEncoder().encode('preview'))
     const id = repository.createRequest({
-      name: 'Previewed', fileName: 'with-preview.stl', filePath: 'todo/with-preview.stl',
-      previewPath: '.printhub/previews/with-preview.stl', quantity: 1, requesterEmail: 'owner@example.com',
+      name: 'Previewed',
+      fileName: 'with-preview.stl',
+      filePath: 'todo/with-preview.stl',
+      previewPath: '.printhub/previews/with-preview.stl',
+      quantity: 1,
+      requesterEmail: 'owner@example.com',
     })
-    const failure = vi.spyOn(repository, 'deleteRequest').mockImplementationOnce(() => { throw new Error('database unavailable') })
-    await expect(service.remove(id, operator)).rejects.toThrow('database unavailable')
+    const failure = vi.spyOn(repository, 'deleteRequest').mockImplementationOnce(() => {
+      throw new Error('database unavailable')
+    })
+    await expect(service.remove(id, admin)).rejects.toThrow('database unavailable')
     const operation = repository.listOperations()[0]
     expect(operation.payload.kind).toBe('delete')
     if (operation.payload.kind === 'delete') expect(new Set(operation.payload.assets.map((asset) => asset.trashPath)).size).toBe(2)
@@ -74,7 +88,7 @@ describe('PrintHubService crash recovery', () => {
   it('does not report a logical delete as failed when trash cleanup fails', async () => {
     const id = await request()
     vi.spyOn(assets, 'purgeTrash').mockRejectedValueOnce(new Error('storage unavailable'))
-    await expect(service.remove(id, operator)).resolves.toBeUndefined()
+    await expect(service.remove(id, admin)).resolves.toBeUndefined()
     expect(repository.getRequest(id)).toBeUndefined()
     expect(repository.listOperations()).toHaveLength(1)
     await service.recoverOperations()
@@ -85,8 +99,13 @@ describe('PrintHubService crash recovery', () => {
     const id = await request()
     const operationId = crypto.randomUUID()
     repository.beginOperation(operationId, {
-      kind: 'move', requestId: id, fromStatus: 'todo', toStatus: 'in_progress', count: 1,
-      sourcePath: 'todo/model.stl', destinationPath: 'in-progress/model.stl',
+      kind: 'move',
+      requestId: id,
+      fromStatus: 'todo',
+      toStatus: 'in_progress',
+      count: 1,
+      sourcePath: 'todo/model.stl',
+      destinationPath: 'in-progress/model.stl',
     })
     await service.recoverOperations()
     expect(repository.getRequest(id)).toMatchObject({ filePath: 'in-progress/model.stl', counts: { todo: 0, in_progress: 1 } })
@@ -98,8 +117,13 @@ describe('PrintHubService crash recovery', () => {
     const id = await request()
     const operationId = crypto.randomUUID()
     repository.beginOperation(operationId, {
-      kind: 'move', requestId: id, fromStatus: 'todo', toStatus: 'done', count: 1,
-      sourcePath: 'todo/model.stl', destinationPath: 'done/model.stl',
+      kind: 'move',
+      requestId: id,
+      fromStatus: 'todo',
+      toStatus: 'done',
+      count: 1,
+      sourcePath: 'todo/model.stl',
+      destinationPath: 'done/model.stl',
     })
     await assets.ensureMoved('todo/model.stl', 'done/model.stl')
     await service.recoverOperations()
@@ -114,8 +138,13 @@ describe('PrintHubService crash recovery', () => {
     await assets.ensureMoved('todo/model.stl', 'retired/model.stl')
     raw.prepare("UPDATE requests SET file_path='retired/model.stl' WHERE id=?").run(id)
     repository.beginOperation(crypto.randomUUID(), {
-      kind: 'move', requestId: id, fromStatus: 'retired', toStatus: 'done', count: 1,
-      sourcePath: 'retired/model.stl', destinationPath: 'done/model.stl',
+      kind: 'move',
+      requestId: id,
+      fromStatus: 'retired',
+      toStatus: 'done',
+      count: 1,
+      sourcePath: 'retired/model.stl',
+      destinationPath: 'done/model.stl',
     })
     expect(() => repository.reconcileWorkflow()).toThrow('still has copies')
     await service.recoverOperations()
@@ -127,15 +156,21 @@ describe('PrintHubService crash recovery', () => {
   it('filters requests to the owner in private mode and lets requesters manage their own', async () => {
     const mine = await request()
     await assets.write('todo/other.stl', new TextEncoder().encode('stl'))
-    const theirs = repository.createRequest({ name: 'Theirs', fileName: 'other.stl', filePath: 'todo/other.stl', quantity: 1, requesterEmail: 'someone-else@example.com' })
+    const theirs = repository.createRequest({
+      name: 'Theirs',
+      fileName: 'other.stl',
+      filePath: 'todo/other.stl',
+      quantity: 1,
+      requesterEmail: 'someone-else@example.com',
+    })
     const requester: Identity = { id: 'requester', email: 'owner@example.com', name: 'Owner', role: 'requester' }
 
     const shared = service.listRequests(requester, false)
-    expect(shared).toHaveLength(2)
+    expect(shared.requests).toHaveLength(2)
     const privately = service.listRequests(requester, true)
-    expect(privately).toHaveLength(1)
-    expect(privately[0]).toMatchObject({ id: mine, mine: true, canDelete: true })
-    expect(service.listRequests(operator, true)).toHaveLength(2)
+    expect(privately.requests).toHaveLength(1)
+    expect(privately.requests[0]).toMatchObject({ id: mine, mine: true, canDelete: true })
+    expect(service.listRequests(admin, true).requests).toHaveLength(2)
 
     service.reorder(mine, 'todo', 3, requester)
     expect(() => service.reorder(theirs, 'todo', 3, requester)).toThrow(expect.objectContaining({ status: 403 }))
@@ -147,34 +182,49 @@ describe('PrintHubService crash recovery', () => {
   it('blocks requester deletion once a copy has started', async () => {
     const id = await request()
     const requester: Identity = { id: 'requester', email: 'owner@example.com', name: 'Owner', role: 'requester' }
-    await service.moveCopies({ id, from: 'todo', to: 'in_progress', count: 1 }, operator)
+    await service.moveCopies({ id, from: 'todo', to: 'in_progress', count: 1 }, admin)
     await expect(service.remove(id, requester)).rejects.toMatchObject({ status: 403 })
-    expect(service.listRequests(requester, true)[0]).toMatchObject({ canDelete: false })
+    expect(service.listRequests(requester, true).requests[0]).toMatchObject({ canDelete: false })
   })
 
   it('returns public role-aware requests and enforces requester authorization', async () => {
     const id = await request()
     const requester: Identity = { id: 'requester', email: 'owner@example.com', name: 'Owner', role: 'requester' }
-    expect(service.listRequests(requester)[0]).toMatchObject({ id: id, mine: true, canEdit: true, canDelete: true, hasPreview: false })
-    expect(service.listRequests(requester)[0]).not.toHaveProperty('filePath')
-    expect(service.listRequests(requester)[0]).not.toHaveProperty('requesterEmail')
-    await service.moveCopies({ id, from: 'todo', to: 'in_progress', count: 1 }, operator)
-    expect(service.listRequests(requester)[0]).toMatchObject({ canEdit: false, canDelete: false })
+    expect(service.listRequests(requester).requests[0]).toMatchObject({
+      id: id,
+      mine: true,
+      canEdit: true,
+      canDelete: true,
+      hasPreview: false,
+    })
+    expect(service.listRequests(requester).requests[0]).not.toHaveProperty('filePath')
+    expect(service.listRequests(requester).requests[0]).not.toHaveProperty('requesterEmail')
+    await service.moveCopies({ id, from: 'todo', to: 'in_progress', count: 1 }, admin)
+    expect(service.listRequests(requester).requests[0]).toMatchObject({ canEdit: false, canDelete: false })
     expect(() => service.update(id, { notes: 'changed' }, requester)).toThrow()
+  })
+
+  it('passes server filters through without exposing private searchable metadata to requesters', async () => {
+    await request()
+    const requester: Identity = { id: 'requester', email: 'owner@example.com', name: 'Owner', role: 'requester' }
+    expect(service.listRequests(requester, false, { query: 'model.stl' }).requests).toHaveLength(0)
+    expect(service.listRequests(admin, false, { query: 'model.stl' }).requests).toHaveLength(1)
   })
 
   it('rejects oversized or malformed updates before persistence', async () => {
     const id = await request()
-    expect(() => service.update(id, { name: 'x'.repeat(121) }, operator)).toThrow(expect.objectContaining({ status: 400 }))
-    expect(() => service.update(id, { notes: 'x'.repeat(2001) }, operator)).toThrow(expect.objectContaining({ status: 400 }))
-    expect(() => service.update(id, { requesterName: 'x'.repeat(61) }, operator)).toThrow(expect.objectContaining({ status: 400 }))
-    expect(() => service.update(id, { quantity: 1.5 }, operator)).toThrow(expect.objectContaining({ status: 400 }))
-    expect(() => service.update(id, { sourceUrl: 'ftp://example.com/model' }, operator)).toThrow(expect.objectContaining({ status: 400 }))
-    expect(() => service.update(id, { sourceUrl: 'not a url' }, operator)).toThrow(expect.objectContaining({ status: 400 }))
-    expect(() => service.update(id, { sourceUrl: `https://example.com/${'x'.repeat(500)}` }, operator)).toThrow(expect.objectContaining({ status: 400 }))
-    service.update(id, { sourceUrl: 'https://example.com/model' }, operator)
+    expect(() => service.update(id, { name: 'x'.repeat(121) }, admin)).toThrow(expect.objectContaining({ status: 400 }))
+    expect(() => service.update(id, { notes: 'x'.repeat(2001) }, admin)).toThrow(expect.objectContaining({ status: 400 }))
+    expect(() => service.update(id, { requesterName: 'x'.repeat(61) }, admin)).toThrow(expect.objectContaining({ status: 400 }))
+    expect(() => service.update(id, { quantity: 1.5 }, admin)).toThrow(expect.objectContaining({ status: 400 }))
+    expect(() => service.update(id, { sourceUrl: 'ftp://example.com/model' }, admin)).toThrow(expect.objectContaining({ status: 400 }))
+    expect(() => service.update(id, { sourceUrl: 'not a url' }, admin)).toThrow(expect.objectContaining({ status: 400 }))
+    expect(() => service.update(id, { sourceUrl: `https://example.com/${'x'.repeat(500)}` }, admin)).toThrow(
+      expect.objectContaining({ status: 400 }),
+    )
+    service.update(id, { sourceUrl: 'https://example.com/model' }, admin)
     expect(repository.getRequest(id)?.sourceUrl).toBe('https://example.com/model')
-    service.update(id, { sourceUrl: '' }, operator)
+    service.update(id, { sourceUrl: '' }, admin)
     expect(repository.getRequest(id)?.sourceUrl).toBeFalsy()
     expect(repository.getRequest(id)?.name).toBe('Model')
   })
@@ -184,7 +234,7 @@ describe('PrintHubService crash recovery', () => {
     await assets.write('.printhub/thumbnails/model.png', new TextEncoder().encode('png bytes'))
     repository.completeAssetGeneration(id, { thumbnailPath: '.printhub/thumbnails/model.png' })
     expect(repository.getRequest(id)!.hasThumbnail).toBe(true)
-    await service.remove(id, operator)
+    await service.remove(id, admin)
     expect(await assets.exists('.printhub/thumbnails/model.png')).toBe(false)
   })
 
@@ -193,10 +243,20 @@ describe('PrintHubService crash recovery', () => {
     await fs.promises.writeFile(part, 'stl')
     const enoent = Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' })
     const failure = vi.spyOn(assets, 'finalizeUpload').mockRejectedValue(enoent)
-    repository.createUploadSession('unwritable-destination-upload', operator.id, Date.now() + 60_000, 3)
-    await expect(service.createUploadedRequest('unwritable-destination-upload', part, {
-      name: 'Model', fileName: 'model.stl', quantity: 1, requesterEmail: 'owner@example.com',
-    }, operator)).rejects.toThrow('ENOENT')
+    repository.createUploadSession('unwritable-destination-upload', admin.id, Date.now() + 60_000, 3)
+    await expect(
+      service.createUploadedRequest(
+        'unwritable-destination-upload',
+        part,
+        {
+          name: 'Model',
+          fileName: 'model.stl',
+          quantity: 1,
+          requesterEmail: 'owner@example.com',
+        },
+        admin,
+      ),
+    ).rejects.toThrow('ENOENT')
     // The staged part survives and the journal entry stays, so the upload
     // completes once storage is reachable again.
     expect(await fs.promises.readFile(part, 'utf8')).toBe('stl')
@@ -210,17 +270,37 @@ describe('PrintHubService crash recovery', () => {
   it('keeps a journaled upload recoverable when metadata insertion fails', async () => {
     const part = staging.uploadPart('metadata-failure-upload')
     await fs.promises.writeFile(part, 'stl')
-    const failure = vi.spyOn(repository, 'completeUploadOperation').mockImplementationOnce(() => { throw new Error('database full') })
-    repository.createUploadSession('metadata-failure-upload', operator.id, Date.now() + 60_000, 3)
-    await expect(service.createUploadedRequest('metadata-failure-upload', part, {
-      name: 'Model', fileName: 'model.stl', quantity: 1, requesterEmail: 'owner@example.com',
-    }, operator)).rejects.toThrow('database full')
+    const failure = vi.spyOn(repository, 'completeUploadOperation').mockImplementationOnce(() => {
+      throw new Error('database full')
+    })
+    repository.createUploadSession('metadata-failure-upload', admin.id, Date.now() + 60_000, 3)
+    await expect(
+      service.createUploadedRequest(
+        'metadata-failure-upload',
+        part,
+        {
+          name: 'Model',
+          fileName: 'model.stl',
+          quantity: 1,
+          requesterEmail: 'owner@example.com',
+        },
+        admin,
+      ),
+    ).rejects.toThrow('database full')
     expect(repository.listOperations()).toHaveLength(1)
     expect(await fs.promises.readdir(assets.absolute('todo'))).toHaveLength(1)
     failure.mockRestore()
-    const retried = await service.createUploadedRequest('metadata-failure-upload', part, {
-      name: 'Model', fileName: 'model.stl', quantity: 1, requesterEmail: 'owner@example.com',
-    }, operator)
+    const retried = await service.createUploadedRequest(
+      'metadata-failure-upload',
+      part,
+      {
+        name: 'Model',
+        fileName: 'model.stl',
+        quantity: 1,
+        requesterEmail: 'owner@example.com',
+      },
+      admin,
+    )
     expect(retried).toBeTruthy()
     expect(repository.listRequests()).toHaveLength(1)
     expect(repository.listOperations()).toHaveLength(0)
@@ -229,14 +309,19 @@ describe('PrintHubService crash recovery', () => {
   it('durably rejects concurrent move and delete operations for one request', async () => {
     const id = await request()
     let release!: () => void
-    const blocked = new Promise<void>((resolve) => { release = resolve })
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve
+    })
     const original = assets.ensureMoved.bind(assets)
-    vi.spyOn(assets, 'ensureMoved').mockImplementationOnce(async (...args) => { await blocked; return original(...args) })
-    const moving = service.moveCopies({ id, from: 'todo', to: 'in_progress', count: 1 }, operator)
+    vi.spyOn(assets, 'ensureMoved').mockImplementationOnce(async (...args) => {
+      await blocked
+      return original(...args)
+    })
+    const moving = service.moveCopies({ id, from: 'todo', to: 'in_progress', count: 1 }, admin)
     await vi.waitFor(() => expect(repository.listOperations()).toHaveLength(1))
-    await expect(service.moveCopies({ id, from: 'todo', to: 'done', count: 1 }, operator)).rejects.toMatchObject({ status: 409 })
-    await expect(service.remove(id, operator)).rejects.toMatchObject({ status: 409 })
-    expect(() => service.update(id, { quantity: 2 }, operator)).toThrow(expect.objectContaining({ status: 409 }))
+    await expect(service.moveCopies({ id, from: 'todo', to: 'done', count: 1 }, admin)).rejects.toMatchObject({ status: 409 })
+    await expect(service.remove(id, admin)).rejects.toMatchObject({ status: 409 })
+    expect(() => service.update(id, { quantity: 2 }, admin)).toThrow(expect.objectContaining({ status: 409 }))
     release()
     await moving
     expect(repository.getRequest(id)).toMatchObject({ counts: { todo: 0, in_progress: 1 }, filePath: 'in-progress/model.stl' })
@@ -247,11 +332,21 @@ describe('PrintHubService crash recovery', () => {
     const uploadId = 'original-finalize-retry'
     const part = staging.uploadPart(uploadId)
     await fs.promises.writeFile(part, 'stl')
-    repository.createUploadSession(uploadId, operator.id, Date.now() + 60_000, 3)
+    repository.createUploadSession(uploadId, admin.id, Date.now() + 60_000, 3)
     vi.spyOn(assets, 'finalizeUpload').mockRejectedValueOnce(new Error('original filesystem failure'))
-    await expect(service.createUploadedRequest(uploadId, part, {
-      name: 'Model', fileName: 'model.stl', quantity: 1, requesterEmail: operator.email,
-    }, operator)).rejects.toThrow('original filesystem failure')
+    await expect(
+      service.createUploadedRequest(
+        uploadId,
+        part,
+        {
+          name: 'Model',
+          fileName: 'model.stl',
+          quantity: 1,
+          requesterEmail: admin.email,
+        },
+        admin,
+      ),
+    ).rejects.toThrow('original filesystem failure')
     expect(repository.listOperations()).toHaveLength(1)
     vi.restoreAllMocks()
     await service.recoverOperations()
@@ -260,7 +355,12 @@ describe('PrintHubService crash recovery', () => {
   })
 
   it('contains rejected optional telemetry promises', async () => {
-    const rejecting: Telemetry = { capture: async () => { throw new Error('telemetry down') }, exception: async () => undefined }
+    const rejecting: Telemetry = {
+      capture: async () => {
+        throw new Error('telemetry down')
+      },
+      exception: async () => undefined,
+    }
     service = new PrintHubService(repository, assets, staging, new LocalEventBus(), rejecting)
     const unhandled = vi.fn()
     process.on('unhandledRejection', unhandled)
@@ -276,8 +376,13 @@ describe('PrintHubService crash recovery', () => {
   it('terminally reconciles a stale conflicting move instead of poisoning every startup', async () => {
     const id = await request()
     repository.beginOperation(crypto.randomUUID(), {
-      kind: 'move', requestId: id, fromStatus: 'todo', toStatus: 'done', count: 1,
-      sourcePath: 'todo/model.stl', destinationPath: 'done/model.stl',
+      kind: 'move',
+      requestId: id,
+      fromStatus: 'todo',
+      toStatus: 'done',
+      count: 1,
+      sourcePath: 'todo/model.stl',
+      destinationPath: 'done/model.stl',
     })
     await assets.ensureMoved('todo/model.stl', 'done/model.stl')
     repository.moveCopies({ id, from: 'todo', to: 'in_progress', count: 1, filePath: 'todo/model.stl' })
@@ -291,21 +396,25 @@ describe('PrintHubService crash recovery', () => {
     const uploadId = 'ambiguous-upload-id'
     const part = staging.uploadPart(uploadId)
     await fs.promises.writeFile(part, 'stl')
-    repository.createUploadSession(uploadId, operator.id, Date.now() + 60_000, 3)
+    repository.createUploadSession(uploadId, admin.id, Date.now() + 60_000, 3)
     const input = { name: 'Model', fileName: 'model.stl', quantity: 1, requesterEmail: 'owner@example.com' }
-    const first = await service.createUploadedRequest(uploadId, part, input, operator)
-    const second = await service.createUploadedRequest(uploadId, part, input, operator)
+    const first = await service.createUploadedRequest(uploadId, part, input, admin)
+    const second = await service.createUploadedRequest(uploadId, part, input, admin)
     expect(second).toBe(first)
     expect(repository.listRequests()).toHaveLength(1)
   })
 
   it('cleans an upload journal whose staged files disappeared before startup replay', async () => {
     const uploadId = 'missing-staged-upload'
-    repository.createUploadSession(uploadId, operator.id, Date.now() + 60_000, 3)
+    repository.createUploadSession(uploadId, admin.id, Date.now() + 60_000, 3)
     repository.beginUploadOperation(crypto.randomUUID(), {
-      kind: 'upload', uploadId, ownerId: operator.id, requestId: crypto.randomUUID(),
-      partPath: staging.uploadPart(uploadId), destinationPath: 'todo/missing.stl',
-      request: { name: 'Missing', fileName: 'missing.stl', quantity: 1, requesterEmail: operator.email },
+      kind: 'upload',
+      uploadId,
+      ownerId: admin.id,
+      requestId: crypto.randomUUID(),
+      partPath: staging.uploadPart(uploadId),
+      destinationPath: 'todo/missing.stl',
+      request: { name: 'Missing', fileName: 'missing.stl', quantity: 1, requesterEmail: admin.email },
     })
     await service.recoverOperations()
     expect(repository.listOperations()).toHaveLength(0)

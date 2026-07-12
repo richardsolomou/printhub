@@ -1,5 +1,8 @@
 import { useState } from 'react'
-import { useEscape } from '../useEscape'
+import { Button } from '@/components/ui/button'
+import { Field, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import { DialogShell } from './DialogShell'
 
 export function MoveDialog({
   requestName,
@@ -15,24 +18,21 @@ export function MoveDialog({
   onCancel: () => void
 }) {
   const [count, setCount] = useState(String(max))
-  useEscape(onCancel)
 
   return (
-    <div className="overlay" onClick={(e) => e.target === e.currentTarget && onCancel()}>
+    <DialogShell onClose={onCancel} title="Move copies" className="sm:max-w-[360px]">
       <form
-        className="dialog dialog-small"
         onSubmit={(e) => {
           e.preventDefault()
           onConfirm(Math.min(max, Math.max(1, Math.round(Number(count) || 1))))
         }}
       >
-        <h2>Move copies</h2>
-        <p className="move-copy">
+        <p className="mb-3 text-sm text-muted-foreground">
           How many copies of “{requestName}” to {toLabel}?
         </p>
-        <div className="field">
-          <label htmlFor="move-count">Copies (of {max})</label>
-          <input
+        <Field>
+          <FieldLabel htmlFor="move-count">Copies (of {max})</FieldLabel>
+          <Input
             id="move-count"
             type="number"
             inputMode="numeric"
@@ -40,18 +40,15 @@ export function MoveDialog({
             max={max}
             value={count}
             onChange={(e) => setCount(e.target.value)}
-            autoFocus
           />
-        </div>
-        <div className="dialog-actions">
-          <button type="button" className="btn" onClick={onCancel}>
+        </Field>
+        <div className="mt-2 flex justify-end gap-2.5">
+          <Button type="button" variant="outline" onClick={onCancel}>
             Cancel
-          </button>
-          <button type="submit" className="btn btn-primary">
-            Move
-          </button>
+          </Button>
+          <Button type="submit">Move</Button>
         </div>
       </form>
-    </div>
+    </DialogShell>
   )
 }

@@ -41,7 +41,10 @@ export class LocalAssetStore implements AssetStore {
     await fs.promises.mkdir(path.dirname(destination), { recursive: true })
     const sourceDirectory = path.dirname(stagedPath)
     const [sourceExists, destinationExists] = await Promise.all([
-      fs.promises.stat(stagedPath).then(() => true).catch((error: NodeJS.ErrnoException) => error.code === 'ENOENT' ? false : Promise.reject(error)),
+      fs.promises
+        .stat(stagedPath)
+        .then(() => true)
+        .catch((error: NodeJS.ErrnoException) => (error.code === 'ENOENT' ? false : Promise.reject(error))),
       this.exists(relativePath),
     ])
     if (!sourceExists && destinationExists) return
@@ -49,7 +52,11 @@ export class LocalAssetStore implements AssetStore {
     if (destinationExists) throw new Error(`upload destination already exists: ${relativePath}`)
     try {
       const handle = await fs.promises.open(stagedPath, 'r')
-      try { await handle.sync() } finally { await handle.close() }
+      try {
+        await handle.sync()
+      } finally {
+        await handle.close()
+      }
       await fs.promises.rename(stagedPath, destination)
       await this.syncDirectory(path.dirname(destination))
       if (sourceDirectory !== path.dirname(destination)) await this.syncDirectory(sourceDirectory)
@@ -59,7 +66,11 @@ export class LocalAssetStore implements AssetStore {
       try {
         await fs.promises.copyFile(stagedPath, temporary, fs.constants.COPYFILE_EXCL)
         const handle = await fs.promises.open(temporary, 'r')
-        try { await handle.sync() } finally { await handle.close() }
+        try {
+          await handle.sync()
+        } finally {
+          await handle.close()
+        }
         await fs.promises.rename(temporary, destination)
         await this.syncDirectory(path.dirname(destination))
         await fs.promises.unlink(stagedPath)
@@ -116,13 +127,18 @@ export class LocalAssetStore implements AssetStore {
   }
 
   async exists(relativePath: string) {
-    return fs.promises.stat(this.absolute(relativePath)).then(() => true).catch((error: NodeJS.ErrnoException) => {
-      if (error.code === 'ENOENT') return false
-      throw error
-    })
+    return fs.promises
+      .stat(this.absolute(relativePath))
+      .then(() => true)
+      .catch((error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT') return false
+        throw error
+      })
   }
 
-  async remove(relativePath: string) { await fs.promises.rm(this.absolute(relativePath), { force: true }) }
+  async remove(relativePath: string) {
+    await fs.promises.rm(this.absolute(relativePath), { force: true })
+  }
 
   async trash(relativePath: string) {
     const source = this.absolute(relativePath)
@@ -140,7 +156,9 @@ export class LocalAssetStore implements AssetStore {
     return trashKey(operationId, relativePath)
   }
 
-  async purgeTrash(trashPath: string) { await this.remove(trashPath) }
+  async purgeTrash(trashPath: string) {
+    await this.remove(trashPath)
+  }
 
   async sweepTrash() {
     const directory = this.absolute('.printhub/trash')
@@ -158,6 +176,10 @@ export class LocalAssetStore implements AssetStore {
 
   private async syncDirectory(directory: string) {
     const handle = await fs.promises.open(directory, 'r')
-    try { await handle.sync() } finally { await handle.close() }
+    try {
+      await handle.sync()
+    } finally {
+      await handle.close()
+    }
   }
 }

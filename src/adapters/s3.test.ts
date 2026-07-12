@@ -1,0 +1,38 @@
+import { S3Client } from '@aws-sdk/client-s3'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { S3AssetStore } from './s3'
+
+const config = {
+  adapter: 's3' as const,
+  endpoint: 'https://objects.example.com',
+  region: 'us-east-1',
+  bucket: 'prints',
+  accessKeyId: 'test',
+  secretAccessKey: 'test',
+  forcePathStyle: true,
+}
+
+describe('S3 retries', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it('retries transient failures', async () => {
+    const send = vi
+      .spyOn(S3Client.prototype, 'send')
+      .mockRejectedValueOnce(Object.assign(new Error('busy'), { $metadata: { httpStatusCode: 503 } }))
+      .mockResolvedValueOnce({} as never)
+
+    await new S3AssetStore(config).write('todo/model.stl', new Uint8Array([1]))
+
+    expect(send).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not retry permanent failures', async () => {
+    const send = vi
+      .spyOn(S3Client.prototype, 'send')
+      .mockRejectedValue(Object.assign(new Error('forbidden'), { $metadata: { httpStatusCode: 403 } }))
+
+    await expect(new S3AssetStore(config).write('todo/model.stl', new Uint8Array([1]))).rejects.toThrow('forbidden')
+
+    expect(send).toHaveBeenCalledTimes(1)
+  })
+})

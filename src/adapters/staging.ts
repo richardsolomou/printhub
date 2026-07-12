@@ -33,11 +33,27 @@ export class UploadStaging implements UploadStagingArea {
     await syncDirectory(directory)
   }
 
+  async copyUploadPart(sourcePath: string, filePath: string) {
+    const directory = path.dirname(filePath)
+    await fs.promises.mkdir(directory, { recursive: true })
+    await fs.promises.copyFile(sourcePath, filePath)
+    const handle = await fs.promises.open(filePath, 'r')
+    try {
+      await handle.sync()
+    } finally {
+      await handle.close()
+    }
+    await syncDirectory(directory)
+  }
+
   async size(filePath: string) {
-    return fs.promises.stat(filePath).then((stat) => stat.size).catch((error: NodeJS.ErrnoException) => {
-      if (error.code === 'ENOENT') return 0
-      throw error
-    })
+    return fs.promises
+      .stat(filePath)
+      .then((stat) => stat.size)
+      .catch((error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT') return 0
+        throw error
+      })
   }
 
   async remove(filePath: string) {
@@ -73,5 +89,9 @@ function validUploadId(uploadId: string) {
 
 async function syncDirectory(directory: string) {
   const handle = await fs.promises.open(directory, 'r')
-  try { await handle.sync() } finally { await handle.close() }
+  try {
+    await handle.sync()
+  } finally {
+    await handle.close()
+  }
 }

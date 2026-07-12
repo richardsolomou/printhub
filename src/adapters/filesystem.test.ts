@@ -18,7 +18,9 @@ describe('LocalAssetStore', () => {
     staging = new UploadStaging(data)
     await Promise.all([store.initialize(), staging.initialize()])
   })
-  afterEach(async () => Promise.all([fs.promises.rm(root, { recursive: true }), fs.promises.rm(data, { recursive: true })]).then(() => undefined))
+  afterEach(async () =>
+    Promise.all([fs.promises.rm(root, { recursive: true }), fs.promises.rm(data, { recursive: true })]).then(() => undefined),
+  )
 
   it('refuses paths outside the storage root', () => {
     expect(() => store.absolute('../secret')).toThrow()
@@ -46,7 +48,10 @@ describe('LocalAssetStore', () => {
     const part = staging.uploadPart('cross-device-upload')
     await fs.promises.writeFile(part, 'complete stl')
     const rename = fs.promises.rename.bind(fs.promises)
-    const spy = vi.spyOn(fs.promises, 'rename').mockRejectedValueOnce(Object.assign(new Error('cross device'), { code: 'EXDEV' })).mockImplementation(rename)
+    const spy = vi
+      .spyOn(fs.promises, 'rename')
+      .mockRejectedValueOnce(Object.assign(new Error('cross device'), { code: 'EXDEV' }))
+      .mockImplementation(rename)
     await store.finalizeUpload(part, 'todo/cross-device.stl')
     expect(await fs.promises.readFile(store.absolute('todo/cross-device.stl'), 'utf8')).toBe('complete stl')
     await expect(fs.promises.stat(part)).rejects.toMatchObject({ code: 'ENOENT' })
@@ -92,7 +97,11 @@ describe('UploadStaging', () => {
     const stale = staging.uploadPart('stale-upload-id')
     const active = staging.uploadPart('active-upload-id')
     const unrelated = path.join(data, 'uploads', 'keep.txt')
-    await Promise.all([fs.promises.writeFile(stale, 'old'), fs.promises.writeFile(active, 'active'), fs.promises.writeFile(unrelated, 'keep')])
+    await Promise.all([
+      fs.promises.writeFile(stale, 'old'),
+      fs.promises.writeFile(active, 'active'),
+      fs.promises.writeFile(unrelated, 'keep'),
+    ])
     const old = new Date(Date.now() - 2 * 86_400_000)
     await Promise.all([fs.promises.utimes(stale, old, old), fs.promises.utimes(active, old, old)])
     await staging.sweepUploads(new Set(['active-upload-id']))

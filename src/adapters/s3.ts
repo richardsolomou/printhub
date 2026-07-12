@@ -11,6 +11,7 @@ import {
 } from '@aws-sdk/client-s3'
 import type { AssetStore, StorageConfig } from '../core/types'
 import { createAssetKey, destinationKey, previewKey, trashKey } from '../core/assetKeys'
+import pRetry, { AbortError } from 'p-retry'
 
 type S3Config = Extract<StorageConfig, { adapter: 's3' }>
 
@@ -65,24 +66,28 @@ export class S3AssetStore implements AssetStore {
     if (destination) {
       if (destination.size !== staged.size) throw new Error(`upload destination already exists: ${relativePath}`)
     } else {
-      await this.client.send(new PutObjectCommand({
-        Bucket: this.bucket,
-        Key: this.key(relativePath),
-        Body: fs.createReadStream(stagedPath),
-        ContentLength: staged.size,
-      }))
+      await retryS3(() =>
+        this.client.send(
+          new PutObjectCommand({
+            Bucket: this.bucket,
+            Key: this.key(relativePath),
+            Body: fs.createReadStream(stagedPath),
+            ContentLength: staged.size,
+          }),
+        ),
+      )
     }
     await fs.promises.rm(stagedPath, { force: true })
   }
 
   async write(relativePath: string, bytes: Uint8Array) {
-    await this.client.send(new PutObjectCommand({ Bucket: this.bucket, Key: this.key(relativePath), Body: bytes }))
+    await retryS3(() => this.client.send(new PutObjectCommand({ Bucket: this.bucket, Key: this.key(relativePath), Body: bytes })))
   }
 
   async read(relativePath: string) {
-    const result = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: this.key(relativePath) }))
+    const result = await retryS3(() => this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: this.key(relativePath) })))
     if (!result.Body) throw new Error(`empty object: ${relativePath}`)
-    return { stream: result.Body.transformToWebStream() as ReadableStream, size: result.ContentLength ?? 0 }
+    return { stream: result.Body.transformToWebStream(), size: result.ContentLength ?? 0 }
   }
 
   async move(relativePath: string, statusId: string) {
@@ -98,13 +103,17 @@ export class S3AssetStore implements AssetStore {
     if (!source) throw Object.assign(new Error(`asset missing: ${sourcePath}`), { code: 'ENOENT' })
     if (destination && destination.size !== source.size) throw new Error(`asset destination already exists: ${destinationPath}`)
     if (!destination) {
-      await this.client.send(new CopyObjectCommand({
-        Bucket: this.bucket,
-        Key: this.key(destinationPath),
-        CopySource: encodeURIComponent(`${this.bucket}/${this.key(sourcePath)}`),
-      }))
+      await retryS3(() =>
+        this.client.send(
+          new CopyObjectCommand({
+            Bucket: this.bucket,
+            Key: this.key(destinationPath),
+            CopySource: encodeURIComponent(`${this.bucket}/${this.key(sourcePath)}`),
+          }),
+        ),
+      )
     }
-    await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: this.key(sourcePath) }))
+    await retryS3(() => this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: this.key(sourcePath) })))
   }
 
   async exists(relativePath: string) {
@@ -112,7 +121,7 @@ export class S3AssetStore implements AssetStore {
   }
 
   async remove(relativePath: string) {
-    await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: this.key(relativePath) }))
+    await retryS3(() => this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: this.key(relativePath) })))
   }
 
   async trash(relativePath: string) {
@@ -130,9 +139,11 @@ export class S3AssetStore implements AssetStore {
     const trashPrefix = `${this.prefix}.printhub/trash/`
     let token: string | undefined
     do {
-      const page = await this.client.send(new ListObjectsV2Command({ Bucket: this.bucket, Prefix: trashPrefix, ContinuationToken: token }))
+      const page = await retryS3(() =>
+        this.client.send(new ListObjectsV2Command({ Bucket: this.bucket, Prefix: trashPrefix, ContinuationToken: token })),
+      )
       for (const object of page.Contents ?? []) {
-        if (object.Key) await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: object.Key }))
+        if (object.Key) await retryS3(() => this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: object.Key })))
       }
       token = page.IsTruncated ? page.NextContinuationToken : undefined
     } while (token)
@@ -140,8 +151,8 @@ export class S3AssetStore implements AssetStore {
 
   async writable() {
     const probe = this.key(`.printhub/health-${crypto.randomUUID()}`)
-    await this.client.send(new PutObjectCommand({ Bucket: this.bucket, Key: probe, Body: new Uint8Array() }))
-    await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: probe }))
+    await retryS3(() => this.client.send(new PutObjectCommand({ Bucket: this.bucket, Key: probe, Body: new Uint8Array() })))
+    await retryS3(() => this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: probe })))
   }
 
   private key(relativePath: string) {
@@ -153,7 +164,7 @@ export class S3AssetStore implements AssetStore {
 
   private async head(relativePath: string) {
     try {
-      const result = await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: this.key(relativePath) }))
+      const result = await retryS3(() => this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: this.key(relativePath) })))
       return { size: result.ContentLength ?? 0 }
     } catch (error) {
       if (isNotFound(error)) return undefined
@@ -165,4 +176,31 @@ export class S3AssetStore implements AssetStore {
 function isNotFound(error: unknown) {
   const candidate = error as { name?: string; $metadata?: { httpStatusCode?: number } }
   return candidate.name === 'NotFound' || candidate.name === 'NoSuchKey' || candidate.$metadata?.httpStatusCode === 404
+}
+
+function retryS3<T>(operation: () => Promise<T>) {
+  return pRetry(
+    async () => {
+      try {
+        return await operation()
+      } catch (error) {
+        if (!isRetryable(error)) throw new AbortError(error instanceof Error ? error : new Error(String(error)))
+        throw error
+      }
+    },
+    { retries: 3, minTimeout: 250, maxTimeout: 2_000 },
+  )
+}
+
+function isRetryable(error: unknown) {
+  const candidate = error as { name?: string; $retryable?: unknown; $metadata?: { httpStatusCode?: number } }
+  const status = candidate.$metadata?.httpStatusCode
+  return (
+    !!candidate.$retryable ||
+    candidate.name === 'TimeoutError' ||
+    candidate.name === 'NetworkingError' ||
+    status === 408 ||
+    status === 429 ||
+    (status !== undefined && status >= 500)
+  )
 }

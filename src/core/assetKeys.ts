@@ -5,7 +5,12 @@ import { initialStatus, statusById } from './workflow'
 const baseName = (key: string) => key.split('/').pop() ?? key
 
 export function createAssetKey(originalFileName: string) {
-  const base = baseName(originalFileName).replace(/\.stl$/i, '').replace(/[^\w.\- ]+/g, '_').trim().slice(0, 120) || 'model'
+  const base =
+    baseName(originalFileName)
+      .replace(/\.stl$/i, '')
+      .replace(/[^\w.\- ]+/g, '_')
+      .trim()
+      .slice(0, 120) || 'model'
   return `${initialStatus().folder}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}__${base}.stl`
 }
 

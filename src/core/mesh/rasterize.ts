@@ -43,11 +43,7 @@ export function rasterize(positions: Float32Array, size: number): Uint8Array {
     }
   }
   const center = [0, 1, 2].map((axis) => (bounds.min[axis] + bounds.max[axis]) / 2)
-  const radius = Math.hypot(
-    bounds.max[0] - bounds.min[0],
-    bounds.max[1] - bounds.min[1],
-    bounds.max[2] - bounds.min[2],
-  ) / 2 || 1
+  const radius = Math.hypot(bounds.max[0] - bounds.min[0], bounds.max[1] - bounds.min[1], bounds.max[2] - bounds.min[2]) / 2 || 1
 
   const fov = (FOV_DEGREES * Math.PI) / 180
   const distance = (radius / Math.sin(fov / 2)) * 1.15
@@ -74,7 +70,10 @@ export function rasterize(positions: Float32Array, size: number): Uint8Array {
       const base = triangle * 9 + corner * 3
       const relative = [world[base] - eye[0], world[base + 1] - eye[1], world[base + 2] - eye[2]]
       const z = relative[0] * forward[0] + relative[1] * forward[1] + relative[2] * forward[2]
-      if (z <= 0) { behind = true; break }
+      if (z <= 0) {
+        behind = true
+        break
+      }
       const x = relative[0] * right[0] + relative[1] * right[1] + relative[2] * right[2]
       const y = relative[0] * up[0] + relative[1] * up[1] + relative[2] * up[2]
       screenX[corner] = ((x / z) * focal + 1) * 0.5 * raster
@@ -144,7 +143,10 @@ function downsample(pixels: Uint8Array, from: number, to: number): Uint8Array {
   const output = new Uint8Array(to * to * 4)
   for (let y = 0; y < to; y++) {
     for (let x = 0; x < to; x++) {
-      let red = 0, green = 0, blue = 0, alpha = 0
+      let red = 0,
+        green = 0,
+        blue = 0,
+        alpha = 0
       for (let sy = 0; sy < factor; sy++) {
         for (let sx = 0; sx < factor; sx++) {
           const source = ((y * factor + sy) * from + x * factor + sx) * 4

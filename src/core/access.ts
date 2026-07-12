@@ -4,4 +4,4 @@ import { adminAc, defaultStatements, userAc } from 'better-auth/plugins/admin/ac
 // Shared by the server auth config and the browser auth client so the admin
 // plugin accepts PrintHub's role names on both sides.
 export const accessControl = createAccessControl(defaultStatements)
-export const accessRoles = { operator: adminAc, requester: userAc }
+export const accessRoles = { admin: adminAc, requester: userAc }

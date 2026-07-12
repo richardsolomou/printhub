@@ -1,452 +1,67 @@
-import { useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useServerFn } from '@tanstack/react-start'
-import type { Identity, StorageConfig } from '../../core/types'
-import { createInvite, revokeInvite, updateBoardSettings, updateStorageSettings, updateTelemetrySettings } from '../../server/fns'
-import { authClient } from '../authClient'
-import { boardQuery, invitesQuery, storageQuery, telemetryQuery, usersQuery } from '../queries'
+import { Link } from '@tanstack/react-router'
+import { buttonVariants } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+import type { Identity } from '../../core/types'
+import { AccountPane } from './settings/AccountPane'
+import { AboutPane } from './settings/AboutPane'
+import { BoardPane } from './settings/BoardPane'
+import { DiagnosticsPane } from './settings/DiagnosticsPane'
+import { IntegrationsPane } from './settings/IntegrationsPane'
+import { StoragePane } from './settings/StoragePane'
+import { TelemetryPane } from './settings/TelemetryPane'
+import { UsersPane } from './settings/UsersPane'
 
-type Pane = 'account' | 'board' | 'users' | 'storage' | 'telemetry' | 'about'
+export const settingsSections = ['account', 'board', 'users', 'storage', 'integrations', 'telemetry', 'diagnostics', 'about'] as const
+export type SettingsSection = (typeof settingsSections)[number]
 
-// Rendered for operators only; the /settings route redirects requesters.
-export function SettingsPanes({ me }: { me: Identity }) {
-  const [pane, setPane] = useState<Pane>('account')
-  const panes: { id: Pane; label: string }[] = [
-    { id: 'account', label: 'Account' },
-    { id: 'board', label: 'Board' },
-    { id: 'users', label: 'Users' },
-    { id: 'storage', label: 'Storage' },
-    { id: 'telemetry', label: 'Telemetry' },
-    { id: 'about', label: 'About' },
-  ]
+const panes: { id: SettingsSection; label: string }[] = [
+  { id: 'account', label: 'Account' },
+  { id: 'board', label: 'Board' },
+  { id: 'users', label: 'Users' },
+  { id: 'storage', label: 'Storage' },
+  { id: 'integrations', label: 'Integrations' },
+  { id: 'telemetry', label: 'Telemetry' },
+  { id: 'diagnostics', label: 'Diagnostics' },
+  { id: 'about', label: 'About' },
+]
 
+export function isSettingsSection(value: string): value is SettingsSection {
+  return settingsSections.includes(value as SettingsSection)
+}
+
+export function SettingsPanes({ me, section }: { me: Identity; section: SettingsSection }) {
+  const availablePanes = me.role === 'admin' ? panes : panes.filter((pane) => pane.id === 'account')
   return (
-    <div className="settings-body">
-      <nav className="settings-nav" aria-label="Settings sections">
-        {panes.map((item) => (
-          <button
+    <div className="grid items-start gap-6 sm:grid-cols-[170px_1fr]">
+      <nav
+        className="sticky top-6 flex flex-col gap-0.5 border-r pr-3 max-sm:static max-sm:flex-row max-sm:flex-wrap max-sm:border-r-0 max-sm:border-b max-sm:pb-2.5"
+        aria-label="Settings sections"
+      >
+        {availablePanes.map((item) => (
+          <Link
             key={item.id}
-            type="button"
-            className={`settings-nav-item${pane === item.id ? ' active' : ''}`}
-            onClick={() => setPane(item.id)}
+            to="/settings/$section"
+            params={{ section: item.id }}
+            className={cn(
+              buttonVariants({ variant: section === item.id ? 'secondary' : 'ghost' }),
+              'h-auto w-full justify-start px-2.5 py-2 text-muted-foreground',
+              section === item.id && 'text-foreground',
+            )}
           >
             {item.label}
-          </button>
+          </Link>
         ))}
       </nav>
-      <div className="settings-pane">
-        {pane === 'account' && <AccountPane me={me} />}
-        {pane === 'board' && <BoardPane />}
-        {pane === 'users' && <UsersPane me={me} />}
-        {pane === 'storage' && <StoragePane />}
-        {pane === 'telemetry' && <TelemetryPane />}
-        {pane === 'about' && <AboutPane />}
+      <div className="min-w-0">
+        {section === 'account' && <AccountPane me={me} />}
+        {me.role === 'admin' && section === 'board' && <BoardPane />}
+        {me.role === 'admin' && section === 'users' && <UsersPane me={me} />}
+        {me.role === 'admin' && section === 'storage' && <StoragePane />}
+        {me.role === 'admin' && section === 'integrations' && <IntegrationsPane />}
+        {me.role === 'admin' && section === 'telemetry' && <TelemetryPane />}
+        {me.role === 'admin' && section === 'diagnostics' && <DiagnosticsPane />}
+        {me.role === 'admin' && section === 'about' && <AboutPane />}
       </div>
     </div>
-  )
-}
-
-function AccountPane({ me }: { me: Identity }) {
-  return (
-    <>
-      <h3>Account</h3>
-      <p className="settings-identity">
-        {me.name} <span className="settings-dim">({me.email})</span>
-        <span className="chip settings-role">{me.role}</span>
-      </p>
-      <ChangePasswordForm />
-      <div className="settings-actions">
-        <button type="button" className="btn sign-out" onClick={async () => { await authClient.signOut(); window.location.reload() }}>Sign out</button>
-      </div>
-    </>
-  )
-}
-
-function ChangePasswordForm() {
-  const [currentPassword, setCurrentPassword] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [error, setError] = useState('')
-  const [saved, setSaved] = useState(false)
-  const [busy, setBusy] = useState(false)
-
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault()
-    setBusy(true)
-    setError('')
-    setSaved(false)
-    const { error: failed } = await authClient.changePassword({ currentPassword, newPassword, revokeOtherSessions: true })
-    if (failed) {
-      setError('Could not change your password. Check your current password and use at least 8 characters.')
-    } else {
-      setCurrentPassword('')
-      setNewPassword('')
-      setSaved(true)
-    }
-    setBusy(false)
-  }
-
-  return (
-    <form onSubmit={submit} className="settings-form">
-      <div className="field"><label htmlFor="current-password">Current password</label><input id="current-password" type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} maxLength={256} autoComplete="current-password" required /></div>
-      <div className="field"><label htmlFor="new-password">New password</label><input id="new-password" type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={8} maxLength={256} autoComplete="new-password" required /></div>
-      {error && <p className="error">{error}</p>}
-      {saved && <p className="settings-saved">Password changed.</p>}
-      <button className="btn btn-primary" disabled={busy}>{busy ? 'Changing…' : 'Change password'}</button>
-    </form>
-  )
-}
-
-function BoardPane() {
-  const { data: current } = useQuery(boardQuery())
-  const callUpdate = useServerFn(updateBoardSettings)
-  const queryClient = useQueryClient()
-  const [error, setError] = useState('')
-  const [saved, setSaved] = useState(false)
-  const [busy, setBusy] = useState(false)
-  if (!current) return <h3>Board</h3>
-
-  const save = async (privateRequests: boolean) => {
-    setBusy(true)
-    setError('')
-    setSaved(false)
-    try {
-      await callUpdate({ data: { privateRequests } })
-      await queryClient.invalidateQueries()
-      setSaved(true)
-    } catch (err) {
-      const message = err instanceof Error && err.message ? err.message : ''
-      setError(message || 'Could not save board settings.')
-    }
-    setBusy(false)
-  }
-
-  return (
-    <>
-      <h3>Board</h3>
-      <div className="field">
-        <label htmlFor="board-visibility">Request visibility</label>
-        <select
-          id="board-visibility"
-          value={current.privateRequests ? 'private' : 'shared'}
-          disabled={busy}
-          onChange={(event) => save(event.target.value === 'private')}
-        >
-          <option value="shared">Shared — everyone sees every request</option>
-          <option value="private">Private — requesters see only their own</option>
-        </select>
-        <p className="field-hint">Private suits print farms and paid work: requesters see, reorder, and withdraw only their own requests. Operators always see everything.</p>
-      </div>
-      {error && <p className="error">{error}</p>}
-      {saved && <p className="settings-saved">Board settings saved.</p>}
-    </>
-  )
-}
-
-function UsersPane({ me }: { me: Identity }) {
-  const { data: users } = useQuery(usersQuery())
-  const [adding, setAdding] = useState(false)
-  const [inviting, setInviting] = useState(false)
-  const [resetting, setResetting] = useState<Identity | null>(null)
-  return (
-    <>
-      <h3>Users</h3>
-      <ul className="settings-users">
-        {(users ?? []).map((user) => (
-          <li key={user.id}>
-            <span>{user.name}</span>
-            <span className="settings-dim">{user.email}</span>
-            <span className="chip settings-role">{user.role}</span>
-            {user.id !== me.id && (
-              <button type="button" className="btn" onClick={() => { setAdding(false); setResetting(user) }}>Set password</button>
-            )}
-          </li>
-        ))}
-      </ul>
-      {resetting && <SetPasswordForm key={resetting.id} user={resetting} onDone={() => setResetting(null)} />}
-      {adding && <CreateUserForm onDone={() => setAdding(false)} />}
-      {inviting && <InviteForm onDone={() => setInviting(false)} />}
-      {!adding && !resetting && !inviting && (
-        <div className="settings-actions">
-          <button type="button" className="btn btn-primary" onClick={() => setInviting(true)}>Invite with link</button>
-          <button type="button" className="btn" onClick={() => setAdding(true)}>Add user</button>
-        </div>
-      )}
-      <PendingInvites />
-    </>
-  )
-}
-
-function InviteForm({ onDone }: { onDone: () => void }) {
-  const callCreateInvite = useServerFn(createInvite)
-  const queryClient = useQueryClient()
-  const [role, setRole] = useState<'requester' | 'operator'>('requester')
-  const [label, setLabel] = useState('')
-  const [link, setLink] = useState('')
-  const [copied, setCopied] = useState(false)
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault()
-    setBusy(true)
-    setError('')
-    try {
-      const { token } = await callCreateInvite({ data: { role, label: label.trim() || undefined } })
-      setLink(`${window.location.origin}/invite/${token}`)
-      await queryClient.invalidateQueries({ queryKey: ['invites'] })
-    } catch {
-      setError('Could not create the invite.')
-    }
-    setBusy(false)
-  }
-
-  if (link) {
-    return (
-      <div className="settings-form">
-        <div className="field">
-          <label htmlFor="invite-link">Invite link — share it with one person; it works once and expires in 7 days</label>
-          <div className="row-optional">
-            <input id="invite-link" readOnly value={link} onFocus={(event) => event.target.select()} />
-            <button type="button" className="btn" onClick={async () => { await navigator.clipboard.writeText(link); setCopied(true) }}>{copied ? 'Copied' : 'Copy'}</button>
-          </div>
-          <p className="field-hint">This is the only time the link is shown. They pick their own name, email, and password.</p>
-        </div>
-        <div className="settings-actions"><button type="button" className="btn" onClick={onDone}>Done</button></div>
-      </div>
-    )
-  }
-
-  return (
-    <form onSubmit={submit} className="settings-form">
-      <div className="field"><label htmlFor="invite-label">Who is this for? (optional note to yourself)</label><input id="invite-label" value={label} onChange={(event) => setLabel(event.target.value)} maxLength={100} placeholder="etsy order #1042" /></div>
-      <div className="field"><label htmlFor="invite-role">Role</label><select id="invite-role" value={role} onChange={(event) => setRole(event.target.value as typeof role)}><option value="requester">Requester</option><option value="operator">Operator</option></select></div>
-      {error && <p className="error">{error}</p>}
-      <div className="settings-actions"><button type="button" className="btn" onClick={onDone}>Cancel</button><button className="btn btn-primary" disabled={busy}>{busy ? 'Creating…' : 'Create invite link'}</button></div>
-    </form>
-  )
-}
-
-function PendingInvites() {
-  const { data: invites } = useQuery(invitesQuery())
-  const callRevoke = useServerFn(revokeInvite)
-  const queryClient = useQueryClient()
-  if (!invites?.length) return null
-  return (
-    <>
-      <h4 className="settings-subheading">Pending invites</h4>
-      <ul className="settings-users">
-        {invites.map((invite) => (
-          <li key={invite.id}>
-            <span>{invite.label || 'Unlabeled invite'}</span>
-            <span className="settings-dim">expires {new Date(invite.expiresAt).toLocaleDateString()}</span>
-            <span className="chip settings-role">{invite.role}</span>
-            <button
-              type="button"
-              className="btn"
-              onClick={async () => { await callRevoke({ data: { id: invite.id } }); await queryClient.invalidateQueries({ queryKey: ['invites'] }) }}
-            >
-              Revoke
-            </button>
-          </li>
-        ))}
-      </ul>
-    </>
-  )
-}
-
-function SetPasswordForm({ user, onDone }: { user: Identity; onDone: () => void }) {
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault()
-    setBusy(true)
-    setError('')
-    const { error: failed } = await authClient.admin.setUserPassword({ userId: user.id, newPassword: password })
-    if (failed) {
-      setError('Could not set the password. Use at least 8 characters.')
-      setBusy(false)
-      return
-    }
-    await authClient.admin.revokeUserSessions({ userId: user.id })
-    onDone()
-  }
-
-  return (
-    <form onSubmit={submit} className="settings-form">
-      <div className="field"><label htmlFor="set-password">New password for {user.name}</label><input id="set-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} maxLength={256} autoComplete="new-password" required /></div>
-      <p className="field-hint">Signs {user.name} out everywhere; share the new password with them directly.</p>
-      {error && <p className="error">{error}</p>}
-      <div className="settings-actions"><button type="button" className="btn" onClick={onDone}>Cancel</button><button className="btn btn-primary" disabled={busy}>{busy ? 'Setting…' : 'Set password'}</button></div>
-    </form>
-  )
-}
-
-function CreateUserForm({ onDone }: { onDone: () => void }) {
-  const queryClient = useQueryClient()
-  const [email, setEmail] = useState('')
-  const [name, setName] = useState('')
-  const [password, setPassword] = useState('')
-  const [role, setRole] = useState<'requester' | 'operator'>('requester')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault()
-    setBusy(true)
-    setError('')
-    const { error: failed } = await authClient.admin.createUser({ email, name, password, role })
-    if (failed) {
-      setError('Could not create this user. Check the fields and email address.')
-      setBusy(false)
-      return
-    }
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['people'] }),
-      queryClient.invalidateQueries({ queryKey: ['users'] }),
-    ])
-    onDone()
-  }
-
-  return (
-    <form onSubmit={submit} className="settings-form">
-      <div className="field"><label htmlFor="user-name">Name</label><input id="user-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={100} required /></div>
-      <div className="field"><label htmlFor="user-email">Email</label><input id="user-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} maxLength={254} required /></div>
-      <div className="field"><label htmlFor="user-password">Initial password</label><input id="user-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} maxLength={256} required /></div>
-      <div className="field"><label htmlFor="user-role">Role</label><select id="user-role" value={role} onChange={(event) => setRole(event.target.value as typeof role)}><option value="requester">Requester</option><option value="operator">Operator</option></select></div>
-      {error && <p className="error">{error}</p>}
-      <div className="settings-actions"><button type="button" className="btn" onClick={onDone}>Cancel</button><button className="btn btn-primary" disabled={busy}>{busy ? 'Creating…' : 'Create user'}</button></div>
-    </form>
-  )
-}
-
-function StoragePane() {
-  const { data: current } = useQuery(storageQuery())
-  if (!current) return <h3>Storage</h3>
-  return <StorageForm key={current.adapter} current={current} />
-}
-
-function StorageForm({ current }: { current: StorageConfig }) {
-  const callUpdate = useServerFn(updateStorageSettings)
-  const queryClient = useQueryClient()
-  const s3 = current.adapter === 's3' ? current : undefined
-  const [adapter, setAdapter] = useState<StorageConfig['adapter']>(current.adapter)
-  const [root, setRoot] = useState(current.adapter === 'local' ? current.root : '/prints')
-  const [endpoint, setEndpoint] = useState(s3?.endpoint ?? '')
-  const [region, setRegion] = useState(s3?.region ?? 'us-east-1')
-  const [bucket, setBucket] = useState(s3?.bucket ?? '')
-  const [prefix, setPrefix] = useState(s3?.prefix ?? '')
-  const [accessKeyId, setAccessKeyId] = useState(s3?.accessKeyId ?? '')
-  const [secretAccessKey, setSecretAccessKey] = useState('')
-  const [forcePathStyle, setForcePathStyle] = useState(s3?.forcePathStyle ?? true)
-  const [error, setError] = useState('')
-  const [saved, setSaved] = useState(false)
-  const [busy, setBusy] = useState(false)
-
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault()
-    setBusy(true)
-    setError('')
-    setSaved(false)
-    try {
-      const config: StorageConfig = adapter === 'local'
-        ? { adapter: 'local', root }
-        : { adapter: 's3', endpoint, region, bucket, prefix: prefix || undefined, accessKeyId, secretAccessKey, forcePathStyle }
-      await callUpdate({ data: config })
-      await queryClient.invalidateQueries({ queryKey: ['storage'] })
-      setSecretAccessKey('')
-      setSaved(true)
-    } catch (err) {
-      const message = err instanceof Error && err.message ? err.message : ''
-      setError(message || 'Could not save storage settings.')
-    }
-    setBusy(false)
-  }
-
-  return (
-    <form onSubmit={submit} className="settings-form">
-      <h3>Storage</h3>
-      <p className="settings-dim">Where finished print files live. Switching is only possible while the board is empty; existing files are not migrated.</p>
-      <div className="field">
-        <label htmlFor="storage-adapter">Adapter</label>
-        <select id="storage-adapter" value={adapter} onChange={(event) => setAdapter(event.target.value as StorageConfig['adapter'])}>
-          <option value="local">Local folder</option>
-          <option value="s3">S3-compatible object storage</option>
-        </select>
-      </div>
-      {adapter === 'local' && (
-        <div className="field">
-          <label htmlFor="storage-root">Folder</label>
-          <input id="storage-root" value={root} onChange={(event) => setRoot(event.target.value)} placeholder="/prints" required />
-        </div>
-      )}
-      {adapter === 's3' && (
-        <>
-          <div className="field"><label htmlFor="storage-endpoint">Endpoint</label><input id="storage-endpoint" type="url" value={endpoint} onChange={(event) => setEndpoint(event.target.value)} placeholder="https://minio.local:9000" required /></div>
-          <div className="field-row">
-            <div className="field"><label htmlFor="storage-bucket">Bucket</label><input id="storage-bucket" value={bucket} onChange={(event) => setBucket(event.target.value)} required /></div>
-            <div className="field"><label htmlFor="storage-region">Region</label><input id="storage-region" value={region} onChange={(event) => setRegion(event.target.value)} /></div>
-          </div>
-          <div className="field"><label htmlFor="storage-prefix">Key prefix (optional)</label><input id="storage-prefix" value={prefix} onChange={(event) => setPrefix(event.target.value)} placeholder="printhub" /></div>
-          <div className="field"><label htmlFor="storage-access">Access key ID</label><input id="storage-access" value={accessKeyId} onChange={(event) => setAccessKeyId(event.target.value)} autoComplete="off" required /></div>
-          <div className="field"><label htmlFor="storage-secret">Secret access key</label><input id="storage-secret" type="password" value={secretAccessKey} onChange={(event) => setSecretAccessKey(event.target.value)} placeholder={s3 ? 'leave blank to keep current' : ''} autoComplete="off" required={!s3} /></div>
-          <label className="settings-check">
-            <input type="checkbox" checked={forcePathStyle} onChange={(event) => setForcePathStyle(event.target.checked)} />
-            Path-style requests (MinIO and most self-hosted endpoints)
-          </label>
-        </>
-      )}
-      {error && <p className="error">{error}</p>}
-      {saved && <p className="settings-saved">Storage settings saved and applied.</p>}
-      <button className="btn btn-primary" disabled={busy}>{busy ? 'Checking storage…' : 'Save storage settings'}</button>
-    </form>
-  )
-}
-
-function TelemetryPane() {
-  const { data: current } = useQuery(telemetryQuery())
-  const callUpdate = useServerFn(updateTelemetrySettings)
-  const queryClient = useQueryClient()
-  const [error, setError] = useState('')
-  const [saved, setSaved] = useState(false)
-  const [busy, setBusy] = useState(false)
-  if (!current) return <h3>Telemetry</h3>
-
-  const save = async (enabled: boolean) => {
-    setBusy(true)
-    setError('')
-    setSaved(false)
-    try {
-      await callUpdate({ data: { enabled } })
-      await queryClient.invalidateQueries({ queryKey: ['telemetry'] })
-      setSaved(true)
-    } catch (err) {
-      const message = err instanceof Error && err.message ? err.message : ''
-      setError(message || 'Could not save telemetry settings.')
-    }
-    setBusy(false)
-  }
-
-  return (
-    <>
-      <h3>Telemetry</h3>
-      <p className="settings-dim">PrintHub sends anonymous usage events to its developers so we can see how the app is used. It never sends email addresses, user names, request names, or file names.</p>
-      <label className="settings-check">
-        <input type="checkbox" checked={current.enabled} disabled={busy} onChange={(event) => save(event.target.checked)} />
-        Share anonymous usage data
-      </label>
-      {error && <p className="error">{error}</p>}
-      {saved && <p className="settings-saved">Telemetry settings saved. The server applies them immediately; browsers on their next page load.</p>}
-    </>
-  )
-}
-
-function AboutPane() {
-  return (
-    <>
-      <h3>About</h3>
-      <p className="settings-dim">PrintHub v{__APP_VERSION__}</p>
-    </>
   )
 }

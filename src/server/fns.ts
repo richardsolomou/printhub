@@ -1,12 +1,34 @@
 import crypto from 'node:crypto'
 import { createServerFn } from '@tanstack/react-start'
-import { getRequest } from '@tanstack/react-start/server'
+import { getRequest, setCookie } from '@tanstack/react-start/server'
+import { resolveAuthAdapterConfig } from '../adapters/auth'
+import { buildEmailDelivery, resolveSmtpConfig } from '../adapters/email'
 import { app, buildAssetStore, hashInviteToken, resetApp, resolveBoardConfig, resolveTelemetryConfig } from './app'
-import { INVITE_HEADER } from './auth'
 import { workflow } from '../core/workflow'
-import { validSourceUrl } from '../core/services'
+import { SOCIAL_AUTH_PROVIDERS, type IntegrationConfig } from '../core/auth'
 import type { StorageConfig } from '../core/types'
+import { getStoredIntegrationConfig, publicIntegrationConfig, setStoredIntegrationConfig } from './integrations'
 import { requireMutationOrigin } from './mutationOrigin'
+import { userImage } from './avatar'
+import {
+  acceptInviteSchema,
+  boardSettingsSchema,
+  beginProviderInviteSchema,
+  createInviteSchema,
+  idSchema,
+  inviteInfoSchema,
+  moveCopiesSchema,
+  reorderRequestSchema,
+  requestFiltersSchema,
+  setOwnPasswordSchema,
+  passwordAuthSettingsSchema,
+  socialProviderEnabledSchema,
+  socialProviderSettingsSchema,
+  smtpEmailSettingsSchema,
+  storageSettingsSchema,
+  telemetrySettingsSchema,
+  updateRequestSchema,
+} from './schemas'
 
 const INVITE_TTL = 7 * 24 * 60 * 60 * 1000
 
@@ -17,242 +39,547 @@ async function rpc<T>(work: () => Promise<T> | T): Promise<T> {
   try {
     return await work()
   } catch (error) {
-    if (error instanceof Response) throw new Error((await error.text()) || `request failed (${error.status})`)
+    if (error instanceof Response) throw new Error((await error.text()) || `request failed (${error.status})`, { cause: error })
     throw error
   }
 }
 
 const me = async (instance: Awaited<ReturnType<typeof app>>) => instance.requireIdentity(getRequest().headers)
-
-export const sessionInfo = createServerFn({ method: 'GET' }).handler(async () => rpc(async () => {
-  const instance = await app()
-  const identity = await instance.identity(getRequest().headers)
-  return {
-    identity,
-    setupRequired: instance.repository.countUsers() === 0,
-    telemetryEnabled: resolveTelemetryConfig(instance.repository).enabled,
-    privateRequests: resolveBoardConfig(instance.repository).privateRequests,
-    workflow,
-  }
-}))
-
-export const listRequests = createServerFn({ method: 'GET' }).handler(async () => rpc(async () => {
-  const instance = await app()
-  return instance.service.listRequests(await me(instance), resolveBoardConfig(instance.repository).privateRequests)
-}))
-
-export const listPeople = createServerFn({ method: 'GET' }).handler(async () => rpc(async () => {
-  const instance = await app()
+const admin = async (instance: Awaited<ReturnType<typeof app>>) => {
   const identity = await me(instance)
-  // With private requests, requesters see no one else — not even names.
-  if (identity.role !== 'operator' && resolveBoardConfig(instance.repository).privateRequests) {
-    return instance.service.listPeople().filter((person) => person.name === identity.name)
-  }
-  return instance.service.listPeople()
-}))
+  if (identity.role !== 'admin') throw new Response('forbidden', { status: 403 })
+  return identity
+}
 
-export const listUsers = createServerFn({ method: 'GET' }).handler(async () => rpc(async () => {
-  const instance = await app()
-  if ((await me(instance)).role !== 'operator') throw new Response('forbidden', { status: 403 })
-  return instance.repository.listUsers()
-}))
+function integrationConfig(instance: Awaited<ReturnType<typeof app>>): IntegrationConfig {
+  return getStoredIntegrationConfig(instance.repository) ?? { passwordEnabled: true }
+}
+
+export const sessionInfo = createServerFn({ method: 'GET' }).handler(async () =>
+  rpc(async () => {
+    const instance = await app()
+    const identity = await instance.identity(getRequest().headers)
+    return {
+      identity,
+      setupRequired: instance.repository.countUsers() === 0,
+      storageConfigured: instance.repository.getSetting('storage') !== undefined,
+      storageReady: instance.storageReady,
+      telemetryEnabled: resolveTelemetryConfig(instance.repository).enabled,
+      privateRequests: resolveBoardConfig(instance.repository).privateRequests,
+      auth: instance.authCapabilities,
+      email: instance.emailCapabilities,
+      workflow,
+    }
+  }),
+)
+
+export const getAccountMethods = createServerFn({ method: 'GET' }).handler(async () =>
+  rpc(async () => {
+    const instance = await app()
+    await me(instance)
+    const accounts = await instance.auth.api.listUserAccounts({ headers: getRequest().headers })
+    return {
+      linked: accounts.map((account) => account.providerId),
+      availableProviders: instance.authCapabilities.socialProviders,
+      passwordAvailable: instance.authCapabilities.password,
+    }
+  }),
+)
+
+export const setOwnPassword = createServerFn({ method: 'POST' })
+  .validator(setOwnPasswordSchema)
+  .handler(async ({ data }) =>
+    rpc(async () => {
+      const instance = await app()
+      requireMutationOrigin()
+      await me(instance)
+      if (!instance.authCapabilities.password) throw new Response('password authentication is disabled', { status: 409 })
+      const accounts = await instance.auth.api.listUserAccounts({ headers: getRequest().headers })
+      if (accounts.some((account) => account.providerId === 'credential')) {
+        throw new Response('this account already has a password', { status: 409 })
+      }
+      await instance.auth.api.setPassword({ body: { newPassword: data.password }, headers: getRequest().headers })
+      return { configured: true }
+    }),
+  )
+
+export const getIntegrationSettings = createServerFn({ method: 'GET' }).handler(async () =>
+  rpc(async () => {
+    const instance = await app()
+    await admin(instance)
+    const stored = getStoredIntegrationConfig(instance.repository)
+    const settings = publicIntegrationConfig(stored, resolveAuthAdapterConfig(stored), resolveSmtpConfig(stored))
+    const accounts = await instance.auth.api.listUserAccounts({ headers: getRequest().headers })
+    for (const provider of SOCIAL_AUTH_PROVIDERS) {
+      settings.providers[provider].linked = accounts.some((account) => account.providerId === provider)
+    }
+    return settings
+  }),
+)
+
+export const updatePasswordAuth = createServerFn({ method: 'POST' })
+  .validator(passwordAuthSettingsSchema)
+  .handler(async ({ data }) =>
+    rpc(async () => {
+      const instance = await app()
+      requireMutationOrigin()
+      await admin(instance)
+      if (process.env.AUTH_PASSWORD_ENABLED !== undefined || process.env.AUTH_PASSWORD_RECOVERY !== undefined) {
+        throw new Response('password authentication is controlled by the deployment environment', { status: 409 })
+      }
+      const config = integrationConfig(instance)
+      if (!data.enabled) {
+        const enabledProviders = instance.authCapabilities.socialProviders
+        if (enabledProviders.length === 0)
+          throw new Response('enable and test a social provider before disabling passwords', { status: 409 })
+        const accounts = await instance.auth.api.listUserAccounts({ headers: getRequest().headers })
+        if (!enabledProviders.some((provider) => accounts.some((account) => account.providerId === provider))) {
+          throw new Response('link the current admin account to an enabled social provider before disabling passwords', { status: 409 })
+        }
+      }
+      setStoredIntegrationConfig(instance.repository, { ...config, passwordEnabled: data.enabled })
+      instance.events.publish('settings.changed')
+      await resetApp()
+      return { enabled: data.enabled }
+    }),
+  )
+
+export const saveSocialProvider = createServerFn({ method: 'POST' })
+  .validator(socialProviderSettingsSchema)
+  .handler(async ({ data }) =>
+    rpc(async () => {
+      const instance = await app()
+      requireMutationOrigin()
+      await admin(instance)
+      const prefix = `AUTH_${data.provider.toUpperCase()}`
+      if (process.env[`${prefix}_CLIENT_ID`] || process.env[`${prefix}_CLIENT_SECRET`]) {
+        throw new Response(`${data.provider} is controlled by the deployment environment`, { status: 409 })
+      }
+      const config = integrationConfig(instance)
+      const current = config[data.provider]
+      const anotherEnabled = SOCIAL_AUTH_PROVIDERS.some((candidate) => candidate !== data.provider && config[candidate]?.enabled)
+      if (current?.enabled && !instance.authCapabilities.password && !anotherEnabled) {
+        throw new Response('enable password authentication before changing the only active social provider', { status: 409 })
+      }
+      const clientSecret = data.clientSecret || current?.clientSecret
+      if (!clientSecret) throw new Response('client secret is required', { status: 400 })
+      setStoredIntegrationConfig(instance.repository, {
+        ...config,
+        [data.provider]: { enabled: false, clientId: data.clientId, clientSecret },
+      })
+      instance.events.publish('settings.changed')
+      await resetApp()
+      return { provider: data.provider, configured: true, enabled: false }
+    }),
+  )
+
+export const updateSocialProviderEnabled = createServerFn({ method: 'POST' })
+  .validator(socialProviderEnabledSchema)
+  .handler(async ({ data }) =>
+    rpc(async () => {
+      const instance = await app()
+      requireMutationOrigin()
+      await admin(instance)
+      const prefix = `AUTH_${data.provider.toUpperCase()}`
+      if (process.env[`${prefix}_CLIENT_ID`] || process.env[`${prefix}_CLIENT_SECRET`]) {
+        throw new Response(`${data.provider} is controlled by the deployment environment`, { status: 409 })
+      }
+      const config = integrationConfig(instance)
+      const provider = config[data.provider]
+      if (!provider) throw new Response(`${data.provider} is not configured`, { status: 400 })
+      if (data.enabled) {
+        const accounts = await instance.auth.api.listUserAccounts({ headers: getRequest().headers })
+        if (!accounts.some((account) => account.providerId === data.provider)) {
+          throw new Response(`test ${data.provider} by linking the current admin account before enabling it`, { status: 409 })
+        }
+      } else if (!instance.authCapabilities.password) {
+        const remaining = SOCIAL_AUTH_PROVIDERS.some((candidate) => candidate !== data.provider && config[candidate]?.enabled)
+        if (!remaining) throw new Response('cannot disable the last active authentication method', { status: 409 })
+      }
+      setStoredIntegrationConfig(instance.repository, { ...config, [data.provider]: { ...provider, enabled: data.enabled } })
+      instance.events.publish('settings.changed')
+      await resetApp()
+      return { provider: data.provider, enabled: data.enabled }
+    }),
+  )
+
+export const saveSmtpSettings = createServerFn({ method: 'POST' })
+  .validator(smtpEmailSettingsSchema)
+  .handler(async ({ data }) =>
+    rpc(async () => {
+      const instance = await app()
+      requireMutationOrigin()
+      const identity = await admin(instance)
+      if (process.env.SMTP_HOST) {
+        throw new Response('SMTP is controlled by the deployment environment', { status: 409 })
+      }
+      const config = integrationConfig(instance)
+      const current = resolveSmtpConfig(config, {})
+      const smtp = { ...data, password: data.password || current?.password, testedAt: Date.now() }
+      const delivery = buildEmailDelivery(smtp)!
+      try {
+        await delivery.verify()
+        await delivery.send({
+          to: identity.email,
+          subject: 'PrintHub email is configured',
+          text: 'Your PrintHub SMTP connection is configured and working.',
+          html: '<p>Your PrintHub SMTP connection is configured and working.</p>',
+        })
+      } catch (error) {
+        throw new Response(`SMTP verification failed: ${error instanceof Error ? error.message : 'unknown error'}`, { status: 400 })
+      }
+      setStoredIntegrationConfig(instance.repository, { ...config, smtp, email: undefined, emailTestedAt: undefined, emails: undefined })
+      instance.events.publish('settings.changed')
+      await resetApp()
+      return { configured: true }
+    }),
+  )
+
+export const removeSmtpSettings = createServerFn({ method: 'POST' }).handler(async () =>
+  rpc(async () => {
+    const instance = await app()
+    requireMutationOrigin()
+    await admin(instance)
+    if (process.env.SMTP_HOST) {
+      throw new Response('SMTP is controlled by the deployment environment', { status: 409 })
+    }
+    const config = integrationConfig(instance)
+    setStoredIntegrationConfig(instance.repository, {
+      ...config,
+      smtp: undefined,
+      email: undefined,
+      emailTestedAt: undefined,
+      emails: undefined,
+    })
+    instance.events.publish('settings.changed')
+    await resetApp()
+    return { configured: false }
+  }),
+)
+
+export const listRequests = createServerFn({ method: 'GET' })
+  .validator(requestFiltersSchema)
+  .handler(async ({ data }) =>
+    rpc(async () => {
+      const instance = await app()
+      return instance.service.listRequests(await me(instance), resolveBoardConfig(instance.repository).privateRequests, data)
+    }),
+  )
+
+export const listPeople = createServerFn({ method: 'GET' }).handler(async () =>
+  rpc(async () => {
+    const instance = await app()
+    const identity = await me(instance)
+    // With private requests, requesters see no one else — not even names.
+    if (identity.role !== 'admin' && resolveBoardConfig(instance.repository).privateRequests) {
+      return instance.service.listPeople().filter((person) => person.name === identity.name)
+    }
+    return instance.service.listPeople()
+  }),
+)
+
+export const listUsers = createServerFn({ method: 'GET' }).handler(async () =>
+  rpc(async () => {
+    const instance = await app()
+    if ((await me(instance)).role !== 'admin') throw new Response('forbidden', { status: 403 })
+    return instance.repository.listUsers().map((user) => ({ ...user, image: userImage(user.email, user.image) }))
+  }),
+)
 
 export const createInvite = createServerFn({ method: 'POST' })
-  .validator((data: { role: 'requester' | 'operator'; label?: string }) => data)
-  .handler(async ({ data }) => rpc(async () => {
-    const instance = await app()
-    requireMutationOrigin()
-    if ((await me(instance)).role !== 'operator') throw new Response('forbidden', { status: 403 })
-    if (data.role !== 'requester' && data.role !== 'operator') throw new Response('invalid role', { status: 400 })
-    const label = typeof data.label === 'string' ? data.label.trim().slice(0, 100) : ''
-    // The raw token exists only in this response; the database keeps a hash.
-    const token = crypto.randomBytes(32).toString('base64url')
-    instance.repository.createInvite({
-      id: crypto.randomUUID(),
-      tokenHash: hashInviteToken(token),
-      role: data.role,
-      label: label || undefined,
-      expiresAt: Date.now() + INVITE_TTL,
-    })
-    return { token }
-  }))
+  .validator(createInviteSchema)
+  .handler(async ({ data }) =>
+    rpc(async () => {
+      const instance = await app()
+      requireMutationOrigin()
+      if ((await me(instance)).role !== 'admin') throw new Response('forbidden', { status: 403 })
+      const label = data.label?.trim() ?? ''
+      if (data.email && !instance.emailDelivery) throw new Response('configure SMTP before emailing invitations', { status: 409 })
+      // The raw token exists only in this response; the database keeps a hash.
+      const token = crypto.randomBytes(32).toString('base64url')
+      const id = crypto.randomUUID()
+      instance.repository.createInvite({
+        id,
+        tokenHash: hashInviteToken(token),
+        role: data.role,
+        label: label || undefined,
+        expiresAt: Date.now() + INVITE_TTL,
+      })
+      const url = `${new URL(getRequest().url).origin}/invite/${token}`
+      if (data.email) {
+        try {
+          await instance.emailDelivery!.send({
+            to: data.email,
+            subject: 'You are invited to PrintHub',
+            text: `You have been invited to PrintHub. Create your account using this single-use link: ${url}\n\nThis link expires in seven days.`,
+            html: `<p>You have been invited to PrintHub.</p><p><a href="${url}">Create your account</a></p><p>This single-use link expires in seven days.</p>`,
+          })
+        } catch (error) {
+          instance.repository.deleteInvite(id)
+          throw new Response(`could not send invitation: ${error instanceof Error ? error.message : 'unknown error'}`, { status: 502 })
+        }
+      }
+      return { token, emailed: Boolean(data.email) }
+    }),
+  )
 
-export const listInvites = createServerFn({ method: 'GET' }).handler(async () => rpc(async () => {
-  const instance = await app()
-  if ((await me(instance)).role !== 'operator') throw new Response('forbidden', { status: 403 })
-  return instance.repository.listInvites().filter((invite) => !invite.usedAt && invite.expiresAt > Date.now())
-}))
+export const listInvites = createServerFn({ method: 'GET' }).handler(async () =>
+  rpc(async () => {
+    const instance = await app()
+    if ((await me(instance)).role !== 'admin') throw new Response('forbidden', { status: 403 })
+    return instance.repository.listInvites().filter((invite) => !invite.usedAt && invite.expiresAt > Date.now())
+  }),
+)
 
 export const revokeInvite = createServerFn({ method: 'POST' })
-  .validator((data: { id: string }) => data)
-  .handler(async ({ data }) => rpc(async () => {
-    const instance = await app()
-    requireMutationOrigin()
-    if ((await me(instance)).role !== 'operator') throw new Response('forbidden', { status: 403 })
-    instance.repository.deleteInvite(String(data.id))
-  }))
+  .validator(idSchema)
+  .handler(async ({ data }) =>
+    rpc(async () => {
+      const instance = await app()
+      requireMutationOrigin()
+      if ((await me(instance)).role !== 'admin') throw new Response('forbidden', { status: 403 })
+      instance.repository.deleteInvite(data.id)
+    }),
+  )
 
 // Public: the accept page needs to know whether the link is still good
 // before asking anyone to type anything.
 export const inviteInfo = createServerFn({ method: 'GET' })
-  .validator((data: { token: string }) => data)
-  .handler(async ({ data }) => rpc(async () => {
-    const instance = await app()
-    const invite = typeof data.token === 'string' ? instance.repository.findInvite(hashInviteToken(data.token)) : undefined
-    return { valid: !!invite && !invite.usedAt && invite.expiresAt > Date.now() }
-  }))
+  .validator(inviteInfoSchema)
+  .handler(async ({ data }) =>
+    rpc(async () => {
+      const instance = await app()
+      const invite = instance.repository.findInvite(hashInviteToken(data.token))
+      return {
+        valid: !!invite && !invite.usedAt && invite.expiresAt > Date.now(),
+        auth: instance.authCapabilities,
+      }
+    }),
+  )
+
+export const beginProviderInvite = createServerFn({ method: 'POST' })
+  .validator(beginProviderInviteSchema)
+  .handler(async ({ data }) =>
+    rpc(async () => {
+      const instance = await app()
+      requireMutationOrigin()
+      const invite = instance.repository.findInvite(hashInviteToken(data.token))
+      if (!invite || invite.usedAt || invite.expiresAt <= Date.now())
+        throw new Response('this invite link is no longer valid', { status: 410 })
+      if (!instance.authCapabilities.socialProviders.includes(data.provider)) {
+        throw new Response(`${data.provider} authentication is not enabled`, { status: 400 })
+      }
+      setCookie('printhub_invite', data.token, {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: new URL(getRequest().url).protocol === 'https:',
+        path: '/api/auth',
+        maxAge: 10 * 60,
+      })
+      return { provider: data.provider }
+    }),
+  )
 
 export const acceptInvite = createServerFn({ method: 'POST' })
-  .validator((data: { token: string; name: string; email: string; password: string }) => data)
-  .handler(async ({ data }) => rpc(async () => {
-    const instance = await app()
-    requireMutationOrigin()
-    if (typeof data.token !== 'string' || data.token.length > 100) throw new Response('invalid invite', { status: 400 })
-    const tokenHash = hashInviteToken(data.token)
-    const invite = instance.repository.findInvite(tokenHash)
-    if (!invite || invite.usedAt || invite.expiresAt <= Date.now()) throw new Response('this invite link is no longer valid', { status: 410 })
-    // Validate everything better-auth would reject before the sign-up hook
-    // consumes the invite, so a typo cannot burn the link.
-    if (typeof data.email !== 'string' || data.email.length > 254 || !/^\S+@\S+\.\S+$/.test(data.email)) throw new Response('use a valid email address', { status: 400 })
-    if (typeof data.name !== 'string' || !data.name.trim() || data.name.length > 100) throw new Response('use a valid name', { status: 400 })
-    if (typeof data.password !== 'string' || data.password.length < 8 || data.password.length > 256) throw new Response('use a password of at least 8 characters', { status: 400 })
-    if (instance.repository.listUsers().some((user) => user.email === data.email.trim().toLowerCase())) {
-      throw new Response('an account with this email already exists — sign in instead', { status: 409 })
-    }
+  .validator(acceptInviteSchema)
+  .handler(async ({ data }) =>
+    rpc(async () => {
+      const instance = await app()
+      requireMutationOrigin()
+      const tokenHash = hashInviteToken(data.token)
+      const invite = instance.repository.findInvite(tokenHash)
+      if (!invite || invite.usedAt || invite.expiresAt <= Date.now())
+        throw new Response('this invite link is no longer valid', { status: 410 })
+      if (instance.repository.listUsers().some((user) => user.email === data.email)) {
+        throw new Response('an account with this email already exists — sign in instead', { status: 409 })
+      }
 
-    const headers = new Headers(getRequest().headers)
-    headers.set(INVITE_HEADER, data.token)
-    const created = await instance.auth.api.signUpEmail({
-      body: { email: data.email.trim(), password: data.password, name: data.name.trim() },
-      headers,
-    })
-    instance.repository.completeInvite(invite.id, created.user.id)
-    if (invite.role === 'operator') {
-      instance.repository.database.prepare('UPDATE "user" SET role=? WHERE id=?').run('operator', created.user.id)
-    }
-  }))
+      const { withAuthInvite } = await import('./authInvite')
+      const created = await withAuthInvite(data.token, () =>
+        instance.auth.api.signUpEmail({
+          body: { email: data.email, password: data.password, name: data.name },
+          headers: getRequest().headers,
+        }),
+      )
+      if (invite.role === 'admin') {
+        instance.repository.database.prepare('UPDATE "user" SET role=? WHERE id=?').run('admin', created.user.id)
+      }
+    }),
+  )
 
 function maskStorage(config: StorageConfig) {
   return config.adapter === 's3' ? { ...config, secretAccessKey: '' } : config
 }
 
-export const getTelemetrySettings = createServerFn({ method: 'GET' }).handler(async () => rpc(async () => {
-  const instance = await app()
-  if ((await me(instance)).role !== 'operator') throw new Response('forbidden', { status: 403 })
-  return resolveTelemetryConfig(instance.repository)
-}))
+export const getTelemetrySettings = createServerFn({ method: 'GET' }).handler(async () =>
+  rpc(async () => {
+    const instance = await app()
+    if ((await me(instance)).role !== 'admin') throw new Response('forbidden', { status: 403 })
+    return resolveTelemetryConfig(instance.repository)
+  }),
+)
 
 export const updateTelemetrySettings = createServerFn({ method: 'POST' })
-  .validator((data: { enabled: boolean }) => data)
-  .handler(async ({ data }) => rpc(async () => {
-    const instance = await app()
-    requireMutationOrigin()
-    if ((await me(instance)).role !== 'operator') throw new Response('forbidden', { status: 403 })
-    const config = { enabled: data.enabled === true }
-    instance.repository.setSetting('telemetry', config)
-    instance.events.publish('settings.changed')
-    return config
-  }))
+  .validator(telemetrySettingsSchema)
+  .handler(async ({ data }) =>
+    rpc(async () => {
+      const instance = await app()
+      requireMutationOrigin()
+      if ((await me(instance)).role !== 'admin') throw new Response('forbidden', { status: 403 })
+      const config = { enabled: data.enabled }
+      instance.repository.setSetting('telemetry', config)
+      instance.events.publish('settings.changed')
+      return config
+    }),
+  )
 
-export const getBoardSettings = createServerFn({ method: 'GET' }).handler(async () => rpc(async () => {
-  const instance = await app()
-  if ((await me(instance)).role !== 'operator') throw new Response('forbidden', { status: 403 })
-  return resolveBoardConfig(instance.repository)
-}))
+export const getBoardSettings = createServerFn({ method: 'GET' }).handler(async () =>
+  rpc(async () => {
+    const instance = await app()
+    if ((await me(instance)).role !== 'admin') throw new Response('forbidden', { status: 403 })
+    return resolveBoardConfig(instance.repository)
+  }),
+)
+
+export const getDiagnostics = createServerFn({ method: 'GET' }).handler(async () =>
+  rpc(async () => {
+    const instance = await app()
+    if ((await me(instance)).role !== 'admin') throw new Response('forbidden', { status: 403 })
+    const operations = await instance.refreshDiagnostics()
+    return {
+      version: __APP_VERSION__,
+      storage: instance.storage.adapter,
+      storageReady: instance.storageReady,
+      queue: instance.assetQueue.stats(),
+      authentication: {
+        password: instance.authCapabilities.password,
+        socialProviders: instance.authCapabilities.socialProviders,
+        smtpConfigured: instance.emailCapabilities.configured,
+      },
+      incompleteUploads: instance.repository.incompleteUploadStats(Date.now()),
+      ...operations,
+    }
+  }),
+)
 
 export const updateBoardSettings = createServerFn({ method: 'POST' })
-  .validator((data: { privateRequests: boolean }) => data)
-  .handler(async ({ data }) => rpc(async () => {
-    const instance = await app()
-    requireMutationOrigin()
-    if ((await me(instance)).role !== 'operator') throw new Response('forbidden', { status: 403 })
-    const config = { privateRequests: data.privateRequests === true }
-    instance.repository.setSetting('board', config)
-    // Boards refetch over SSE so requesters' views update immediately.
-    instance.events.publish('board.changed')
-    return config
-  }))
+  .validator(boardSettingsSchema)
+  .handler(async ({ data }) =>
+    rpc(async () => {
+      const instance = await app()
+      requireMutationOrigin()
+      if ((await me(instance)).role !== 'admin') throw new Response('forbidden', { status: 403 })
+      const config = { privateRequests: data.privateRequests }
+      instance.repository.setSetting('board', config)
+      // Boards refetch over SSE so requesters' views update immediately.
+      instance.events.publish('board.changed')
+      return config
+    }),
+  )
 
-export const getStorageSettings = createServerFn({ method: 'GET' }).handler(async () => rpc(async () => {
-  const instance = await app()
-  if ((await me(instance)).role !== 'operator') throw new Response('forbidden', { status: 403 })
-  return maskStorage(instance.storage)
-}))
+export const getStorageSettings = createServerFn({ method: 'GET' }).handler(async () =>
+  rpc(async () => {
+    const instance = await app()
+    if ((await me(instance)).role !== 'admin') throw new Response('forbidden', { status: 403 })
+    return maskStorage(instance.storage)
+  }),
+)
 
 export const updateStorageSettings = createServerFn({ method: 'POST' })
-  .validator((data: StorageConfig) => data)
-  .handler(async ({ data }) => rpc(async () => {
-    const instance = await app()
-    requireMutationOrigin()
-    if ((await me(instance)).role !== 'operator') throw new Response('forbidden', { status: 403 })
+  .validator(storageSettingsSchema)
+  .handler(async ({ data }) =>
+    rpc(async () => {
+      const instance = await app()
+      requireMutationOrigin()
+      if ((await me(instance)).role !== 'admin') throw new Response('forbidden', { status: 403 })
 
-    let config: StorageConfig
-    if (data.adapter === 'local') {
-      const root = typeof data.root === 'string' ? data.root.trim() : ''
-      if (!root || root.length > 500 || !root.startsWith('/')) throw new Response('folder must be an absolute path', { status: 400 })
-      config = { adapter: 'local', root }
-    } else if (data.adapter === 's3') {
-      const current = instance.storage
-      // A blank secret keeps the currently saved one so edits never echo it.
-      const secretAccessKey = data.secretAccessKey || (current.adapter === 's3' ? current.secretAccessKey : '')
-      if (typeof data.endpoint !== 'string' || !validSourceUrl(data.endpoint.trim())) throw new Response('endpoint must be an http(s) URL', { status: 400 })
-      if (typeof data.bucket !== 'string' || !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(data.bucket)) throw new Response('invalid bucket name', { status: 400 })
-      if (typeof data.region !== 'string' || data.region.length > 64) throw new Response('invalid region', { status: 400 })
-      const prefix = typeof data.prefix === 'string' ? data.prefix.trim().replace(/^\/+|\/+$/g, '') : ''
-      if (prefix.length > 200 || prefix.split('/').some((segment) => segment === '.' || segment === '..')) throw new Response('invalid prefix', { status: 400 })
-      if (typeof data.accessKeyId !== 'string' || !data.accessKeyId.trim() || data.accessKeyId.length > 128) throw new Response('missing access key', { status: 400 })
-      if (typeof secretAccessKey !== 'string' || !secretAccessKey || secretAccessKey.length > 256) throw new Response('missing secret access key', { status: 400 })
-      config = {
-        adapter: 's3',
-        endpoint: data.endpoint.trim(),
-        region: data.region.trim(),
-        bucket: data.bucket,
-        prefix: prefix || undefined,
-        accessKeyId: data.accessKeyId.trim(),
-        secretAccessKey,
-        forcePathStyle: data.forcePathStyle === true,
+      let config: StorageConfig
+      if (data.adapter === 'local') {
+        config = data
+      } else {
+        const current = instance.storage
+        // A blank secret keeps the currently saved one so edits never echo it.
+        const secretAccessKey = data.secretAccessKey || (current.adapter === 's3' ? current.secretAccessKey : '')
+        if (!secretAccessKey) throw new Response('missing secret access key', { status: 400 })
+        const prefix = data.prefix?.trim().replace(/^\/+|\/+$/g, '') ?? ''
+        if (prefix.length > 200 || prefix.split('/').some((segment) => segment === '.' || segment === '..'))
+          throw new Response('invalid prefix', { status: 400 })
+        config = {
+          adapter: 's3',
+          endpoint: data.endpoint,
+          region: data.region,
+          bucket: data.bucket,
+          prefix: prefix || undefined,
+          accessKeyId: data.accessKeyId,
+          secretAccessKey,
+          forcePathStyle: data.forcePathStyle,
+        }
       }
-    } else {
-      throw new Response('unknown storage adapter', { status: 400 })
-    }
 
-    if (instance.repository.listRequests().length > 0 || instance.repository.listOperations().length > 0 || instance.repository.activeUploadIds(Date.now()).size > 0) {
-      throw new Response('storage can only be changed while the board is empty and no uploads are in flight', { status: 409 })
-    }
+      if (
+        instance.repository.listRequests().length > 0 ||
+        instance.repository.listOperations().length > 0 ||
+        instance.repository.activeUploadIds(Date.now()).size > 0
+      ) {
+        throw new Response('storage can only be changed while the board is empty and no uploads are in flight', { status: 409 })
+      }
 
-    const candidate = buildAssetStore(config)
-    try {
-      await candidate.initialize()
-      await candidate.writable()
-    } catch (error) {
-      throw new Response(`storage is not reachable or not writable: ${error instanceof Error ? error.message : 'unknown error'}`, { status: 400 })
-    }
+      const candidate = buildAssetStore(config)
+      try {
+        await candidate.initialize()
+        await candidate.writable()
+      } catch (error) {
+        throw new Response(`storage is not reachable or not writable: ${error instanceof Error ? error.message : 'unknown error'}`, {
+          status: 400,
+        })
+      }
 
-    instance.repository.setSetting('storage', config)
-    // On the old bus deliberately: resetApp replaces it, and this nudges
-    // connected tabs to refetch before their streams reconnect.
-    instance.events.publish('settings.changed')
-    await resetApp()
-    return maskStorage(config)
-  }))
+      instance.repository.setSetting('storage', config)
+      // On the old bus deliberately: resetApp replaces it, and this nudges
+      // connected tabs to refetch before their streams reconnect.
+      instance.events.publish('settings.changed')
+      await resetApp()
+      return maskStorage(config)
+    }),
+  )
 
 export const moveCopies = createServerFn({ method: 'POST' })
-  .validator((data: { id: string; from: string; to: string; count: number; order?: number }) => data)
-  .handler(async ({ data }) => rpc(async () => { const instance = await app(); requireMutationOrigin(); return instance.service.moveCopies(data, await me(instance)) }))
+  .validator(moveCopiesSchema)
+  .handler(async ({ data }) =>
+    rpc(async () => {
+      const instance = await app()
+      requireMutationOrigin()
+      return instance.service.moveCopies(data, await me(instance))
+    }),
+  )
 
 export const reorderRequest = createServerFn({ method: 'POST' })
-  .validator((data: { id: string; status: string; order: number }) => data)
-  .handler(async ({ data }) => rpc(async () => { const instance = await app(); requireMutationOrigin(); return instance.service.reorder(data.id, data.status, data.order, await me(instance)) }))
+  .validator(reorderRequestSchema)
+  .handler(async ({ data }) =>
+    rpc(async () => {
+      const instance = await app()
+      requireMutationOrigin()
+      return instance.service.reorder(data.id, data.status, data.order, await me(instance))
+    }),
+  )
 
 export const updateRequest = createServerFn({ method: 'POST' })
-  .validator((data: { id: string; name?: string; quantity?: number; requesterName?: string; notes?: string; sourceUrl?: string }) => data)
-  .handler(async ({ data }) => rpc(async () => {
-    const instance = await app()
-    requireMutationOrigin()
-    const { id, ...fields } = data
-    instance.service.update(id, fields, await me(instance))
-  }))
+  .validator(updateRequestSchema)
+  .handler(async ({ data }) =>
+    rpc(async () => {
+      const instance = await app()
+      requireMutationOrigin()
+      const { id, ...fields } = data
+      instance.service.update(id, fields, await me(instance))
+    }),
+  )
 
 export const deleteRequest = createServerFn({ method: 'POST' })
-  .validator((data: { id: string }) => data)
-  .handler(async ({ data }) => rpc(async () => { const instance = await app(); requireMutationOrigin(); return instance.service.remove(data.id, await me(instance)) }))
+  .validator(idSchema)
+  .handler(async ({ data }) =>
+    rpc(async () => {
+      const instance = await app()
+      requireMutationOrigin()
+      return instance.service.remove(data.id, await me(instance))
+    }),
+  )

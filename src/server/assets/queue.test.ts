@@ -40,7 +40,13 @@ describe('asset generation queue', () => {
 
   async function requestWithFile(file: Uint8Array = triangleStl()) {
     await assets.write('todo/model.stl', file)
-    return repository.createRequest({ name: 'Model', fileName: 'model.stl', filePath: 'todo/model.stl', quantity: 1, requesterEmail: 'owner@example.com' })
+    return repository.createRequest({
+      name: 'Model',
+      fileName: 'model.stl',
+      filePath: 'todo/model.stl',
+      quantity: 1,
+      requesterEmail: 'owner@example.com',
+    })
   }
 
   it('generates a thumbnail, stamps the request, and publishes an update', async () => {
@@ -54,6 +60,15 @@ describe('asset generation queue', () => {
     expect(await assets.exists(request.thumbnailPath!)).toBe(true)
     expect(published).toContain('request.updated')
     expect(repository.requestsNeedingAssets()).toHaveLength(0)
+  })
+
+  it('reports queue depth and worker mode for health checks', async () => {
+    const id = await requestWithFile()
+    expect(queue.stats()).toEqual({ queued: 0, pending: 0, worker: false })
+    queue.enqueue(id)
+    expect(queue.stats().queued + queue.stats().pending).toBe(1)
+    await queue.idle()
+    expect(queue.stats()).toEqual({ queued: 0, pending: 0, worker: false })
   })
 
   it('backfills every unstamped request and skips stamped ones afterwards', async () => {

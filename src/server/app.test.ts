@@ -26,12 +26,13 @@ describe('app initialization', () => {
     seed.setSetting('storage', { adapter: 'local', root: invalidPrints })
     seed.close()
 
-    const { app, resetApp } = await import('./app')
+    const { app } = await import('./app')
     const broken = await app()
     expect(broken.storageReady).toBe(false)
-    broken.repository.setSetting('storage', { adapter: 'local', root: path.join(temporary, 'prints') })
-    await resetApp()
-    await expect(app()).resolves.toMatchObject({ storageReady: true })
+    await fs.promises.rm(invalidPrints)
+    await fs.promises.mkdir(invalidPrints)
+    await expect(broken.recoverStorage()).resolves.toBe(true)
+    expect(broken.storageReady).toBe(true)
   })
 
   it('clears a rejected singleton and recovers after a transient database failure', async () => {

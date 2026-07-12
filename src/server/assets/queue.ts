@@ -2,9 +2,12 @@ import fs from 'node:fs'
 import { setImmediate } from 'node:timers/promises'
 import { Worker } from 'node:worker_threads'
 import { fileURLToPath } from 'node:url'
+import PQueue from 'p-queue'
 import type { AssetStore, EventBus, Repository, Telemetry } from '../../core/types'
 import { thumbnailKey } from '../../core/assetKeys'
 import { generateAssets, type GeneratedAssets } from './pipeline'
+import { logger } from '../logger'
+import { assetJobDuration, assetJobs, assetQueueDepth } from '../metrics'
 
 // In production the mesh work runs in a per-job worker_thread (bundled by
 // `pnpm build` next to the server entry), so a heavy decimation cannot stall
@@ -18,7 +21,7 @@ function resolveWorkerPath(): string | undefined {
       if (fs.existsSync(resolved)) return resolved
     } catch {}
   }
-  console.warn('[printhub] assets-worker.mjs not found next to the server bundle; generating assets in-process')
+  logger.warn('assets worker not found next to server bundle; generating assets in-process')
   return undefined
 }
 
@@ -26,7 +29,8 @@ function resolveWorkerPath(): string | undefined {
 // time keeps memory bounded (a job holds the whole STL), and a NAS-scale
 // board rarely queues more than a handful.
 export class AssetGenerationQueue {
-  private chain: Promise<void> = Promise.resolve()
+  private queue = new PQueue({ concurrency: 1 })
+  private queued = new Set<string>()
   private workerPath = resolveWorkerPath()
 
   constructor(
@@ -37,7 +41,16 @@ export class AssetGenerationQueue {
   ) {}
 
   enqueue(requestId: string) {
-    this.chain = this.chain.then(() => this.process(requestId)).catch(() => undefined)
+    if (this.queued.has(requestId)) return
+    this.queued.add(requestId)
+    void this.queue
+      .add(() => this.process(requestId))
+      .catch((error) => logger.error({ err: error, requestId }, 'asset queue job failed'))
+      .finally(() => {
+        this.queued.delete(requestId)
+        this.updateMetrics()
+      })
+    this.updateMetrics()
   }
 
   /** Queue every request never stamped as processed — new uploads from a crash, imported boards, interrupted jobs. */
@@ -47,10 +60,21 @@ export class AssetGenerationQueue {
 
   /** Resolves once everything currently queued has finished; for tests and shutdown. */
   idle() {
-    return this.chain
+    return this.queue.onIdle()
+  }
+
+  stats() {
+    return { queued: this.queue.size, pending: this.queue.pending, worker: !!this.workerPath }
+  }
+
+  private updateMetrics() {
+    assetQueueDepth.set({ state: 'queued' }, this.queue.size)
+    assetQueueDepth.set({ state: 'running' }, this.queue.pending)
   }
 
   private async process(requestId: string) {
+    const startedAt = performance.now()
+    const log = logger.child({ requestId })
     const request = this.repository.getRequest(requestId)
     if (!request) return
     const wants = { thumbnail: !request.thumbnailPath, preview: !request.previewPath }
@@ -66,6 +90,9 @@ export class AssetGenerationQueue {
       // Storage trouble is transient: leave the request unstamped so the next
       // boot's backfill retries it.
       void this.telemetry.exception(error, { action: 'assets_read', request_id: requestId }).catch(() => undefined)
+      log.warn({ err: error }, 'asset source read failed')
+      assetJobs.inc({ outcome: 'read_error' })
+      assetJobDuration.observe({ outcome: 'read_error' }, (performance.now() - startedAt) / 1000)
       return
     }
 
@@ -76,7 +103,10 @@ export class AssetGenerationQueue {
     } catch (error) {
       // Unparseable model: stamp it processed so it is not retried forever.
       void this.telemetry.exception(error, { action: 'assets_generate', request_id: requestId }).catch(() => undefined)
+      log.warn({ err: error }, 'asset generation failed')
       this.repository.completeAssetGeneration(requestId, {})
+      assetJobs.inc({ outcome: 'invalid_model' })
+      assetJobDuration.observe({ outcome: 'invalid_model' }, (performance.now() - startedAt) / 1000)
       return
     }
 
@@ -87,8 +117,17 @@ export class AssetGenerationQueue {
       if (generated.previewStl && previewPath) await this.assets.write(previewPath, generated.previewStl)
       this.repository.completeAssetGeneration(requestId, { thumbnailPath, previewPath })
       this.events.publish('request.updated')
+      log.info(
+        { durationMs: Math.round(performance.now() - startedAt), thumbnail: !!thumbnailPath, preview: !!previewPath },
+        'asset generation completed',
+      )
+      assetJobs.inc({ outcome: 'success' })
+      assetJobDuration.observe({ outcome: 'success' }, (performance.now() - startedAt) / 1000)
     } catch (error) {
       void this.telemetry.exception(error, { action: 'assets_write', request_id: requestId }).catch(() => undefined)
+      log.warn({ err: error }, 'generated asset write failed')
+      assetJobs.inc({ outcome: 'write_error' })
+      assetJobDuration.observe({ outcome: 'write_error' }, (performance.now() - startedAt) / 1000)
     }
   }
 
