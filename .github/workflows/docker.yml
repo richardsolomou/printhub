@@ -92,6 +92,25 @@ jobs:
           MINIO_TEST_ACCESS_KEY: minioadmin
           MINIO_TEST_SECRET_KEY: minioadmin
 
+  release:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push')
+    needs: [check, e2e]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      created: ${{ steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - name: Create or update release
+        if: github.event_name == 'push'
+        id: release
+        uses: googleapis/release-please-action@v5
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
   build-image:
     if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push')
     name: Build image (${{ matrix.platform }})
@@ -143,7 +162,7 @@ jobs:
 
   publish-image:
     if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push')
-    needs: [check, e2e, build-image]
+    needs: [check, e2e, release, build-image]
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -161,9 +180,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Read version
-        id: version
-        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
       - name: Create multi-platform image
         working-directory: ${{ runner.temp }}/digests
         run: |
@@ -171,14 +187,22 @@ jobs:
           for digest in *; do
             images+=("${IMAGE}@sha256:${digest}")
           done
+
+          tags=(
+            --tag "${IMAGE}:latest"
+            --tag "${IMAGE}:sha-${GITHUB_SHA}"
+          )
+          if [ "$RELEASE_CREATED" = "true" ]; then
+            tags+=(--tag "${IMAGE}:${RELEASE_TAG}")
+          fi
+
           docker buildx imagetools create \
-            --tag "${IMAGE}:latest" \
-            --tag "${IMAGE}:v${VERSION}" \
-            --tag "${IMAGE}:sha-${GITHUB_SHA}" \
+            "${tags[@]}" \
             "${images[@]}"
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/printhub
-          VERSION: ${{ steps.version.outputs.version }}
+          RELEASE_CREATED: ${{ needs.release.outputs.created }}
+          RELEASE_TAG: ${{ needs.release.outputs.tag }}
       - uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ghcr.io/${{ github.repository_owner }}/printhub:sha-${{ github.sha }}
