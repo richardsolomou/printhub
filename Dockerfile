@@ -7,9 +7,15 @@ COPY . .
 RUN pnpm build
 
 FROM node:22-alpine
+LABEL org.opencontainers.image.title="PrintHub" \
+      org.opencontainers.image.description="Self-hosted 3D print request queue" \
+      org.opencontainers.image.source="https://github.com/richardsolomou/printhub" \
+      org.opencontainers.image.licenses="MIT"
 WORKDIR /app
 COPY --from=build /app/.output ./.output
 ENV NODE_ENV=production PORT=3000 DATA_DIR=/data
 VOLUME ["/data", "/prints"]
 EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD wget -q --spider http://127.0.0.1:3000/api/health || exit 1
 CMD ["node", ".output/server/index.mjs"]

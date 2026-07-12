@@ -8,6 +8,7 @@ dist/
 data-dev/
 prints-dev/
 src/routeTree.gen.ts
-deploy/
+deploy/*.local.*
 .pnpm-store/
 .DS_Store
+.claude/settings.local.json

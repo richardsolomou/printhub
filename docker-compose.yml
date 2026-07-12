@@ -1,17 +1,13 @@
 services:
-  app:
+  printhub:
     image: ghcr.io/richardsolomou/printhub:latest
     build:
       context: .
     restart: unless-stopped
     ports:
       - '3010:3000'
-    healthcheck:
-      test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:3000/api/health']
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
     volumes:
-      - ${DATA_HOST_DIR:-/mnt/HDDs/STL/.printhub-data}:/data
-      - ${PRINTS_HOST_DIR:-/mnt/HDDs/STL}:/prints
+      # App data: SQLite database, settings, in-flight uploads.
+      - ${DATA_HOST_DIR:-./printhub-data}:/data
+      # Your print files: todo/, in-progress/, done/ live here as plain files.
+      - ${PRINTS_HOST_DIR:-./prints}:/prints

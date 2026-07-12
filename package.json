@@ -1,7 +1,14 @@
 {
   "name": "printhub",
   "version": "0.16.0",
+  "description": "Self-hosted 3D print request queue: friends or customers upload STLs to a Kanban board, files stay as plain files on storage you control.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/richardsolomou/printhub.git"
+  },
+  "homepage": "https://github.com/richardsolomou/printhub",
+  "bugs": "https://github.com/richardsolomou/printhub/issues",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
