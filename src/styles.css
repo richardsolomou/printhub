@@ -723,11 +723,16 @@ select:focus-visible,
   color: var(--text);
 }
 
+/* Unlike the board's fixed-height .app shell, settings flows normally so
+   the whole document scrolls and the sidebar can stick. */
+.settings-layout {
+  min-height: 100dvh;
+}
+
 .settings-page {
   width: min(760px, 100%);
   margin: 0 auto;
   padding: 28px 20px 48px;
-  overflow-y: auto;
 }
 
 .settings-body {
@@ -738,6 +743,8 @@ select:focus-visible,
 }
 
 .settings-nav {
+  position: sticky;
+  top: 24px;
   display: flex;
   flex-direction: column;
   gap: 2px;

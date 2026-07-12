@@ -15,7 +15,7 @@ function SettingsPage() {
     return null
   }
   return (
-    <div className="app">
+    <div className="settings-layout">
       <header className="header">
         <h1 className="logo">Print<span className="accent">Hub</span></h1>
         <span className="who">Settings</span>
