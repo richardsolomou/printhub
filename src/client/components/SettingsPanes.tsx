@@ -8,6 +8,7 @@ import { BoardPane } from './settings/BoardPane'
 import { DiagnosticsPane } from './settings/DiagnosticsPane'
 import { IntegrationsPane } from './settings/IntegrationsPane'
 import { PrintersPane } from './settings/PrintersPane'
+import { RecoveryPane } from './settings/RecoveryPane'
 import { StoragePane } from './settings/StoragePane'
 import { TelemetryPane } from './settings/TelemetryPane'
 import { UsersPane } from './settings/UsersPane'
@@ -20,6 +21,7 @@ export const settingsSections = [
   'storage',
   'integrations',
   'telemetry',
+  'recovery',
   'diagnostics',
   'about',
 ] as const
@@ -33,6 +35,7 @@ const panes: { id: SettingsSection; label: string }[] = [
   { id: 'storage', label: 'Storage' },
   { id: 'integrations', label: 'Integrations' },
   { id: 'telemetry', label: 'Telemetry' },
+  { id: 'recovery', label: 'Recovery' },
   { id: 'diagnostics', label: 'Diagnostics' },
   { id: 'about', label: 'About' },
 ]
@@ -72,6 +75,7 @@ export function SettingsPanes({ me, section }: { me: Identity; section: Settings
         {me.role === 'admin' && section === 'storage' && <StoragePane />}
         {me.role === 'admin' && section === 'integrations' && <IntegrationsPane />}
         {me.role === 'admin' && section === 'telemetry' && <TelemetryPane />}
+        {me.role === 'admin' && section === 'recovery' && <RecoveryPane />}
         {me.role === 'admin' && section === 'diagnostics' && <DiagnosticsPane />}
         {me.role === 'admin' && section === 'about' && <AboutPane />}
       </div>
