@@ -33,11 +33,21 @@ pnpm migrate:convex -- \
 - `--operator`/`--operator-password` give one account a password. PrintHub signs in with built-in email/password accounts only, so pass it — without it nobody can sign in after the import.
 - The importer moves `.previews/*` into the new `.printhub/previews/` layout, verifies every request's file exists on disk (warning if not), records the prints location in settings, and refuses to run against a database that already has requests.
 
-## 5. First start
+## 5. Verify the import
+
+Before starting the app, run the independent verifier — it compares every exported field against the imported database and the files on disk:
+
+```sh
+pnpm exec tsx scripts/verify-convex-import.ts ./printhub-export /mnt/HDDs/STL/.printhub-data /mnt/HDDs/STL
+```
+
+It must end with `NO METADATA MISMATCHES` and full file counts; anything else lists the exact request and field that differs.
+
+## 6. First start
 
 Start the container and open the app. Sign in with the `--operator` credentials. Verify the board: columns and copy counts should match the old app, thumbnails render, and downloads work.
 
-## 6. Let teammates back in
+## 7. Let teammates back in
 
 The old deployment authenticated with Cloudflare Access headers; the new app uses built-in email/password accounts. Your teammates' accounts were imported with the same emails, names, and colors, but without passwords. Set one for each under **Settings → Users → Set password** and share it with them directly; they can change it themselves afterwards under Account.
 
