@@ -112,7 +112,7 @@ describe('asset generation queue', () => {
       bundle: true,
       platform: 'node',
       format: 'esm',
-      target: 'node22',
+      target: 'node24',
       outfile: workerPath,
       logLevel: 'silent',
     })

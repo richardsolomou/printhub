@@ -1,4 +1,4 @@
-FROM node:22-alpine AS build
+FROM node:24-alpine AS build
 WORKDIR /app
 RUN npm i -g pnpm@10.33.0
 COPY package.json pnpm-lock.yaml ./
@@ -6,7 +6,7 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build
 
-FROM node:22-alpine
+FROM node:24-alpine
 LABEL org.opencontainers.image.title="PrintHub" \
       org.opencontainers.image.description="Self-hosted 3D print request queue" \
       org.opencontainers.image.source="https://github.com/richardsolomou/printhub" \

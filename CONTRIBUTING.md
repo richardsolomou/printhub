@@ -4,7 +4,7 @@ Thanks for helping! PrintHub aims to stay a small, hackable codebase — read [V
 
 ## Development setup
 
-Requirements: Node 22+ and pnpm 10.33+.
+Requirements: Node 24 and pnpm 10.33+.
 
 ```sh
 pnpm install

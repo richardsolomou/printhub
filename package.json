@@ -13,7 +13,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build && esbuild src/server/assets/worker.ts --bundle --platform=node --format=esm --target=node22 --outfile=.output/server/assets-worker.mjs --log-level=warning",
+    "build": "vite build && esbuild src/server/assets/worker.ts --bundle --platform=node --format=esm --target=node24 --outfile=.output/server/assets-worker.mjs --log-level=warning",
     "start": "node .output/server/index.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint --type-aware --deny-warnings .",
@@ -100,6 +100,9 @@
     "typescript": "^7.0.2",
     "vite": "^8.1.4",
     "vitest": "^4.1.10"
+  },
+  "engines": {
+    "node": ">=24 <25"
   },
   "packageManager": "pnpm@10.33.0",
   "pnpm": {
