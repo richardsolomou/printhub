@@ -62,6 +62,37 @@ type RequestRow = {
 
 type SqlFilterOptions = { omitRequester?: boolean; includeOwner?: boolean }
 
+function mapPlateModelAnalysis(row: unknown): import('../core/platePlanner').PlateModelAnalysis {
+  const analysis = row as {
+    request_id: string
+    width_mm: number
+    depth_mm: number
+    height_mm: number
+    orientation_quaternion: string | null
+    orientation_island_count: number | null
+    orientation_risk: number | null
+    orientation_candidates: string | null
+    content_hash: string | null
+    analysis_version: number
+  }
+  return {
+    requestId: analysis.request_id,
+    widthMm: analysis.width_mm,
+    depthMm: analysis.depth_mm,
+    heightMm: analysis.height_mm,
+    orientationQuaternion: analysis.orientation_quaternion
+      ? (JSON.parse(analysis.orientation_quaternion) as [number, number, number, number])
+      : undefined,
+    orientationIslandCount: analysis.orientation_island_count ?? undefined,
+    orientationRisk: analysis.orientation_risk ?? undefined,
+    orientationCandidates: analysis.orientation_candidates
+      ? (JSON.parse(analysis.orientation_candidates) as import('../core/mesh/resinOrientation').ResinOrientation[])
+      : undefined,
+    contentHash: analysis.content_hash ?? undefined,
+    analysisVersion: analysis.analysis_version,
+  }
+}
+
 const ORDER_BY: Record<NonNullable<RequestFilters['sort']>, string> = {
   board: 'r.created_at DESC',
   'updated-desc': 'r.updated_at DESC, r.created_at DESC',
@@ -408,6 +439,16 @@ export class SqliteRepository implements Repository {
       .run(generated.thumbnailPath ?? null, generated.previewPath ?? null, now, now, id)
   }
 
+  getPlateModelAnalysis(requestId: string) {
+    const row = this.db
+      .prepare(
+        `SELECT request_id,width_mm,depth_mm,height_mm,orientation_quaternion,orientation_island_count,orientation_risk,
+                orientation_candidates,content_hash,analysis_version FROM plate_model_analysis WHERE request_id=?`,
+      )
+      .get(requestId)
+    return row ? mapPlateModelAnalysis(row) : undefined
+  }
+
   listPlateModelAnalyses() {
     return this.db
       .prepare(
@@ -415,36 +456,7 @@ export class SqliteRepository implements Repository {
                 orientation_candidates,content_hash,analysis_version FROM plate_model_analysis ORDER BY request_id`,
       )
       .all()
-      .map((row) => {
-        const analysis = row as {
-          request_id: string
-          width_mm: number
-          depth_mm: number
-          height_mm: number
-          orientation_quaternion: string | null
-          orientation_island_count: number | null
-          orientation_risk: number | null
-          orientation_candidates: string | null
-          content_hash: string | null
-          analysis_version: number
-        }
-        return {
-          requestId: analysis.request_id,
-          widthMm: analysis.width_mm,
-          depthMm: analysis.depth_mm,
-          heightMm: analysis.height_mm,
-          orientationQuaternion: analysis.orientation_quaternion
-            ? (JSON.parse(analysis.orientation_quaternion) as [number, number, number, number])
-            : undefined,
-          orientationIslandCount: analysis.orientation_island_count ?? undefined,
-          orientationRisk: analysis.orientation_risk ?? undefined,
-          orientationCandidates: analysis.orientation_candidates
-            ? (JSON.parse(analysis.orientation_candidates) as import('../core/mesh/resinOrientation').ResinOrientation[])
-            : undefined,
-          contentHash: analysis.content_hash ?? undefined,
-          analysisVersion: analysis.analysis_version,
-        }
-      })
+      .map(mapPlateModelAnalysis)
   }
 
   upsertPlateModelAnalyses(analyses: import('../core/platePlanner').PlateModelAnalysis[]) {

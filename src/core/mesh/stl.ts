@@ -2,7 +2,10 @@ import * as THREE from 'three'
 import { STLExporter, STLLoader } from 'three-stdlib'
 
 export function parseStl(file: Uint8Array): Float32Array {
-  const buffer = file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength) as ArrayBuffer
+  const buffer =
+    file.byteOffset === 0 && file.byteLength === file.buffer.byteLength
+      ? (file.buffer as ArrayBuffer)
+      : (file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength) as ArrayBuffer)
   const geometry = new STLLoader().parse(buffer)
   const position = geometry.getAttribute('position')
   if (!position || position.count === 0) throw new Error('empty STL')

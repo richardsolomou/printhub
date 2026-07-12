@@ -68,14 +68,16 @@ export function rasterize(positions: Float32Array, size: number): Uint8Array {
     let behind = false
     for (let corner = 0; corner < 3; corner++) {
       const base = triangle * 9 + corner * 3
-      const relative = [world[base] - eye[0], world[base + 1] - eye[1], world[base + 2] - eye[2]]
-      const z = relative[0] * forward[0] + relative[1] * forward[1] + relative[2] * forward[2]
+      const relativeX = world[base] - eye[0]
+      const relativeY = world[base + 1] - eye[1]
+      const relativeZ = world[base + 2] - eye[2]
+      const z = relativeX * forward[0] + relativeY * forward[1] + relativeZ * forward[2]
       if (z <= 0) {
         behind = true
         break
       }
-      const x = relative[0] * right[0] + relative[1] * right[1] + relative[2] * right[2]
-      const y = relative[0] * up[0] + relative[1] * up[1] + relative[2] * up[2]
+      const x = relativeX * right[0] + relativeY * right[1] + relativeZ * right[2]
+      const y = relativeX * up[0] + relativeY * up[1] + relativeZ * up[2]
       screenX[corner] = ((x / z) * focal + 1) * 0.5 * raster
       screenY[corner] = (1 - (y / z) * focal) * 0.5 * raster
       inverseZ[corner] = 1 / z
@@ -93,22 +95,27 @@ export function rasterize(positions: Float32Array, size: number): Uint8Array {
     const vx = world[base + 6] - world[base]
     const vy = world[base + 7] - world[base + 1]
     const vz = world[base + 8] - world[base + 2]
-    let normal = normalize([uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx])
-    const toEye = [eye[0] - world[base], eye[1] - world[base + 1], eye[2] - world[base + 2]]
-    if (normal[0] * toEye[0] + normal[1] * toEye[1] + normal[2] * toEye[2] < 0) {
-      normal = [-normal[0], -normal[1], -normal[2]]
+    let normalX = uy * vz - uz * vy
+    let normalY = uz * vx - ux * vz
+    let normalZ = ux * vy - uy * vx
+    const normalLength = Math.hypot(normalX, normalY, normalZ) || 1
+    normalX /= normalLength
+    normalY /= normalLength
+    normalZ /= normalLength
+    if (normalX * (eye[0] - world[base]) + normalY * (eye[1] - world[base + 1]) + normalZ * (eye[2] - world[base + 2]) < 0) {
+      normalX = -normalX
+      normalY = -normalY
+      normalZ = -normalZ
     }
-    const hemisphereMix = (normal[1] + 1) / 2
-    const key = KEY_INTENSITY * Math.max(0, normal[0] * LIGHT[0] + normal[1] * LIGHT[1] + normal[2] * LIGHT[2])
-    const shade = [0, 1, 2].map((channel) => {
-      const hemisphere = (GROUND[channel] + (SKY[channel] - GROUND[channel]) * hemisphereMix) * HEMISPHERE_INTENSITY
-      const linear = BASE_COLOR[channel] * (hemisphere + key) * EXPOSURE
-      // Reinhard keeps highlights from clipping flat.
-      return linear / (1 + linear * 0.35)
-    })
-    const red = Math.round(shade[0] * 255)
-    const green = Math.round(shade[1] * 255)
-    const blue = Math.round(shade[2] * 255)
+    const hemisphereMix = (normalY + 1) / 2
+    const key = KEY_INTENSITY * Math.max(0, normalX * LIGHT[0] + normalY * LIGHT[1] + normalZ * LIGHT[2])
+    const redLinear = BASE_COLOR[0] * ((GROUND[0] + (SKY[0] - GROUND[0]) * hemisphereMix) * HEMISPHERE_INTENSITY + key) * EXPOSURE
+    const greenLinear = BASE_COLOR[1] * ((GROUND[1] + (SKY[1] - GROUND[1]) * hemisphereMix) * HEMISPHERE_INTENSITY + key) * EXPOSURE
+    const blueLinear = BASE_COLOR[2] * ((GROUND[2] + (SKY[2] - GROUND[2]) * hemisphereMix) * HEMISPHERE_INTENSITY + key) * EXPOSURE
+    // Reinhard keeps highlights from clipping flat.
+    const red = Math.round((redLinear / (1 + redLinear * 0.35)) * 255)
+    const green = Math.round((greenLinear / (1 + greenLinear * 0.35)) * 255)
+    const blue = Math.round((blueLinear / (1 + blueLinear * 0.35)) * 255)
 
     const minX = Math.max(0, Math.floor(Math.min(screenX[0], screenX[1], screenX[2])))
     const maxX = Math.min(raster - 1, Math.ceil(Math.max(screenX[0], screenX[1], screenX[2])))

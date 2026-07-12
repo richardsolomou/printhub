@@ -179,6 +179,14 @@ describe('asset generation queue', () => {
     ])
   })
 
+  it('looks up existing orientation analysis without scanning every model', async () => {
+    const id = await requestWithFile()
+    const list = vi.spyOn(repository, 'listPlateModelAnalyses')
+    queue.enqueue(id)
+    await queue.idle()
+    expect(list).not.toHaveBeenCalled()
+  })
+
   it('backfills interrupted orientation jobs after restart', async () => {
     const id = await requestWithFile()
     repository.queueOrientationAnalysis(id, ORIENTATION_ANALYSIS_VERSION)

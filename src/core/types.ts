@@ -160,6 +160,7 @@ export interface Repository {
   startOrientationAnalysis(id: string, analysisVersion: number): void
   failOrientationAnalysis(id: string, analysisVersion: number, error: string): void
   listOrientationAnalysisJobs(): import('./platePlanner').OrientationAnalysisJob[]
+  getPlateModelAnalysis(requestId: string): import('./platePlanner').PlateModelAnalysis | undefined
   findPlateModelAnalysisByContentHash(contentHash: string, analysisVersion: number): import('./platePlanner').PlateModelAnalysis | undefined
   completeAssetGeneration(id: string, generated: { thumbnailPath?: string; previewPath?: string }): void
   listPlateModelAnalyses(): import('./platePlanner').PlateModelAnalysis[]

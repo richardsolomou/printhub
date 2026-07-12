@@ -97,7 +97,7 @@ export class AssetGenerationQueue {
     const log = logger.child({ requestId })
     const request = this.repository.getRequest(requestId)
     if (!request) return
-    const existingAnalysis = this.repository.listPlateModelAnalyses().find((analysis) => analysis.requestId === requestId)
+    const existingAnalysis = this.repository.getPlateModelAnalysis(requestId)
     const wantsOrientation =
       existingAnalysis?.analysisVersion !== ORIENTATION_ANALYSIS_VERSION || !existingAnalysis.orientationCandidates?.length
     const wants = { thumbnail: !request.thumbnailPath, preview: !request.previewPath, orientation: wantsOrientation }
@@ -147,8 +147,10 @@ export class AssetGenerationQueue {
     try {
       const thumbnailPath = generated.thumbnailPng ? thumbnailKey(request.filePath, 'image/png') : undefined
       const previewPath = generated.previewStl ? this.assets.previewPath(request.filePath) : undefined
-      if (generated.thumbnailPng && thumbnailPath) await this.assets.write(thumbnailPath, generated.thumbnailPng)
-      if (generated.previewStl && previewPath) await this.assets.write(previewPath, generated.previewStl)
+      await Promise.all([
+        generated.thumbnailPng && thumbnailPath ? this.assets.write(thumbnailPath, generated.thumbnailPng) : undefined,
+        generated.previewStl && previewPath ? this.assets.write(previewPath, generated.previewStl) : undefined,
+      ])
       const orientationCandidates = sharedAnalysis?.orientationCandidates ?? generated.orientationCandidates
       if (wantsOrientation && orientationCandidates?.length) {
         const selected = orientationCandidates[0]
@@ -239,14 +241,17 @@ function errorMessage(error: unknown) {
 }
 
 async function readAll(asset: { stream: ReadableStream; size: number }): Promise<Uint8Array> {
-  const chunks: Uint8Array[] = []
-  const reader = (asset.stream as ReadableStream<Uint8Array>).getReader()
-  for (let step = await reader.read(); !step.done; step = await reader.read()) chunks.push(step.value)
-  const output = new Uint8Array(chunks.reduce((sum, chunk) => sum + chunk.length, 0))
+  let output = new Uint8Array(asset.size)
   let offset = 0
-  for (const chunk of chunks) {
-    output.set(chunk, offset)
-    offset += chunk.length
+  const reader = (asset.stream as ReadableStream<Uint8Array>).getReader()
+  for (let step = await reader.read(); !step.done; step = await reader.read()) {
+    if (offset + step.value.length > output.length) {
+      const expanded = new Uint8Array(Math.max(offset + step.value.length, output.length * 2))
+      expanded.set(output)
+      output = expanded
+    }
+    output.set(step.value, offset)
+    offset += step.value.length
   }
-  return output
+  return offset === output.length ? output : output.slice(0, offset)
 }
