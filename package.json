@@ -2,7 +2,7 @@
   "name": "printhub",
   "version": "0.17.0",
   "private": true,
-  "description": "Self-hosted 3D print request queue: friends or customers upload STLs to a Kanban board, files stay as plain files on storage you control.",
+  "description": "Privacy-first, self-hosted resin production queue from request intake through printing, post-processing, and completion.",
   "homepage": "https://github.com/richardsolomou/printhub",
   "bugs": "https://github.com/richardsolomou/printhub/issues",
   "license": "MIT",

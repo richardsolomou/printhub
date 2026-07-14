@@ -3,21 +3,30 @@
 
 # PrintHub
 
-A self-hosted queue for 3D print requests.
+A privacy-first, self-hosted production queue for resin printing.
 
-Upload STL files, track copies across **To Do → In Progress → Done**, preview models, and plan printer plates. Files stay on storage you control.
+Accept STL requests, plan resin plates, and track every copy through **Queue → Printing → Post-processing → Ready**. There is no hosted service or required cloud account, and files stay on storage you control.
 
 <img src="docs/media/printhub-demo.gif" alt="PrintHub tour showing the request board, interactive STL viewer, and plate planner" width="1200" />
 </div>
 
 ## What it does ✨
 
-- Accepts STL uploads with quantities, notes, source links, and requester names.
-- Tracks individual copies through a shared or private Kanban board.
-- Generates thumbnails and lightweight browser previews on the server.
-- Packs outstanding models across configured printer build plates.
+- Accepts private STL requests with quantities, notes, source links, and requester accounts.
+- Tracks individual copies through printing, post-processing, and completion.
+- Estimates solid resin volume per model and across every production stage.
+- Assigns requests to manually configured resin printers without connecting a vendor account.
+- Finds resin-friendly orientations and packs outstanding models across build plates.
+- Generates thumbnails and lightweight browser previews inside your installation.
 - Supports local folders or S3-compatible storage.
+- Sends anonymous usage telemetry by default without model or request data and supports opting out at any time.
 - Includes accounts, invites, optional Google or Discord login, SMTP, backups, health checks, and metrics.
+
+## Why self-hosted only
+
+PrintHub is designed for print shops, labs, and makerspaces that do not want customer models copied into another vendor's cloud. The application, database, model analysis, previews, and production history run in your installation. S3-compatible storage is optional and uses credentials you configure.
+
+PrintHub deliberately does not provide a public model gallery, marketplace, hosted file library, printer-vendor account, or mandatory remote service.
 
 ## Run it 🚀
 

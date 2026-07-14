@@ -39,6 +39,7 @@ export type PlateModelAnalysis = {
   widthMm: number
   depthMm: number
   heightMm: number
+  estimatedVolumeMm3?: number
   orientationQuaternion?: [number, number, number, number]
   orientationIslandCount?: number
   orientationRisk?: number
@@ -80,6 +81,13 @@ export function placementDimensions(placement: Pick<PlatePlacement, 'footprint' 
   const footprint = quarterTurn ? { widthMm: placement.footprint.depthMm, depthMm: placement.footprint.widthMm } : placement.footprint
   const margin = printer ? printer.supportMarginMm + printer.adhesionMarginMm : 0
   return { widthMm: footprint.widthMm + margin * 2, depthMm: footprint.depthMm + margin * 2 }
+}
+
+export function candidateFitsPrinter(candidate: PlateCandidate, printer: PrinterProfile) {
+  const size = placementDimensions({ ...candidate, rotationZDegrees: 0 }, printer)
+  const fitsFlat = size.widthMm <= printer.widthMm && size.depthMm <= printer.depthMm
+  const fitsRotated = size.depthMm <= printer.widthMm && size.widthMm <= printer.depthMm
+  return candidate.estimatedSupportedHeightMm <= printer.heightMm && (fitsFlat || fitsRotated)
 }
 
 function bounds(placement: PlatePlacement, printer: PrinterProfile, padding = 0) {
@@ -156,10 +164,7 @@ export function planPlates(candidates: PlateCandidate[], printer: PrinterProfile
     const compatibleIds = new Set(compatible.map((candidate) => candidate.copyId))
     const packable: PlateCandidate[] = []
     for (const candidate of compatible) {
-      const size = placementDimensions({ ...candidate, rotationZDegrees: 0 }, printer)
-      const fitsFlat = size.widthMm <= printer.widthMm && size.depthMm <= printer.depthMm
-      const fitsRotated = size.depthMm <= printer.widthMm && size.widthMm <= printer.depthMm
-      if (candidate.estimatedSupportedHeightMm <= printer.heightMm && (fitsFlat || fitsRotated)) packable.push(candidate)
+      if (candidateFitsPrinter(candidate, printer)) packable.push(candidate)
       else skipped.push(candidate)
     }
     remaining = remaining.filter((candidate) => !compatibleIds.has(candidate.copyId))

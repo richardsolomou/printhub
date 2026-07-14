@@ -11,9 +11,15 @@ export type WorkflowDefinition = { statuses: WorkflowStatus[] }
 
 export const workflow: WorkflowDefinition = {
   statuses: [
-    { id: 'todo', label: 'To Do', folder: 'todo', empty: 'Nothing queued.' },
-    { id: 'in_progress', label: 'In Progress', folder: 'in-progress', empty: 'Printers are idle.' },
-    { id: 'done', label: 'Done', folder: 'done', empty: 'Nothing finished yet.' },
+    { id: 'todo', label: 'Queue', folder: 'todo', empty: 'No resin prints are waiting.' },
+    { id: 'in_progress', label: 'Printing', folder: 'in-progress', empty: 'Resin printers are idle.' },
+    {
+      id: 'post_processing',
+      label: 'Post-processing',
+      folder: 'post-processing',
+      empty: 'No prints are waiting for support removal, washing, or curing.',
+    },
+    { id: 'done', label: 'Ready', folder: 'done', empty: 'No finished prints are ready yet.' },
   ],
 }
 
