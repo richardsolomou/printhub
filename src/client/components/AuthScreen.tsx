@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
-import { Boxes, CircleAlert, CloudOff, Printer, ShieldCheck } from 'lucide-react'
+import { Boxes, CircleAlert, Printer, ShieldCheck } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -54,29 +54,24 @@ export function AuthScreen({ setupRequired, auth }: { setupRequired: boolean; au
           <OnboardingProgress step={1} />
           <Card className="shadow-xl shadow-black/10">
             <CardHeader>
-              <CardTitle>Private resin production, not a generic printer dashboard</CardTitle>
-              <CardDescription>
-                PrintHub helps a resin shop or lab accept private STL requests, prepare build plates, and track copies through production.
-              </CardDescription>
+              <CardTitle>Your private resin print queue</CardTitle>
+              <CardDescription>Accept STL requests and take them from upload to collection.</CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col gap-5">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <IntroductionItem icon={ShieldCheck} title="Self-hosted and private">
-                  Models, previews, accounts, and production history stay in this installation and storage you control.
+            <CardContent className="flex flex-col gap-4">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <IntroductionItem icon={ShieldCheck} title="Private requests">
+                  Models and production history stay on storage you control.
                 </IntroductionItem>
-                <IntroductionItem icon={Boxes} title="Built for resin workflow">
-                  Manage requests from queue to printing, post-processing, and collection, with resin estimates and plate planning.
+                <IntroductionItem icon={Boxes} title="Resin workflow">
+                  Move each copy through Queue, Printing, Post-processing, and Ready.
                 </IntroductionItem>
-                <IntroductionItem icon={Printer} title="Printer-aware planning">
-                  Add each resin printer's usable build volume so PrintHub can assign requests and generate compatible plates.
-                </IntroductionItem>
-                <IntroductionItem icon={CloudOff} title="No vendor cloud required">
-                  PrintHub does not connect to, monitor, slice for, or control printers, and it is not designed for FDM production.
+                <IntroductionItem icon={Printer} title="Plate planning">
+                  Configure build volumes, estimate resin, and generate compatible plates.
                 </IntroductionItem>
               </div>
-              <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
-                Setup creates the admin account, chooses model storage, and records your resin printer dimensions. Anonymous usage telemetry
-                starts enabled and can be disabled in Settings at any time.
+              <div className="rounded-lg border bg-muted/30 p-3.5 text-sm text-muted-foreground">
+                <p>Next: create the admin, choose storage, and add your printers.</p>
+                <p className="mt-1">Anonymous usage telemetry is enabled by default and can be disabled in Settings.</p>
               </div>
               <Button type="button" className="self-end" disabled={!hydrated} onClick={() => setShowIntroduction(false)}>
                 Set up PrintHub
@@ -229,10 +224,10 @@ export function AuthScreen({ setupRequired, auth }: { setupRequired: boolean; au
 
 function IntroductionItem({ icon: Icon, title, children }: { icon: typeof Printer; title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border bg-card p-4">
-      <Icon className="mb-3 size-5 text-primary" />
+    <div className="rounded-lg border bg-card p-3.5">
+      <Icon className="mb-2 size-5 text-primary" />
       <h3 className="font-heading font-semibold">{title}</h3>
-      <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{children}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{children}</p>
     </div>
   )
 }
