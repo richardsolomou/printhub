@@ -43,7 +43,6 @@ const DEFAULT_PRINTERS: PrinterProfile[] = [
   {
     id: 'resin-medium',
     name: 'Printer 1',
-    technology: 'sla',
     widthMm: 129,
     depthMm: 80,
     heightMm: 150,

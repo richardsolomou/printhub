@@ -101,7 +101,7 @@ function AuthenticatedHome() {
   const me = identity!
   const isAdmin = me.role === 'admin'
   const hideRequester = privateRequests && !isAdmin
-  const showPrinters = printers.length > 1 && printers.some((printer) => printer.technology === 'sla')
+  const showPrinters = printers.length > 1
   const filters = filtersFromSearch(search)
   const { data: result, isFetching } = useQuery(requestsQuery(filters))
   const { data: people = [] } = useQuery(peopleQuery())

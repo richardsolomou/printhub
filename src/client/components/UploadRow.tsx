@@ -76,7 +76,7 @@ export function UploadRow({
         </div>
         {showPrinterPicker && (
           <Select
-            items={printers.map((printer) => ({ value: printer.id, label: `${printer.name} · ${printer.technology.toUpperCase()}` }))}
+            items={printers.map((printer) => ({ value: printer.id, label: printer.name }))}
             value={entry.printerId ?? printers[0]?.id}
             onValueChange={(printerId) => printerId && onPatch({ printerId })}
             disabled={entry.state === 'done'}
@@ -87,7 +87,7 @@ export function UploadRow({
             <SelectContent>
               {printers.map((printer) => (
                 <SelectItem key={printer.id} value={printer.id}>
-                  {printer.name} · {printer.technology.toUpperCase()}
+                  {printer.name}
                 </SelectItem>
               ))}
             </SelectContent>

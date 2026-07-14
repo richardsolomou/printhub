@@ -12,7 +12,6 @@ import {
 const printer: PrinterProfile = {
   id: 'test',
   name: 'Test printer',
-  technology: 'sla',
   widthMm: 100,
   depthMm: 60,
   heightMm: 150,

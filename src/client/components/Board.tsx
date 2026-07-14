@@ -198,7 +198,7 @@ export function Board({
   const dragEnabled = sort === 'board'
 
   return (
-    <main className="board grid min-h-0 flex-1 grid-cols-3 gap-3 overflow-x-auto p-3 max-[900px]:grid-flow-col max-[900px]:grid-cols-none max-[900px]:auto-cols-[82%]">
+    <main className="board grid min-h-0 flex-1 grid-flow-col grid-cols-none auto-cols-[minmax(280px,1fr)] gap-3 overflow-x-auto p-3 max-[900px]:auto-cols-[82%]">
       {workflow.statuses.map((definition) => {
         const status = definition.id
         return (

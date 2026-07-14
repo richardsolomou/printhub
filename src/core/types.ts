@@ -9,8 +9,7 @@ export type Identity = {
 }
 
 export type Person = { name: string; color?: string }
-export type PrintTechnology = 'fdm' | 'sla'
-export type PrinterSummary = { id: string; name: string; technology: PrintTechnology }
+export type PrinterSummary = { id: string; name: string }
 
 export type Invite = {
   id: string

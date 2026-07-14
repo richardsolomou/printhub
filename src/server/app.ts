@@ -28,7 +28,7 @@ export function resolveStorageConfig(repository: Repository): StorageConfig {
 // Read per call, not at boot: flipping the setting applies instantly on the
 // server, and the browser picks it up on its next page load.
 export function resolveTelemetryConfig(repository: Repository): TelemetryConfig {
-  return { enabled: repository.getSetting<TelemetryConfig>('telemetry')?.enabled !== false }
+  return { enabled: repository.getSetting<TelemetryConfig>('telemetry')?.enabled === true }
 }
 
 // Read per call, not at boot: flipping visibility applies instantly.

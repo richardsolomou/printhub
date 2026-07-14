@@ -45,7 +45,7 @@ export function UploadForm({
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState<number | null>(null)
   const [confirmClose, setConfirmClose] = useState(false)
-  const showPrinterPicker = printers.length > 1 && printers.some((printer) => printer.technology === 'sla')
+  const showPrinterPicker = printers.length > 1
 
   const initialAdded = useRef(false)
   useEffect(() => {

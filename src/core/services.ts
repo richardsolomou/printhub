@@ -36,7 +36,7 @@ export class PrintHubService {
     const printers = new Map(
       (this.repository.getSetting<PrinterProfile[]>('plate-planner-profiles') ?? []).map((profile) => {
         const printer = normalizePrinterProfile(profile)
-        return [printer.id, { id: printer.id, name: printer.name, technology: printer.technology }] as const
+        return [printer.id, { id: printer.id, name: printer.name }] as const
       }),
     )
     return {

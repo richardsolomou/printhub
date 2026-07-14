@@ -16,7 +16,6 @@ const admin: Identity = { id: 'admin', email: 'op@example.com', name: 'Admin', r
 const slaPrinter: PrinterProfile = {
   id: 'sla-printer',
   name: 'Elegoo Saturn',
-  technology: 'sla',
   widthMm: 192,
   depthMm: 120,
   heightMm: 200,
@@ -205,7 +204,7 @@ describe('PrintHubService crash recovery', () => {
     })
 
     expect(service.listRequests(admin).requests).toEqual([
-      expect.objectContaining({ id, printer: { id: slaPrinter.id, name: slaPrinter.name, technology: 'sla' } }),
+      expect.objectContaining({ id, printer: { id: slaPrinter.id, name: slaPrinter.name } }),
     ])
     expect(() => service.update(id, { printerId: 'missing-printer' }, admin)).toThrow(expect.objectContaining({ status: 400 }))
   })

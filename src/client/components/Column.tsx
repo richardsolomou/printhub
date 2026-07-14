@@ -66,7 +66,7 @@ export function Column({
   const total = entries.reduce((sum, entry) => sum + entry.count, 0)
   const resin = summarizeResinMl(entries)
   const resinLabel =
-    resin.unknownCopies === resin.slaCopies
+    resin.unknownCopies === resin.resinCopies
       ? '… ml'
       : resin.unknownCopies > 0
         ? `≥${formatResinMl(resin.knownMl)} ml`
@@ -92,6 +92,8 @@ export function Column({
             'size-2 rounded-full bg-muted-foreground',
             status === 'todo' && 'bg-muted-foreground',
             status === 'in_progress' && 'bg-primary',
+            status === 'washing' && 'bg-[var(--chart-3)]',
+            status === 'curing' && 'bg-[var(--chart-4)]',
             status === 'done' && 'bg-[var(--chart-2)]',
           )}
         />
@@ -99,7 +101,7 @@ export function Column({
         <span className="ml-auto rounded-full bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground" title="Copies">
           {total}
         </span>
-        {resin.slaCopies > 0 && (
+        {resin.resinCopies > 0 && (
           <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground" title={resinTitle}>
             {resinLabel}
           </span>

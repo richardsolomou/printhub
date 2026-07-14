@@ -41,7 +41,7 @@ export function RequestModal({
   const { data: people } = useSuspenseQuery(peopleQuery())
   const { data: session } = useSuspenseQuery(sessionQuery())
   const printers = session.printers
-  const showPrinterPicker = printers.length > 1 && printers.some((printer) => printer.technology === 'sla')
+  const showPrinterPicker = printers.length > 1
   const callUpdate = useServerFn(updateRequest)
   const callDelete = useServerFn(deleteRequest)
   const queryClient = useQueryClient()
@@ -149,7 +149,7 @@ export function RequestModal({
                   <Select
                     items={printers.map((printer) => ({
                       value: printer.id,
-                      label: `${printer.name} · ${printer.technology.toUpperCase()}`,
+                      label: printer.name,
                     }))}
                     value={printerId}
                     onValueChange={(value) => value && setPrinterId(value)}
@@ -160,7 +160,7 @@ export function RequestModal({
                     <SelectContent>
                       {printers.map((printer) => (
                         <SelectItem key={printer.id} value={printer.id}>
-                          {printer.name} · {printer.technology.toUpperCase()}
+                          {printer.name}
                         </SelectItem>
                       ))}
                     </SelectContent>

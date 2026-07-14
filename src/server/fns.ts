@@ -66,7 +66,7 @@ export const sessionInfo = createServerFn({ method: 'GET' }).handler(async () =>
     const storedPrinters = instance.repository.getSetting<PrinterProfile[]>('plate-planner-profiles')
     const printers = (storedPrinters ?? []).map((profile) => {
       const printer = normalizePrinterProfile(profile)
-      return { id: printer.id, name: printer.name, technology: printer.technology }
+      return { id: printer.id, name: printer.name }
     })
     return {
       identity,

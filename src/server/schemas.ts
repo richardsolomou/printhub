@@ -40,8 +40,6 @@ export const boardSettingsSchema = z.object({ privateRequests: z.boolean() })
 const printerProfileSchema = z.object({
   id: id,
   name: z.string().trim().min(1).max(100),
-  technology: z.enum(['fdm', 'sla']),
-  catalogId: z.string().min(1).max(200).optional(),
   widthMm: z.number().positive().max(10_000),
   depthMm: z.number().positive().max(10_000),
   heightMm: z.number().positive().max(10_000),
