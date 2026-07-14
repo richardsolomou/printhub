@@ -5,7 +5,7 @@
 
 A privacy-first, self-hosted production queue for resin printing.
 
-Accept STL requests, plan resin plates, and track every copy through **Queue → Printing → Washing → Curing → Ready**. There is no hosted service or required cloud account, and files stay on storage you control.
+Accept STL requests, plan resin plates, and track every copy through **Queue → Printing → Post-processing → Ready**. There is no hosted service or required cloud account, and files stay on storage you control.
 
 <img src="docs/media/printhub-demo.gif" alt="PrintHub tour showing the request board, interactive STL viewer, and plate planner" width="1200" />
 </div>
@@ -13,13 +13,13 @@ Accept STL requests, plan resin plates, and track every copy through **Queue →
 ## What it does ✨
 
 - Accepts private STL requests with quantities, notes, source links, and requester accounts.
-- Tracks individual copies through resin printing, washing, curing, and completion.
+- Tracks individual copies through printing, post-processing, and completion.
 - Estimates solid resin volume per model and across every production stage.
 - Assigns requests to manually configured resin printers without connecting a vendor account.
 - Finds resin-friendly orientations and packs outstanding models across build plates.
 - Generates thumbnails and lightweight browser previews inside your installation.
 - Supports local folders or S3-compatible storage.
-- Keeps anonymous telemetry disabled unless an admin explicitly opts in.
+- Sends anonymous usage telemetry by default without model or request data and supports opting out at any time.
 - Includes accounts, invites, optional Google or Discord login, SMTP, backups, health checks, and metrics.
 
 ## Why self-hosted only

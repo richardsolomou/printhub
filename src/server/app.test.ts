@@ -72,9 +72,9 @@ describe('app initialization', () => {
     await expect(fs.promises.stat(expired)).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
-  it('keeps telemetry disabled until an admin opts in', async () => {
+  it('enables telemetry until an admin opts out', async () => {
     const { resolveTelemetryConfig } = await import('./app')
     const repository = { getSetting: () => undefined }
-    expect(resolveTelemetryConfig(repository as never)).toEqual({ enabled: false })
+    expect(resolveTelemetryConfig(repository as never)).toEqual({ enabled: true })
   })
 })

@@ -8,7 +8,7 @@ changelog_url: https://github.com/richardsolomou/printhub/releases
 date_added: '2026-07-12'
 description: >-
   PrintHub is a privacy-first, self-hosted resin production queue. Customers
-  upload STLs and each copy moves through Queue, Printing, Washing, Curing, and
+  upload STLs and each copy moves through Queue, Printing, Post-processing, and
   Ready while files stay on storage you control.
 home: https://github.com/richardsolomou/printhub
 host_mounts: []

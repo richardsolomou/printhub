@@ -46,7 +46,7 @@ describe('SqliteRepository contract', () => {
     repository.moveCopies({ id, from: 'todo', to: 'in_progress', count: 2, filePath: 'todo/bracket.stl', order: 4 })
     expect(repository.getRequest(id)).toMatchObject({ counts: { todo: 1, in_progress: 2, done: 0 }, orders: { in_progress: 4 } })
     expect(() => repository.moveCopies({ id, from: 'todo', to: 'done', count: 2, filePath: 'todo/bracket.stl' })).toThrow('invalid move')
-    expect(repository.getRequest(id)?.counts).toEqual({ todo: 1, in_progress: 2, washing: 0, curing: 0, done: 0 })
+    expect(repository.getRequest(id)?.counts).toEqual({ todo: 1, in_progress: 2, post_processing: 0, done: 0 })
   })
 
   it('tracks thumbnail and preview generation as durable stages', () => {

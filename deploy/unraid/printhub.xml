@@ -8,7 +8,7 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/richardsolomou/printhub/issues</Support>
   <Project>https://github.com/richardsolomou/printhub</Project>
-  <Overview>Privacy-first, self-hosted resin production queue. Customers upload STLs and each copy moves through Queue, Printing, Washing, Curing, and Ready while files stay on your array. Built-in accounts, resin estimates, plate planning, and opt-in telemetry. The first person to open the web UI claims the admin account, so open it right after starting the container.</Overview>
+  <Overview>Privacy-first, self-hosted resin production queue. Customers upload STLs and each copy moves through Queue, Printing, Post-processing, and Ready while files stay on your array. Built-in accounts, resin estimates, plate planning, and anonymous telemetry with an opt-out. The first person to open the web UI claims the admin account, so open it right after starting the container.</Overview>
   <Category>Productivity: Tools:Utilities</Category>
   <WebUI>http://[IP]:[PORT:3000]/</WebUI>
   <Icon>https://raw.githubusercontent.com/richardsolomou/printhub/main/public/favicon.svg</Icon>

@@ -2,7 +2,7 @@
   "name": "printhub",
   "version": "0.17.0",
   "private": true,
-  "description": "Privacy-first, self-hosted resin production queue from request intake through printing, washing, curing, and completion.",
+  "description": "Privacy-first, self-hosted resin production queue from request intake through printing, post-processing, and completion.",
   "homepage": "https://github.com/richardsolomou/printhub",
   "bugs": "https://github.com/richardsolomou/printhub/issues",
   "license": "MIT",

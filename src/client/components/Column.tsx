@@ -92,8 +92,7 @@ export function Column({
             'size-2 rounded-full bg-muted-foreground',
             status === 'todo' && 'bg-muted-foreground',
             status === 'in_progress' && 'bg-primary',
-            status === 'washing' && 'bg-[var(--chart-3)]',
-            status === 'curing' && 'bg-[var(--chart-4)]',
+            status === 'post_processing' && 'bg-[var(--chart-3)]',
             status === 'done' && 'bg-[var(--chart-2)]',
           )}
         />

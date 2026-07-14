@@ -69,8 +69,8 @@ export function AboutPane() {
         </ItemGroup>
       </SettingsSection>
       <FieldDescription>
-        PrintHub is open source under the MIT License. It has no hosted service or mandatory cloud account, and anonymous telemetry is
-        disabled by default.
+        PrintHub is open source under the MIT License. It has no hosted service or mandatory cloud account, and anonymous telemetry can be
+        disabled at any time.
       </FieldDescription>
     </SettingsPage>
   )
