@@ -5,7 +5,8 @@ import { Server } from '@tus/server'
 import { z } from 'zod'
 import { app, resolveBoardConfig } from './app'
 import { validSourceUrl } from '../core/services'
-import type { Identity, NewPrintRequest } from '../core/types'
+import type { Identity, NewPrintRequest, PrintTechnology } from '../core/types'
+import type { PrinterProfile } from '../core/platePlanner'
 import { UploadRequestLimiter, validSameOrigin } from './uploadGuards'
 import { uploadBytes, uploadsCompleted } from './metrics'
 import { assertUploadCapacity } from './operations'
@@ -33,6 +34,7 @@ const metadataSchema = z.object({
   requesterName: optionalMetadataString(60),
   notes: optionalMetadataString(2000),
   sourceUrl: optionalMetadataString(500).refine((value) => !value || validSourceUrl(value), 'source URL must be an http(s) link'),
+  technology: z.preprocess((value) => (value === null ? undefined : value), z.enum(['resin', 'fdm']).optional()),
   printerId: optionalMetadataString(100),
 })
 
@@ -71,9 +73,18 @@ async function finalizeUpload(
   const completed = instance.repository.getCompletedUpload(uploadId, identity.id)
   if (completed) return completed
   const parsed = metadataSchema.parse(metadata ?? {})
-  const printers = instance.repository.getSetting<import('../core/platePlanner').PrinterProfile[]>('plate-planner-profiles') ?? []
-  if (parsed.printerId && !printers.some((printer) => printer.id === parsed.printerId)) {
-    throw new Response('unknown printer', { status: 400, statusText: 'unknown printer' })
+  const printers = instance.repository.getSetting<PrinterProfile[]>('plate-planner-profiles') ?? []
+  const selectedPrinter = parsed.printerId ? printers.find((printer) => printer.id === parsed.printerId) : undefined
+  if (parsed.printerId && !selectedPrinter) throw new Response('unknown printer', { status: 400, statusText: 'unknown printer' })
+  const fleetTechnologies = new Set(printers.map(printerTechnology))
+  const technology = parsed.technology ?? (selectedPrinter ? printerTechnology(selectedPrinter) : singleTechnology(fleetTechnologies))
+  if (!technology)
+    throw new Response('technology is required for mixed printer fleets', { status: 400, statusText: 'technology is required' })
+  if (selectedPrinter && printerTechnology(selectedPrinter) !== technology) {
+    throw new Response('printer technology does not match request', {
+      status: 400,
+      statusText: 'printer technology does not match request',
+    })
   }
   const requesterChoice = !resolveBoardConfig(instance.repository).privateRequests
   const request: Omit<NewPrintRequest, 'filePath' | 'previewPath' | 'thumbnailPath'> = {
@@ -84,6 +95,7 @@ async function finalizeUpload(
     requesterName: (requesterChoice ? parsed.requesterName : '') || identity.name || undefined,
     notes: parsed.notes || undefined,
     sourceUrl: parsed.sourceUrl || undefined,
+    technology,
     printerId: parsed.printerId,
   }
   const part = instance.staging.uploadPart(uploadId)
@@ -94,6 +106,16 @@ async function finalizeUpload(
   uploadsCompleted.inc()
   uploadBytes.inc(completedBytes)
   return requestId
+}
+
+function printerTechnology(printer: PrinterProfile): PrintTechnology {
+  return Reflect.get(printer, 'technology') === 'fdm' ? 'fdm' : 'resin'
+}
+
+function singleTechnology(technologies: Set<PrintTechnology>): PrintTechnology | undefined {
+  if (technologies.size === 0) return 'resin'
+  if (technologies.size === 1) return technologies.values().next().value
+  return undefined
 }
 
 const server = new Server({

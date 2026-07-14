@@ -32,9 +32,14 @@ import {
   telemetrySettingsSchema,
   updateRequestSchema,
 } from './schemas'
-import { normalizePrinterProfile, type PlatePlannerDraft, type PrinterProfile } from '../core/platePlanner'
+import type { PlatePlannerDraft, PrinterProfile } from '../core/platePlanner'
+import type { PrintTechnology } from '../core/types'
 
 const INVITE_TTL = 7 * 24 * 60 * 60 * 1000
+
+function printerTechnology(printer: PrinterProfile): PrintTechnology {
+  return Reflect.get(printer, 'technology') === 'fdm' ? 'fdm' : 'resin'
+}
 
 // The app throws Response for HTTP handlers, but a Response thrown inside a
 // server fn is delivered as a plain response and the client promise resolves
@@ -65,8 +70,7 @@ export const sessionInfo = createServerFn({ method: 'GET' }).handler(async () =>
     const identity = await instance.identity(getRequest().headers)
     const storedPrinters = instance.repository.getSetting<PrinterProfile[]>('plate-planner-profiles')
     const printers = (storedPrinters ?? []).map((profile) => {
-      const printer = normalizePrinterProfile(profile)
-      return { id: printer.id, name: printer.name }
+      return { id: profile.id, name: profile.name, technology: printerTechnology(profile) }
     })
     return {
       identity,
@@ -90,7 +94,7 @@ export const getPlatePlannerState = createServerFn({ method: 'GET' }).handler(as
     await admin(instance)
     return {
       profiles: instance.repository.getSetting<PrinterProfile[]>('plate-planner-profiles'),
-      draft: instance.repository.getSetting<PlatePlannerDraft>('plate-planner-draft'),
+      drafts: instance.repository.getSetting<Record<string, PlatePlannerDraft>>('plate-planner-drafts') ?? {},
       analyses: instance.repository.listPlateModelAnalyses(),
       analysisJobs: instance.repository.listOrientationAnalysisJobs(),
       queue: instance.assetQueue.stats(),
@@ -105,14 +109,8 @@ export const savePlatePlannerProfiles = createServerFn({ method: 'POST' })
       const instance = await app()
       requireMutationOrigin()
       await admin(instance)
-      instance.repository.setSetting('plate-planner-profiles', data.profiles)
-      const printerIds = new Set(data.profiles.map((profile) => profile.id))
-      const fallbackPrinterId = data.profiles[0]?.id ?? null
-      for (const request of instance.repository.listRequests()) {
-        if (!request.printerId || !printerIds.has(request.printerId)) {
-          instance.repository.updateRequest(request.id, { printerId: fallbackPrinterId })
-        }
-      }
+      instance.repository.replacePrinterProfiles(data.profiles)
+      instance.events.publish('settings.changed')
       return { saved: true }
     }),
   )
@@ -136,7 +134,11 @@ export const savePlatePlannerDraft = createServerFn({ method: 'POST' })
       const instance = await app()
       requireMutationOrigin()
       await admin(instance)
-      instance.repository.setSetting('plate-planner-draft', data.draft)
+      const profiles = instance.repository.getSetting<PrinterProfile[]>('plate-planner-profiles') ?? []
+      if (!profiles.some((profile) => profile.id === data.draft.printerId)) throw new Response('unknown printer', { status: 400 })
+      const drafts = instance.repository.getSetting<Record<string, PlatePlannerDraft>>('plate-planner-drafts') ?? {}
+      drafts[data.draft.printerId] = data.draft
+      instance.repository.setSetting('plate-planner-drafts', drafts)
       return { saved: true }
     }),
   )

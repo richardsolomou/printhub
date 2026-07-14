@@ -1,4 +1,5 @@
 export type Role = 'admin' | 'requester'
+export type PrintTechnology = 'resin' | 'fdm'
 
 export type Identity = {
   id: string
@@ -9,7 +10,13 @@ export type Identity = {
 }
 
 export type Person = { name: string; color?: string }
-export type PrinterSummary = { id: string; name: string }
+export type PrinterSummary = {
+  id: string
+  name: string
+  technology: PrintTechnology
+  filamentDiameterMm?: number
+  materialDensityGPerCm3?: number
+}
 
 export type Invite = {
   id: string
@@ -35,8 +42,9 @@ export type PrintRequest = {
   thumbnailPath?: string
   previewPath?: string
   hasThumbnail: boolean
+  technology: PrintTechnology
   printerId?: string
-  estimatedResinMl?: number
+  estimatedVolumeMm3?: number
   createdAt: number
   updatedAt: number
 }
@@ -47,6 +55,8 @@ export type PublicPrintRequest = Omit<PrintRequest, 'fileName' | 'filePath' | 'r
   canDelete: boolean
   hasPreview: boolean
   printer?: PrinterSummary
+  compatiblePrinterIds?: string[]
+  fitState?: 'pending' | 'selected_printer' | 'another_compatible_printer' | 'none'
 }
 
 export type AssetGenerationStage = 'thumbnail' | 'preview'
@@ -84,6 +94,8 @@ export type RequestFilters = {
   hasSource?: boolean
   hasThumbnail?: boolean
   hasPreview?: boolean
+  technology?: PrintTechnology
+  printerId?: string | null
   sort?: RequestSort
 }
 
@@ -118,7 +130,7 @@ export type NewPrintRequest = Pick<
   | 'thumbnailPath'
   | 'previewPath'
   | 'printerId'
->
+> & { technology?: PrintTechnology }
 
 export type MoveOperation = {
   kind: 'move'
@@ -176,6 +188,7 @@ export interface Repository {
       requesterName?: string
       notes?: string
       sourceUrl?: string
+      technology?: PrintTechnology
       printerId?: string | null
     },
   ): void
@@ -212,6 +225,7 @@ export interface Repository {
   deleteInvite(id: string): void
   getSetting<T>(key: string): T | undefined
   setSetting(key: string, value: unknown): void
+  replacePrinterProfiles(profiles: import('./platePlanner').PrinterProfile[]): void
   countUsers(): number
   databaseInfo(): { path: string; sizeBytes: number; integrity: string; lastCheckedAt: number }
   maintain(): { integrity: string; checkedAt: number }

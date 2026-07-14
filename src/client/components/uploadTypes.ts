@@ -1,3 +1,5 @@
+import type { PrintTechnology } from '../../core/types'
+
 export type UploadEntry = {
   key: string
   file: File
@@ -5,6 +7,7 @@ export type UploadEntry = {
   quantity: string
   notes: string
   sourceUrl: string
+  technology?: PrintTechnology
   printerId?: string
   noteOpen: boolean
   linkOpen: boolean

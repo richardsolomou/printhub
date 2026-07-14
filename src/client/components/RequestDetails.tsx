@@ -2,7 +2,7 @@ import type { PublicPrintRequest } from '../../core/types'
 import type { WorkflowDefinition } from '../../core/workflow'
 import { Badge } from '@/components/ui/badge'
 import { requesterColor, requesterLabel } from '../requester'
-import { formatResinMl, RESIN_ESTIMATE_DESCRIPTION, resinVolumeMl } from '../../core/resin'
+import { FitBadge, MaterialDetails, TechnologyBadge } from './PrintTechnology'
 
 export function RequestDetails({
   request,
@@ -17,24 +17,13 @@ export function RequestDetails({
   hideRequester: boolean
   showSource?: boolean
 }) {
-  const resinMl = resinVolumeMl(request)
-  const totalResinMl = resinVolumeMl(request, request.quantity)
-
   return (
     <>
       <div className="mb-3 flex flex-wrap gap-1.5">
+        <TechnologyBadge technology={request.technology} />
         <Badge variant="outline">×{request.quantity}</Badge>
-        {request.printer && <Badge variant="outline">{request.printer.name}</Badge>}
-        {resinMl !== undefined && (
-          <Badge variant="outline" title={RESIN_ESTIMATE_DESCRIPTION}>
-            ≈{formatResinMl(resinMl)} ml resin each
-          </Badge>
-        )}
-        {request.quantity > 1 && totalResinMl !== undefined && (
-          <Badge variant="outline" title={RESIN_ESTIMATE_DESCRIPTION}>
-            ≈{formatResinMl(totalResinMl)} ml total
-          </Badge>
-        )}
+        <Badge variant="outline">{request.printer?.name ?? 'Any compatible printer'}</Badge>
+        <FitBadge request={request} />
         {workflow.statuses
           .filter((status) => request.counts[status.id] > 0)
           .map((status) => (
@@ -47,6 +36,9 @@ export function RequestDetails({
             {requesterLabel(request)}
           </Badge>
         )}
+      </div>
+      <div className="mb-3">
+        <MaterialDetails request={request} />
       </div>
       {showSource && request.sourceUrl && (
         <p className="mb-3 text-sm">

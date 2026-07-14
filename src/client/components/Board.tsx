@@ -20,6 +20,7 @@ export function Board({
   isAdmin,
   hideRequester,
   showPrinters,
+  filtered = false,
   sort,
   onOpenRequest,
 }: {
@@ -29,6 +30,7 @@ export function Board({
   isAdmin: boolean
   hideRequester: boolean
   showPrinters: boolean
+  filtered?: boolean
   sort: RequestSort
   onOpenRequest: (requestId: string) => void
 }) {
@@ -103,7 +105,7 @@ export function Board({
         { data: { id: requestId, from, to, count, order } },
         {
           onError: (error) => {
-            posthog.captureException(error, { action: 'move_request_copies', request_id: requestId, from, to, count })
+            posthog.captureException(error, { action: 'move_request_copies', printer_technology: request.technology, from, to, count })
             revertOverride(requestId)
           },
         },
@@ -122,7 +124,7 @@ export function Board({
         { data: { id: requestId, status, order } },
         {
           onError: (error) => {
-            posthog.captureException(error, { action: 'reorder_request', request_id: requestId, status })
+            posthog.captureException(error, { action: 'reorder_request', printer_technology: request.technology, status })
             revertOverride(requestId)
           },
         },
@@ -197,6 +199,23 @@ export function Board({
   const pendingRequest = pendingMove ? requests.find((j) => j.id === pendingMove.requestId) : undefined
   const dragEnabled = sort === 'board'
 
+  if (requests.length === 0) {
+    return (
+      <main className="grid min-h-0 flex-1 place-items-center p-6 text-center">
+        <div className="max-w-md rounded-xl border bg-card/40 p-7">
+          <h2 className="font-heading text-xl font-semibold">
+            {filtered ? 'No prints match these filters' : 'Your production queue is ready'}
+          </h2>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            {filtered
+              ? 'Clear or adjust the filters to see resin and FDM requests in the queue.'
+              : 'Add a private STL request to start tracking copies from Queue through Printing, Finishing, and Ready.'}
+          </p>
+        </div>
+      </main>
+    )
+  }
+
   return (
     <main className="board grid min-h-0 flex-1 grid-flow-col grid-cols-none auto-cols-[minmax(280px,1fr)] gap-3 overflow-x-auto p-3 max-[900px]:auto-cols-[82%]">
       {workflow.statuses.map((definition) => {
@@ -215,6 +234,7 @@ export function Board({
             dragEnabled={dragEnabled}
             hideRequester={hideRequester}
             showPrinter={showPrinters}
+            filtered={filtered}
             settlingIds={settlingIds}
             onOpenRequest={onOpenRequest}
           />

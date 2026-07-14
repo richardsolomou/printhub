@@ -10,6 +10,7 @@ export async function uploadPrint(entry: UploadEntry, requesterName: string, onP
     quantity: String(Math.min(50, Math.max(1, Math.round(Number(entry.quantity) || 1)))),
     requesterName,
   }
+  if (entry.technology) metadata.technology = entry.technology
   if (entry.notes.trim()) metadata.notes = entry.notes.trim()
   if (entry.sourceUrl.trim()) metadata.sourceUrl = entry.sourceUrl.trim()
   if (entry.printerId) metadata.printerId = entry.printerId
@@ -30,6 +31,7 @@ export async function uploadPrint(entry: UploadEntry, requesterName: string, onP
         requesterName,
         entry.notes,
         entry.sourceUrl,
+        entry.technology,
         entry.printerId,
       ].join('-'),
     metadata,

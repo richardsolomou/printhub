@@ -153,7 +153,7 @@ export class AssetGenerationQueue {
     } catch (error) {
       // Storage trouble is transient: leave the request unstamped so the next
       // boot's backfill retries it.
-      void this.telemetry.exception(error, { action: 'assets_read', request_id: requestId }).catch(() => undefined)
+      void this.telemetry.exception(error, { action: 'assets_read', printer_technology: request.technology }).catch(() => undefined)
       log.warn({ err: error }, 'asset source read failed')
       this.repository.requeueAssetGeneration(
         requestId,
@@ -200,13 +200,15 @@ export class AssetGenerationQueue {
         current.some((job) => job.stage === stage && job.status === 'running'),
       )
       if (error instanceof AssetWriteError) {
-        void this.telemetry.exception(error.cause, { action: 'assets_write', request_id: requestId }).catch(() => undefined)
+        void this.telemetry
+          .exception(error.cause, { action: 'assets_write', printer_technology: request.technology })
+          .catch(() => undefined)
         log.warn({ err: error.cause }, 'generated asset write failed')
         this.repository.requeueAssetGeneration(requestId, running)
         assetJobs.inc({ outcome: 'write_error' })
         assetJobDuration.observe({ outcome: 'write_error' }, (performance.now() - startedAt) / 1000)
       } else {
-        void this.telemetry.exception(error, { action: 'assets_generate', request_id: requestId }).catch(() => undefined)
+        void this.telemetry.exception(error, { action: 'assets_generate', printer_technology: request.technology }).catch(() => undefined)
         log.warn({ err: error }, 'visual asset generation failed')
         for (const stage of running)
           this.repository.finishAssetGeneration(requestId, stage, { status: 'failed', error: errorMessage(error) })
@@ -221,8 +223,13 @@ export class AssetGenerationQueue {
     await this.visualQueue.onIdle()
     const request = this.repository.getRequest(requestId)
     if (!request) return
+    const technology = (request as typeof request & { technology?: 'resin' | 'fdm' }).technology ?? 'resin'
     const existingAnalysis = this.repository.getPlateModelAnalysis(requestId)
-    if (existingAnalysis?.analysisVersion === ORIENTATION_ANALYSIS_VERSION && existingAnalysis.orientationCandidates?.length) return
+    if (
+      existingAnalysis?.analysisVersion === ORIENTATION_ANALYSIS_VERSION &&
+      (technology === 'fdm' || existingAnalysis.orientationCandidates?.length)
+    )
+      return
     this.repository.startOrientationAnalysis(requestId, ORIENTATION_ANALYSIS_VERSION)
     this.publishUpdate()
     try {
@@ -230,23 +237,38 @@ export class AssetGenerationQueue {
       const contentHash = crypto.createHash('sha256').update(sourceFile).digest('hex')
       const sharedAnalysis = this.repository.findPlateModelAnalysisByContentHash(contentHash, ORIENTATION_ANALYSIS_VERSION)
       const analysisFile = request.previewPath ? await readAll(await this.assets.read(request.previewPath)) : sourceFile
-      const generated = sharedAnalysis
-        ? undefined
-        : await this.runPipeline(analysisFile, { thumbnail: false, preview: false, orientation: true })
-      const orientationCandidates = sharedAnalysis?.orientationCandidates ?? generated?.orientationCandidates
-      if (orientationCandidates?.length) {
-        const selected = orientationCandidates[0]
+      const sourceGenerated = await this.runPipeline(sourceFile, {
+        thumbnail: false,
+        preview: false,
+        meshAnalysis: true,
+        orientation: technology === 'resin' && !request.previewPath && !sharedAnalysis?.orientationCandidates?.length,
+      })
+      const mesh = sourceGenerated.meshAnalysis
+      if (!mesh) throw new Error('mesh analysis returned no result')
+      const generated =
+        technology === 'resin' && request.previewPath && !sharedAnalysis?.orientationCandidates?.length
+          ? await this.runPipeline(analysisFile, { thumbnail: false, preview: false, orientation: true })
+          : sourceGenerated
+      const orientationCandidates =
+        technology === 'resin'
+          ? (sharedAnalysis?.orientationCandidates ?? generated?.orientationCandidates)?.map((candidate) => ({
+              ...candidate,
+              estimatedVolumeMm3: mesh.estimatedVolumeMm3 ?? 0,
+            }))
+          : undefined
+      if (technology === 'fdm' || orientationCandidates?.length) {
+        const selected = orientationCandidates?.[0]
         const analysis: PlateModelAnalysis = {
           requestId,
           contentHash,
           analysisVersion: ORIENTATION_ANALYSIS_VERSION,
-          widthMm: selected.widthMm,
-          depthMm: selected.depthMm,
-          heightMm: selected.heightMm,
-          estimatedVolumeMm3: selected.estimatedVolumeMm3,
-          orientationQuaternion: selected.quaternion,
-          orientationIslandCount: selected.islandCount,
-          orientationRisk: selected.islandRisk,
+          widthMm: mesh.widthMm,
+          depthMm: mesh.depthMm,
+          heightMm: mesh.heightMm,
+          estimatedVolumeMm3: mesh.estimatedVolumeMm3,
+          orientationQuaternion: selected?.quaternion,
+          orientationIslandCount: selected?.islandCount,
+          orientationRisk: selected?.islandRisk,
           orientationCandidates,
         }
         this.repository.upsertPlateModelAnalyses([analysis])
@@ -293,7 +315,10 @@ export class AssetGenerationQueue {
     })
   }
 
-  private runPipeline(file: Uint8Array, wants: { thumbnail: boolean; preview: boolean; orientation: boolean }): Promise<GeneratedAssets> {
+  private runPipeline(
+    file: Uint8Array,
+    wants: { thumbnail: boolean; preview: boolean; orientation?: boolean; meshAnalysis?: boolean },
+  ): Promise<GeneratedAssets> {
     if (!this.workerConfig) return generateAssets(file, wants)
     return new Promise((resolve, reject) => {
       const worker = new Worker(this.workerConfig!.path, {

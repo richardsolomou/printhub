@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Spinner } from '@/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import type { RequestFacets, RequestFilters, RequestSort } from '../../core/types'
+import type { PrinterSummary, PrintTechnology, RequestFacets, RequestFilters, RequestSort } from '../../core/types'
 import { DatePicker } from './DatePicker'
 import { PeopleCombobox } from './PeopleCombobox'
 
@@ -25,6 +25,8 @@ export type BoardSearch = {
   hasSource?: boolean
   hasThumbnail?: boolean
   hasPreview?: boolean
+  technology?: PrintTechnology
+  printer?: string
   sort?: RequestSort
 }
 
@@ -54,6 +56,7 @@ const METADATA = [
   ['hasThumbnail', 'Thumbnail'],
   ['hasPreview', '3D preview'],
 ] as const
+const NO_PRINTERS: PrinterSummary[] = []
 
 function endOfDay(value?: string) {
   if (!value) return undefined
@@ -93,6 +96,8 @@ export function validateRequestSearch(input: Record<string, unknown>): BoardSear
     hasSource: boolean(input.hasSource),
     hasThumbnail: boolean(input.hasThumbnail),
     hasPreview: boolean(input.hasPreview),
+    technology: input.technology === 'resin' || input.technology === 'fdm' ? input.technology : undefined,
+    printer: text(input.printer, 100),
     sort: sort && SORT_IDS.has(sort) ? sort : undefined,
   }
 }
@@ -119,6 +124,8 @@ export function filtersFromSearch(search: BoardSearch, defaultSort: RequestSort 
     hasSource: search.hasSource,
     hasThumbnail: search.hasThumbnail,
     hasPreview: search.hasPreview,
+    technology: search.technology,
+    printerId: search.printer === 'unassigned' ? null : search.printer,
     sort: search.sort ?? defaultSort,
   }
 }
@@ -126,6 +133,7 @@ export function filtersFromSearch(search: BoardSearch, defaultSort: RequestSort 
 export function BoardFilters({
   search,
   facets,
+  printers = NO_PRINTERS,
   isFetching,
   onChange,
   defaultSort = 'board',
@@ -136,6 +144,7 @@ export function BoardFilters({
 }: {
   search: BoardSearch
   facets: RequestFacets
+  printers?: PrinterSummary[]
   isFetching: boolean
   onChange: (patch: Partial<BoardSearch>, replace?: boolean) => void
   defaultSort?: RequestSort
@@ -169,9 +178,19 @@ export function BoardFilters({
     search.hasThumbnail === false,
     search.hasPreview,
     search.hasPreview === false,
+    search.technology,
+    search.printer,
   ].filter(Boolean).length
 
   const active = [
+    search.technology && { key: 'technology', label: search.technology === 'resin' ? 'Resin' : 'FDM' },
+    search.printer && {
+      key: 'printer',
+      label:
+        search.printer === 'unassigned'
+          ? 'Any compatible printer'
+          : (printers.find((printer) => printer.id === search.printer)?.name ?? 'Printer'),
+    },
     search.requester && { key: 'requester', label: search.requester },
     search.minQuantity !== undefined && { key: 'minQuantity', label: `Qty ≥ ${search.minQuantity}` },
     search.maxQuantity !== undefined && { key: 'maxQuantity', label: `Qty ≤ ${search.maxQuantity}` },
@@ -213,6 +232,8 @@ export function BoardFilters({
       hasSource: undefined,
       hasThumbnail: undefined,
       hasPreview: undefined,
+      technology: undefined,
+      printer: undefined,
       sort: undefined,
     })
   }
@@ -292,6 +313,61 @@ export function BoardFilters({
               </Tooltip>
             </header>
             <div className="grid grid-cols-2 gap-4 p-4 max-[900px]:grid-cols-1">
+              <section className="grid content-start gap-2">
+                <h3 className="font-heading text-xs font-semibold tracking-wide uppercase text-muted-foreground">Technology</h3>
+                <Select
+                  items={[
+                    { value: '', label: 'All technologies' },
+                    { value: 'resin', label: 'Resin' },
+                    { value: 'fdm', label: 'FDM' },
+                  ]}
+                  value={search.technology ?? ''}
+                  onValueChange={(value) =>
+                    onChange({ technology: (value || undefined) as PrintTechnology | undefined, printer: undefined })
+                  }
+                >
+                  <SelectTrigger className="w-full" aria-label="Filter by printing technology">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All technologies</SelectItem>
+                    <SelectItem value="resin">Resin</SelectItem>
+                    <SelectItem value="fdm">FDM</SelectItem>
+                  </SelectContent>
+                </Select>
+              </section>
+              <section className="grid content-start gap-2">
+                <h3 className="font-heading text-xs font-semibold tracking-wide uppercase text-muted-foreground">Printer</h3>
+                <Select
+                  items={[
+                    { value: '', label: 'All printers' },
+                    { value: 'unassigned', label: 'Any compatible printer' },
+                    ...printers
+                      .filter((printer) => !search.technology || printer.technology === search.technology)
+                      .map((printer) => ({
+                        value: printer.id,
+                        label: `${printer.name} · ${printer.technology === 'resin' ? 'Resin' : 'FDM'}`,
+                      })),
+                  ]}
+                  value={search.printer ?? ''}
+                  onValueChange={(value) => onChange({ printer: value || undefined })}
+                >
+                  <SelectTrigger className="w-full" aria-label="Filter by assigned printer">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All printers</SelectItem>
+                    <SelectItem value="unassigned">Any compatible printer</SelectItem>
+                    {printers
+                      .filter((printer) => !search.technology || printer.technology === search.technology)
+                      .map((printer) => (
+                        <SelectItem key={printer.id} value={printer.id}>
+                          {printer.name} · {printer.technology === 'resin' ? 'Resin' : 'FDM'}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </section>
               <section className="grid content-start gap-2">
                 <h3 className="font-heading text-xs font-semibold tracking-wide uppercase text-muted-foreground">Requester</h3>
                 <PeopleCombobox

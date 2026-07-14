@@ -17,6 +17,7 @@ import orientationAnalysisJobsMigration from './migrations/013_orientation_analy
 import assetStageJobsMigration from './migrations/014_asset_stage_jobs.sql?raw'
 import resinVolumeMigration from './migrations/015_resin_volume.sql?raw'
 import requestPrinterMigration from './migrations/016_request_printer.sql?raw'
+import requestTechnologyMigration from './migrations/017_request_technology.sql?raw'
 import type {
   NewPrintRequest,
   OperationPayload,
@@ -29,6 +30,7 @@ import type {
   UploadOperation,
 } from '../core/types'
 import { initialStatus, workflow } from '../core/workflow'
+import type { PlatePlannerDraft, PrinterProfile } from '../core/platePlanner'
 import { backupDatabase } from './sqliteBackup'
 
 const migrations = [
@@ -48,6 +50,7 @@ const migrations = [
   { version: 14, sql: assetStageJobsMigration },
   { version: 15, sql: resinVolumeMigration },
   { version: 16, sql: requestPrinterMigration },
+  { version: 17, sql: requestTechnologyMigration },
 ]
 
 type RequestRow = {
@@ -63,6 +66,7 @@ type RequestRow = {
   thumbnail_path: string | null
   preview_path: string | null
   printer_id: string | null
+  technology: import('../core/types').PrintTechnology
   estimated_volume_mm3: number | null
   created_at: number
   updated_at: number
@@ -380,6 +384,7 @@ export class SqliteRepository implements Repository {
       requesterName?: string
       notes?: string
       sourceUrl?: string
+      technology?: import('../core/types').PrintTechnology
       printerId?: string | null
     },
   ) {
@@ -396,13 +401,16 @@ export class SqliteRepository implements Repository {
           .run(fields.quantity - started, id, initialStatus().id)
       }
       this.db
-        .prepare(`UPDATE requests SET name=?, quantity=?, requester_name=?, notes=?, source_url=?, printer_id=?, updated_at=? WHERE id=?`)
+        .prepare(
+          `UPDATE requests SET name=?, quantity=?, requester_name=?, notes=?, source_url=?, technology=?, printer_id=?, updated_at=? WHERE id=?`,
+        )
         .run(
           fields.name ?? request.name,
           fields.quantity ?? request.quantity,
           fields.requesterName ?? request.requesterName ?? null,
           fields.notes ?? request.notes ?? null,
           fields.sourceUrl ?? request.sourceUrl ?? null,
+          fields.technology ?? request.technology,
           fields.printerId === undefined ? (request.printerId ?? null) : fields.printerId,
           Date.now(),
           id,
@@ -764,6 +772,42 @@ export class SqliteRepository implements Repository {
       .run(key, JSON.stringify(value), Date.now())
   }
 
+  replacePrinterProfiles(profiles: PrinterProfile[]) {
+    this.db.transaction(() => {
+      const previous = this.getSetting<PrinterProfile[]>('plate-planner-profiles') ?? []
+      const next = profiles
+      const nextById = new Map(next.map((profile) => [profile.id, profile]))
+      const changedIds = new Set(
+        previous.filter((profile) => JSON.stringify(profile) !== JSON.stringify(nextById.get(profile.id))).map((profile) => profile.id),
+      )
+
+      const nextIds = [...nextById.keys()]
+      if (nextIds.length) {
+        const placeholders = nextIds.map(() => '?').join(',')
+        this.db
+          .prepare(`UPDATE requests SET printer_id=NULL, updated_at=? WHERE printer_id IS NOT NULL AND printer_id NOT IN (${placeholders})`)
+          .run(Date.now(), ...nextIds)
+      } else {
+        this.db.prepare('UPDATE requests SET printer_id=NULL, updated_at=? WHERE printer_id IS NOT NULL').run(Date.now())
+      }
+      for (const profile of next) {
+        this.db
+          .prepare('UPDATE requests SET printer_id=NULL, updated_at=? WHERE printer_id=? AND technology<>?')
+          .run(Date.now(), profile.id, printerTechnology(profile))
+      }
+
+      this.setSetting('plate-planner-profiles', next)
+      const drafts = this.getSetting<Record<string, PlatePlannerDraft>>('plate-planner-drafts') ?? {}
+      const legacyDraft = this.getSetting<PlatePlannerDraft>('plate-planner-draft')
+      if (legacyDraft && !drafts[legacyDraft.printerId]) drafts[legacyDraft.printerId] = legacyDraft
+      for (const printerId of Object.keys(drafts)) {
+        if (!nextById.has(printerId) || changedIds.has(printerId)) delete drafts[printerId]
+      }
+      this.setSetting('plate-planner-drafts', drafts)
+      this.db.prepare("DELETE FROM settings WHERE key='plate-planner-draft'").run()
+    })()
+  }
+
   countUsers() {
     return (this.db.prepare('SELECT count(*) count FROM "user"').get() as { count: number }).count
   }
@@ -938,9 +982,10 @@ export class SqliteRepository implements Repository {
       sourceUrl: row.source_url ?? undefined,
       thumbnailPath: row.thumbnail_path ?? undefined,
       previewPath: row.preview_path ?? undefined,
+      technology: row.technology,
       printerId: row.printer_id ?? undefined,
       hasThumbnail: row.thumbnail_path !== null,
-      estimatedResinMl: row.estimated_volume_mm3 === null ? undefined : row.estimated_volume_mm3 / 1_000,
+      estimatedVolumeMm3: row.estimated_volume_mm3 ?? undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       counts: Object.fromEntries(states.map((state) => [state.status_id, state.quantity])),
@@ -979,9 +1024,10 @@ export class SqliteRepository implements Repository {
         sourceUrl: row.source_url ?? undefined,
         thumbnailPath: row.thumbnail_path ?? undefined,
         previewPath: row.preview_path ?? undefined,
+        technology: row.technology,
         printerId: row.printer_id ?? undefined,
         hasThumbnail: row.thumbnail_path !== null,
-        estimatedResinMl: row.estimated_volume_mm3 === null ? undefined : row.estimated_volume_mm3 / 1_000,
+        estimatedVolumeMm3: row.estimated_volume_mm3 ?? undefined,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
         counts: Object.fromEntries(requestStates.map((state) => [state.status_id, state.quantity])),
@@ -1032,6 +1078,11 @@ export class SqliteRepository implements Repository {
       add(filters.hasSource ? "trim(coalesce(r.source_url,'')) <> ''" : "trim(coalesce(r.source_url,'')) = ''")
     if (filters.hasThumbnail !== undefined) add(filters.hasThumbnail ? 'r.thumbnail_path IS NOT NULL' : 'r.thumbnail_path IS NULL')
     if (filters.hasPreview !== undefined) add(filters.hasPreview ? 'r.preview_path IS NOT NULL' : 'r.preview_path IS NULL')
+    if (filters.technology !== undefined) add('r.technology = ?', filters.technology)
+    if (filters.printerId !== undefined) {
+      if (filters.printerId === null) add('r.printer_id IS NULL')
+      else add('r.printer_id = ?', filters.printerId)
+    }
     return { sql: conditions.length ? `WHERE ${conditions.join(' AND ')}` : '', params }
   }
 
@@ -1039,7 +1090,7 @@ export class SqliteRepository implements Repository {
     const now = Date.now()
     this.db
       .prepare(
-        `INSERT INTO requests (id,name,file_name,file_path,quantity,requester_email,requester_name,notes,source_url,thumbnail_path,preview_path,printer_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO requests (id,name,file_name,file_path,quantity,requester_email,requester_name,notes,source_url,thumbnail_path,preview_path,technology,printer_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       )
       .run(
         id,
@@ -1053,6 +1104,7 @@ export class SqliteRepository implements Repository {
         request.sourceUrl ?? null,
         request.thumbnailPath ?? null,
         request.previewPath ?? null,
+        request.technology ?? 'resin',
         request.printerId ?? null,
         now,
         now,
@@ -1094,6 +1146,10 @@ export class SqliteRepository implements Repository {
       for (const status of workflow.statuses) insert.run(status.id)
     })()
   }
+}
+
+function printerTechnology(printer: PrinterProfile): import('../core/types').PrintTechnology {
+  return Reflect.get(printer, 'technology') === 'fdm' ? 'fdm' : 'resin'
 }
 
 export function databasePath() {

@@ -7,9 +7,9 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { StatusId } from '../../core/workflow'
 import type { Person, PublicPrintRequest } from '../../core/types'
-import { formatResinMl, RESIN_ESTIMATE_DESCRIPTION, resinVolumeMl } from '../../core/resin'
 import { LazyThumb } from './LazyThumb'
 import { requesterColor, requesterLabel } from '../requester'
+import { FitBadge, MaterialBadge, TechnologyBadge } from './PrintTechnology'
 
 export function RequestCard({
   request,
@@ -35,7 +35,6 @@ export function RequestCard({
   const ref = useRef<HTMLButtonElement>(null)
   const [dragging, setDragging] = useState(false)
   const [closestEdge, setClosestEdge] = useState<Edge | null>(null)
-  const resinMl = resinVolumeMl(request, count)
 
   useEffect(() => {
     const element = ref.current
@@ -89,19 +88,17 @@ export function RequestCard({
       <div className="min-w-0 flex-1">
         <div className="truncate font-semibold">{request.name}</div>
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          <TechnologyBadge technology={request.technology} />
           <Badge variant="outline" className="font-mono">
             {count === request.quantity ? `×${count}` : `×${count} of ${request.quantity}`}
           </Badge>
-          {showPrinter && request.printer && (
+          {showPrinter && (
             <Badge variant="outline" className="max-w-full overflow-hidden text-ellipsis font-mono whitespace-nowrap">
-              {request.printer.name}
+              {request.printer?.name ?? 'Any compatible printer'}
             </Badge>
           )}
-          {resinMl !== undefined && (
-            <Badge variant="outline" className="font-mono text-muted-foreground" title={RESIN_ESTIMATE_DESCRIPTION}>
-              ≈{formatResinMl(resinMl)} ml
-            </Badge>
-          )}
+          <MaterialBadge request={request} quantity={count} />
+          <FitBadge request={request} />
           {!hideRequester && (
             <Badge
               variant="outline"

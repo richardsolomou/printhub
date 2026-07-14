@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   ORIENTATION_ANALYSIS_VERSION,
   candidateFitsPrinter,
+  normalizePrinterProfile,
   orientationAnalysisReady,
   packPlate,
   placementIssues,
@@ -13,6 +14,7 @@ import {
 const printer: PrinterProfile = {
   id: 'test',
   name: 'Test printer',
+  technology: 'resin',
   widthMm: 100,
   depthMm: 60,
   heightMm: 150,
@@ -179,5 +181,48 @@ describe('plate planner', () => {
     const result = planPlates(candidates, { ...printer, widthMm: 129, depthMm: 80, supportMarginMm: 4, adhesionMarginMm: 2 })
     for (const plate of result.plates)
       expect(placementIssues(plate, { ...printer, widthMm: 129, depthMm: 80, supportMarginMm: 4, adhesionMarginMm: 2 })).toEqual(new Map())
+  })
+
+  it('uses FDM brim margin without resin support allowances', () => {
+    const fdm: PrinterProfile = {
+      id: 'fdm',
+      name: 'FDM',
+      technology: 'fdm',
+      widthMm: 100,
+      depthMm: 100,
+      heightMm: 100,
+      spacingMm: 2,
+      brimMarginMm: 5,
+      filamentDiameterMm: 1.75,
+      materialDensityGPerCm3: 1.24,
+    }
+    expect(candidateFitsPrinter(candidate('fits', 90, 90, 100), fdm)).toBe(true)
+    expect(candidateFitsPrinter(candidate('too-wide', 91, 90, 100), fdm)).toBe(false)
+  })
+
+  it('does not split FDM plates into resin height bands', () => {
+    const fdm: PrinterProfile = {
+      id: 'fdm',
+      name: 'FDM',
+      technology: 'fdm',
+      widthMm: 100,
+      depthMm: 100,
+      heightMm: 100,
+      spacingMm: 0,
+      brimMarginMm: 0,
+      filamentDiameterMm: 1.75,
+      materialDensityGPerCm3: 1.24,
+    }
+    const result = planPlates([candidate('short', 40, 40, 10), candidate('tall', 40, 40, 90)], fdm)
+    expect(result.plates).toHaveLength(1)
+  })
+
+  it('normalizes legacy profiles to resin without changing their build volume', () => {
+    expect(normalizePrinterProfile({ id: 'legacy', name: 'Legacy', widthMm: 130, depthMm: 80, heightMm: 160 })).toMatchObject({
+      technology: 'resin',
+      widthMm: 130,
+      depthMm: 80,
+      heightMm: 160,
+    })
   })
 })

@@ -12,7 +12,15 @@ import betterAuthMigration from './migrations/005_better_auth.sql?raw'
 import assetGenerationMigration from './migrations/006_asset_generation.sql?raw'
 import invitesMigration from './migrations/007_invites.sql?raw'
 import authRateLimitMigration from './migrations/008_auth_rate_limit.sql?raw'
+import adminRoleMigration from './migrations/009_admin_role.sql?raw'
+import platePlannerMigration from './migrations/010_plate_planner.sql?raw'
+import resinOrientationMigration from './migrations/011_resin_orientation.sql?raw'
+import resinOrientationCandidatesMigration from './migrations/012_resin_orientation_candidates.sql?raw'
+import orientationAnalysisJobsMigration from './migrations/013_orientation_analysis_jobs.sql?raw'
+import assetStageJobsMigration from './migrations/014_asset_stage_jobs.sql?raw'
 import resinVolumeMigration from './migrations/015_resin_volume.sql?raw'
+import requestPrinterMigration from './migrations/016_request_printer.sql?raw'
+import type { PlatePlannerDraft, PrinterProfile } from '../core/platePlanner'
 
 describe('SqliteRepository contract', () => {
   let repository: SqliteRepository
@@ -37,6 +45,7 @@ describe('SqliteRepository contract', () => {
     expect(repository.getRequest(id)).toMatchObject({
       counts: { todo: 3, in_progress: 0, done: 0 },
       sourceUrl: 'https://example.com/bracket',
+      technology: 'resin',
       printerId: 'printer-id',
     })
 
@@ -119,6 +128,44 @@ describe('SqliteRepository contract', () => {
       { value: 'Maker', label: 'Maker', count: 1 },
       { value: 'Other', label: 'Other', count: 1 },
     ])
+  })
+
+  it('filters mixed requests by technology and printer assignment', () => {
+    const resin = repository.createRequest({
+      name: 'Resin model',
+      fileName: 'resin.stl',
+      filePath: 'todo/resin.stl',
+      quantity: 1,
+      requesterEmail: 'maker@example.com',
+      technology: 'resin',
+      printerId: 'resin-printer',
+    })
+    const fdm = repository.createRequest({
+      name: 'FDM model',
+      fileName: 'fdm.stl',
+      filePath: 'todo/fdm.stl',
+      quantity: 1,
+      requesterEmail: 'maker@example.com',
+      technology: 'fdm',
+      printerId: 'fdm-printer',
+    })
+    const unassigned = repository.createRequest({
+      name: 'Unassigned FDM model',
+      fileName: 'unassigned.stl',
+      filePath: 'todo/unassigned.stl',
+      quantity: 1,
+      requesterEmail: 'maker@example.com',
+      technology: 'fdm',
+    })
+
+    expect(
+      repository
+        .queryRequests({ filters: { technology: 'fdm' } })
+        .requests.map(({ id }) => id)
+        .sort(),
+    ).toEqual([unassigned, fdm].sort())
+    expect(repository.queryRequests({ filters: { printerId: 'resin-printer' } }).requests.map(({ id }) => id)).toEqual([resin])
+    expect(repository.queryRequests({ filters: { printerId: null } }).requests.map(({ id }) => id)).toEqual([unassigned])
   })
 
   it('applies visibility and ownership before returning requests or facets', () => {
@@ -228,7 +275,7 @@ describe('SqliteRepository contract', () => {
         orientationCandidates: [expect.objectContaining({ islandCount: 0, supportAreaMm2: 20 })],
       }),
     ])
-    expect(repository.getRequest(id)).toMatchObject({ estimatedResinMl: 1 })
+    expect(repository.getRequest(id)).toMatchObject({ estimatedVolumeMm3: 1_000 })
     repository.upsertPlateModelAnalyses([{ requestId: id, widthMm: 13, depthMm: 19, heightMm: 43 }])
     expect(repository.listPlateModelAnalyses()).toEqual([
       expect.objectContaining({ requestId: id, analysisVersion: 1, widthMm: 13, depthMm: 19, heightMm: 43 }),
@@ -455,6 +502,113 @@ describe('SqliteRepository contract', () => {
         .run('invalid-invite', 'invalid-token', 'operator', 1700000000000, 1800000000000),
     ).toThrow()
     migrated.close()
+  })
+
+  it('upgrades existing requests to resin technology', () => {
+    const db = new Database(':memory:')
+    db.exec('CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)')
+    for (const [version, sql] of [
+      [1, initialMigration],
+      [2, operationsMigration],
+      [3, uploadsMigration],
+      [4, settingsMigration],
+      [5, betterAuthMigration],
+      [6, assetGenerationMigration],
+      [7, invitesMigration],
+      [8, authRateLimitMigration],
+      [9, adminRoleMigration],
+      [10, platePlannerMigration],
+      [11, resinOrientationMigration],
+      [12, resinOrientationCandidatesMigration],
+      [13, orientationAnalysisJobsMigration],
+      [14, assetStageJobsMigration],
+      [15, resinVolumeMigration],
+      [16, requestPrinterMigration],
+    ] as const) {
+      db.exec(sql)
+      db.prepare('INSERT INTO schema_migrations VALUES (?,?)').run(version, Date.now())
+    }
+    db.prepare(
+      'INSERT INTO requests (id,name,file_name,file_path,quantity,requester_email,printer_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
+    ).run('legacy-request', 'Legacy', 'legacy.stl', 'todo/legacy.stl', 1, 'owner@example.com', 'legacy-printer', 1, 1)
+    db.prepare('INSERT INTO request_statuses (request_id,status_id,quantity) VALUES (?,?,?)').run('legacy-request', 'todo', 1)
+
+    const migrated = new SqliteRepository(db)
+
+    expect(migrated.getRequest('legacy-request')).toMatchObject({ technology: 'resin', printerId: 'legacy-printer' })
+    expect(() =>
+      migrated.database
+        .prepare(
+          'INSERT INTO requests (id,name,file_name,file_path,quantity,requester_email,technology,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
+        )
+        .run('invalid', 'Invalid', 'invalid.stl', 'todo/invalid.stl', 1, 'owner@example.com', 'powder', 1, 1),
+    ).toThrow()
+    migrated.close()
+  })
+
+  it('keeps assignments for planning changes while pruning their drafts', () => {
+    const resin = {
+      id: 'resin-printer',
+      name: 'Resin printer',
+      widthMm: 100,
+      depthMm: 60,
+      heightMm: 150,
+      spacingMm: 2,
+      supportMarginMm: 2,
+      adhesionMarginMm: 1,
+      heightAllowanceMm: 4,
+      maxHeightDifferenceMm: 20,
+    } as PrinterProfile
+    const fdm = {
+      id: 'fdm-printer',
+      name: 'FDM printer',
+      technology: 'fdm',
+      widthMm: 220,
+      depthMm: 220,
+      heightMm: 250,
+      spacingMm: 3,
+      brimMarginMm: 2,
+      filamentDiameterMm: 1.75,
+      materialDensityGPerCm3: 1.24,
+    } as unknown as PrinterProfile
+    repository.setSetting('plate-planner-profiles', [resin, fdm])
+    const resinRequest = repository.createRequest({
+      name: 'Resin',
+      fileName: 'resin.stl',
+      filePath: 'todo/resin.stl',
+      quantity: 1,
+      requesterEmail: 'owner@example.com',
+      technology: 'resin',
+      printerId: resin.id,
+    })
+    const fdmRequest = repository.createRequest({
+      name: 'FDM',
+      fileName: 'fdm.stl',
+      filePath: 'todo/fdm.stl',
+      quantity: 1,
+      requesterEmail: 'owner@example.com',
+      technology: 'fdm',
+      printerId: fdm.id,
+    })
+    const draft = (printerId: string): PlatePlannerDraft => ({
+      fingerprint: printerId,
+      printerId,
+      candidates: [],
+      placements: [],
+      skippedCount: 0,
+      savedAt: 1,
+    })
+    repository.setSetting('plate-planner-drafts', { [resin.id]: draft(resin.id), [fdm.id]: draft(fdm.id) })
+
+    repository.replacePrinterProfiles([{ ...resin, widthMm: 110 }, fdm])
+
+    expect(repository.getRequest(resinRequest)?.printerId).toBe(resin.id)
+    expect(repository.getRequest(fdmRequest)?.printerId).toBe(fdm.id)
+    expect(repository.getSetting<Record<string, PlatePlannerDraft>>('plate-planner-drafts')).toEqual({ [fdm.id]: draft(fdm.id) })
+
+    repository.replacePrinterProfiles([{ ...fdm, id: resin.id, name: 'Converted printer' }, fdm])
+    expect(repository.getRequest(resinRequest)?.printerId).toBeUndefined()
+    expect(repository.getRequest(fdmRequest)?.printerId).toBe(fdm.id)
   })
 
   it('reconciles added statuses and rejects removed statuses that contain copies', () => {

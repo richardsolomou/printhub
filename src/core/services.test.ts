@@ -16,6 +16,7 @@ const admin: Identity = { id: 'admin', email: 'op@example.com', name: 'Admin', r
 const slaPrinter: PrinterProfile = {
   id: 'sla-printer',
   name: 'Elegoo Saturn',
+  technology: 'resin',
   widthMm: 192,
   depthMm: 120,
   heightMm: 200,
@@ -25,6 +26,18 @@ const slaPrinter: PrinterProfile = {
   heightAllowanceMm: 5,
   maxHeightDifferenceMm: 20,
 }
+const fdmPrinter = {
+  id: 'fdm-printer',
+  name: 'Prusa MK4',
+  technology: 'fdm',
+  widthMm: 250,
+  depthMm: 210,
+  heightMm: 220,
+  spacingMm: 3,
+  brimMarginMm: 2,
+  filamentDiameterMm: 1.75,
+  materialDensityGPerCm3: 1.24,
+} as unknown as PrinterProfile
 
 describe('PrintHubService crash recovery', () => {
   let root: string
@@ -204,9 +217,74 @@ describe('PrintHubService crash recovery', () => {
     })
 
     expect(service.listRequests(admin).requests).toEqual([
-      expect.objectContaining({ id, printer: { id: slaPrinter.id, name: slaPrinter.name } }),
+      expect.objectContaining({ id, printer: { id: slaPrinter.id, name: slaPrinter.name, technology: 'resin' } }),
     ])
     expect(() => service.update(id, { printerId: 'missing-printer' }, admin)).toThrow(expect.objectContaining({ status: 400 }))
+  })
+
+  it('enforces request and printer technology compatibility', () => {
+    repository.setSetting('plate-planner-profiles', [slaPrinter, fdmPrinter])
+    expect(() =>
+      service.createRequest(
+        {
+          name: 'Wrong printer',
+          fileName: 'wrong.stl',
+          filePath: 'todo/wrong.stl',
+          quantity: 1,
+          requesterEmail: 'owner@example.com',
+          technology: 'fdm',
+          printerId: slaPrinter.id,
+        },
+        admin,
+      ),
+    ).toThrow(expect.objectContaining({ status: 400 }))
+
+    const id = service.createRequest(
+      {
+        name: 'FDM model',
+        fileName: 'fdm.stl',
+        filePath: 'todo/fdm.stl',
+        quantity: 1,
+        requesterEmail: 'owner@example.com',
+        technology: 'fdm',
+        printerId: fdmPrinter.id,
+      },
+      admin,
+    )
+
+    expect(repository.getRequest(id)).toMatchObject({ technology: 'fdm', printerId: fdmPrinter.id })
+    expect(() => service.update(id, { printerId: slaPrinter.id }, admin)).toThrow(expect.objectContaining({ status: 400 }))
+    service.update(id, { technology: 'resin' }, admin)
+    expect(repository.getRequest(id)).toMatchObject({ technology: 'resin', printerId: undefined })
+  })
+
+  it('reports compatibility across configured printers after analysis', () => {
+    repository.setSetting('plate-planner-profiles', [slaPrinter, fdmPrinter])
+    const id = service.createRequest(
+      {
+        name: 'FDM model',
+        fileName: 'fdm.stl',
+        filePath: 'todo/fdm.stl',
+        quantity: 1,
+        requesterEmail: 'owner@example.com',
+        technology: 'fdm',
+        printerId: fdmPrinter.id,
+      },
+      admin,
+    )
+
+    expect(service.listRequests(admin).requests[0]).toMatchObject({ fitState: 'pending' })
+    repository.upsertPlateModelAnalyses([
+      { requestId: id, analysisVersion: 7, widthMm: 100, depthMm: 80, heightMm: 50, estimatedVolumeMm3: 10_000 },
+    ])
+    expect(service.listRequests(admin).requests[0]).toMatchObject({
+      compatiblePrinterIds: [fdmPrinter.id],
+      fitState: 'selected_printer',
+    })
+    repository.upsertPlateModelAnalyses([
+      { requestId: id, analysisVersion: 7, widthMm: 300, depthMm: 280, heightMm: 250, estimatedVolumeMm3: 10_000 },
+    ])
+    expect(service.listRequests(admin).requests[0]).toMatchObject({ compatiblePrinterIds: [], fitState: 'none' })
   })
 
   it('blocks requester deletion once a copy has started', async () => {

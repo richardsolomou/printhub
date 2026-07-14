@@ -12,7 +12,9 @@ export function AboutPane() {
           <img className="size-13 shrink-0 rounded-xl" src="/favicon.svg" alt="" aria-hidden="true" />
           <div>
             <strong>PrintHub v{__APP_VERSION__}</strong>
-            <p className="mt-1 text-muted-foreground">A privacy-first resin production queue that keeps models on storage you control.</p>
+            <p className="mt-1 text-muted-foreground">
+              A private resin and FDM production queue that keeps models, planning, and production history on storage you control.
+            </p>
           </div>
         </div>
       </SettingsSection>

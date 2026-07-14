@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 import { Card, CardHeader } from '@/components/ui/card'
 import { Empty, EmptyDescription } from '@/components/ui/empty'
 import { RequestCard } from './RequestCard'
-import { formatResinMl, RESIN_ESTIMATE_DESCRIPTION, summarizeResinMl } from '../../core/resin'
+import { formatMaterial, materialEstimate } from './PrintTechnology'
 
 export function Column({
   status,
@@ -20,6 +20,7 @@ export function Column({
   dragEnabled,
   hideRequester,
   showPrinter,
+  filtered,
   settlingIds,
   onOpenRequest,
 }: {
@@ -31,6 +32,7 @@ export function Column({
   dragEnabled: boolean
   hideRequester: boolean
   showPrinter: boolean
+  filtered: boolean
   settlingIds: Set<string>
   onOpenRequest: (requestId: string) => void
 }) {
@@ -64,19 +66,20 @@ export function Column({
   }, [dragEnabled, isAdmin, status])
 
   const total = entries.reduce((sum, entry) => sum + entry.count, 0)
-  const resin = summarizeResinMl(entries)
-  const resinLabel =
-    resin.unknownCopies === resin.resinCopies
-      ? '… ml'
-      : resin.unknownCopies > 0
-        ? `≥${formatResinMl(resin.knownMl)} ml`
-        : `${formatResinMl(resin.knownMl)} ml`
-  const resinTitle = [
-    RESIN_ESTIMATE_DESCRIPTION,
-    resin.unknownCopies > 0 ? `No volume estimate is available for ${resin.unknownCopies} copies yet.` : undefined,
-  ]
-    .filter(Boolean)
-    .join(' ')
+  const materialTotals = entries.reduce(
+    (totals, entry) => {
+      const technology = entry.request.technology
+      totals[technology].copies += entry.count
+      const estimate = materialEstimate(entry.request, entry.count)
+      if (estimate) totals[technology].known += estimate.total
+      else totals[technology].unknown += entry.count
+      return totals
+    },
+    {
+      resin: { copies: 0, known: 0, unknown: 0, unit: 'ml' },
+      fdm: { copies: 0, known: 0, unknown: 0, unit: 'g' },
+    },
+  )
   const virtualizer = useVirtualizer({
     count: entries.length,
     getScrollElement: () => bodyRef.current,
@@ -100,16 +103,28 @@ export function Column({
         <span className="ml-auto rounded-full bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground" title="Copies">
           {total}
         </span>
-        {resin.resinCopies > 0 && (
-          <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground" title={resinTitle}>
-            {resinLabel}
-          </span>
-        )}
+        {(['resin', 'fdm'] as const).map((technology) => {
+          const summary = materialTotals[technology]
+          if (!summary.copies) return null
+          const label =
+            summary.unknown === summary.copies
+              ? `… ${summary.unit}`
+              : `${summary.unknown ? '≥' : ''}${formatMaterial(summary.known)} ${summary.unit}`
+          return (
+            <span
+              key={technology}
+              className="rounded-full bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground"
+              aria-label={`${technology === 'resin' ? 'Resin' : 'FDM'} material total: ${label}`}
+            >
+              {label}
+            </span>
+          )
+        })}
       </CardHeader>
       <div ref={bodyRef} className="column-body virtualized relative flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-2.5">
         {entries.length === 0 && (
           <Empty className="border-0 py-6">
-            <EmptyDescription>{definition.empty}</EmptyDescription>
+            <EmptyDescription>{filtered ? 'No matching prints in this stage.' : definition.empty}</EmptyDescription>
           </Empty>
         )}
         <div className="virtual-list relative w-full" style={{ height: virtualizer.getTotalSize() }}>

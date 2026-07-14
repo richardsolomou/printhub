@@ -126,6 +126,7 @@ function AuthenticatedHome() {
       <BoardFilters
         search={search}
         facets={facets}
+        printers={printers}
         isFetching={isFetching}
         onChange={(patch, replace = false) => void navigate({ to: '/', search: updateRequestSearch(search, patch), replace })}
       />
@@ -136,10 +137,11 @@ function AuthenticatedHome() {
         isAdmin={isAdmin}
         hideRequester={hideRequester}
         showPrinters={showPrinters}
+        filtered={Object.entries(filters).some(([key, value]) => key !== 'sort' && value !== undefined)}
         sort={filters.sort ?? 'board'}
         onOpenRequest={(id) => {
           setOpenRequestId(id)
-          posthog.capture('request_viewed', { request_id: id })
+          posthog.capture('request_viewed', { printer_technology: requests.find((request) => request.id === id)?.technology })
         }}
       />
       {!result && <div className="absolute inset-0 grid place-items-center bg-background/70 text-muted-foreground">Loading board…</div>}

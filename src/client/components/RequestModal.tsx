@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { usePostHog } from '@posthog/react'
-import { Plus, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
@@ -11,11 +11,11 @@ import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import type { PublicPrintRequest } from '../../core/types'
+import type { PrintTechnology, PublicPrintRequest } from '../../core/types'
 import type { WorkflowDefinition } from '../../core/workflow'
 import { peopleQuery, sessionQuery } from '../queries'
 import { requesterLabel } from '../requester'
-import { deleteRequest, updateRequest } from '../../server/fns'
+import { deleteRequest, moveCopies, updateRequest } from '../../server/fns'
 import { DialogShell } from './DialogShell'
 import { ConfirmDialog } from './ConfirmDialog'
 import { LazyStlViewer } from './LazyStlViewer'
@@ -41,16 +41,17 @@ export function RequestModal({
   const { data: people } = useSuspenseQuery(peopleQuery())
   const { data: session } = useSuspenseQuery(sessionQuery())
   const printers = session.printers
-  const showPrinterPicker = printers.length > 1
   const callUpdate = useServerFn(updateRequest)
   const callDelete = useServerFn(deleteRequest)
+  const callMoveCopies = useServerFn(moveCopies)
   const queryClient = useQueryClient()
   const [name, setName] = useState(request.name)
   const [quantity, setQuantity] = useState(String(request.quantity))
   const [forName, setForName] = useState(requesterLabel(request))
   const [notes, setNotes] = useState(request.notes ?? '')
   const [sourceUrl, setSourceUrl] = useState(request.sourceUrl ?? '')
-  const [printerId, setPrinterId] = useState(request.printerId ?? printers[0]?.id ?? '')
+  const [technology, setTechnology] = useState<PrintTechnology>(request.technology)
+  const [printerId, setPrinterId] = useState(request.printerId ?? '')
   const [notesOpen, setNotesOpen] = useState(Boolean(request.notes))
   const [sourceOpen, setSourceOpen] = useState(Boolean(request.sourceUrl))
   const [error, setError] = useState('')
@@ -60,11 +61,11 @@ export function RequestModal({
     mutationFn: callUpdate,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['requests'] })
-      posthog.capture('request_updated', { request_id: request.id })
+      posthog.capture('request_updated', { printer_technology: technology })
       onClose()
     },
     onError: (failure) => {
-      posthog.captureException(failure, { action: 'update_request', request_id: request.id })
+      posthog.captureException(failure, { action: 'update_request', printer_technology: technology })
       setError("Couldn't save changes. Try again.")
     },
   })
@@ -75,11 +76,19 @@ export function RequestModal({
       onClose()
     },
     onError: (failure) => {
-      posthog.captureException(failure, { action: 'delete_request', request_id: request.id })
+      posthog.captureException(failure, { action: 'delete_request', printer_technology: request.technology })
       setError("Couldn't delete this request.")
     },
   })
-  const busy = updateMutation.isPending || deleteMutation.isPending
+  const moveMutation = useMutation({
+    mutationFn: callMoveCopies,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['requests'] }),
+    onError: (failure) => {
+      posthog.captureException(failure, { action: 'move_request_copy' })
+      setError("Couldn't move that copy. Refresh and try again.")
+    },
+  })
+  const busy = updateMutation.isPending || deleteMutation.isPending || moveMutation.isPending
 
   const dirty =
     canEdit &&
@@ -88,7 +97,8 @@ export function RequestModal({
       forName !== requesterLabel(request) ||
       notes !== (request.notes ?? '') ||
       sourceUrl !== (request.sourceUrl ?? '') ||
-      printerId !== (request.printerId ?? printers[0]?.id ?? ''))
+      technology !== request.technology ||
+      printerId !== (request.printerId ?? ''))
 
   const requestClose = () => {
     if (dirty) setConfirmation('discard')
@@ -106,6 +116,7 @@ export function RequestModal({
         requesterName: forName.trim(),
         notes: notes.trim(),
         sourceUrl: sourceUrl.trim(),
+        technology,
         printerId: printerId || null,
       },
     })
@@ -120,11 +131,20 @@ export function RequestModal({
 
         <RequestDetails request={request} workflow={workflow} people={people} hideRequester={hideRequester} showSource={!canEdit} />
 
+        {isAdmin && (
+          <ProductionControls
+            request={request}
+            workflow={workflow}
+            busy={moveMutation.isPending}
+            onMove={(from, to) => moveMutation.mutate({ data: { id: request.id, from, to, count: 1 } })}
+          />
+        )}
+
         {!canEdit && request.notes && <p>{request.notes}</p>}
 
         {canEdit && (
           <form onSubmit={save}>
-            <div className="mb-3 grid gap-3 sm:grid-cols-3 [&>[data-slot=field]]:min-w-0">
+            <div className="mb-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 [&>[data-slot=field]]:min-w-0">
               {isAdmin && (
                 <Field>
                   <FieldLabel htmlFor="request-name">Name</FieldLabel>
@@ -143,30 +163,56 @@ export function RequestModal({
                   onChange={(e) => setQuantity(e.target.value)}
                 />
               </Field>
-              {showPrinterPicker && (
-                <Field>
-                  <FieldLabel htmlFor="request-printer">Printer</FieldLabel>
-                  <Select
-                    items={printers.map((printer) => ({
-                      value: printer.id,
-                      label: printer.name,
-                    }))}
-                    value={printerId}
-                    onValueChange={(value) => value && setPrinterId(value)}
-                  >
-                    <SelectTrigger id="request-printer" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {printers.map((printer) => (
+              <Field>
+                <FieldLabel htmlFor="request-technology">Technology</FieldLabel>
+                <Select
+                  items={[
+                    { value: 'resin', label: 'Resin' },
+                    { value: 'fdm', label: 'FDM' },
+                  ]}
+                  value={technology}
+                  onValueChange={(value) => {
+                    if (!value) return
+                    setTechnology(value)
+                    setPrinterId('')
+                  }}
+                >
+                  <SelectTrigger id="request-technology" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="resin">Resin</SelectItem>
+                    <SelectItem value="fdm">FDM</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="request-printer">Printer</FieldLabel>
+                <Select
+                  items={[
+                    { value: '', label: 'Any compatible printer' },
+                    ...printers
+                      .filter((printer) => printer.technology === technology)
+                      .map((printer) => ({ value: printer.id, label: printer.name })),
+                  ]}
+                  value={printerId}
+                  onValueChange={(value) => setPrinterId(value ?? '')}
+                >
+                  <SelectTrigger id="request-printer" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Any compatible printer</SelectItem>
+                    {printers
+                      .filter((printer) => printer.technology === technology)
+                      .map((printer) => (
                         <SelectItem key={printer.id} value={printer.id}>
                           {printer.name}
                         </SelectItem>
                       ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-              )}
+                  </SelectContent>
+                </Select>
+              </Field>
               {isAdmin && (
                 <Field>
                   <FieldLabel htmlFor="request-for">For</FieldLabel>
@@ -285,7 +331,7 @@ export function RequestModal({
                 className={cn(buttonVariants({ variant: 'outline' }))}
                 href={`/api/files/${request.id}`}
                 download
-                onClick={() => posthog.capture('stl_downloaded', { request_id: request.id })}
+                onClick={() => posthog.capture('stl_downloaded', { printer_technology: request.technology })}
               >
                 Download STL
               </a>
@@ -303,7 +349,7 @@ export function RequestModal({
               className={cn(buttonVariants({ variant: 'outline' }))}
               href={`/api/files/${request.id}`}
               download
-              onClick={() => posthog.capture('stl_downloaded', { request_id: request.id })}
+              onClick={() => posthog.capture('stl_downloaded', { printer_technology: request.technology })}
             >
               Download STL
             </a>
@@ -323,5 +369,65 @@ export function RequestModal({
         onConfirm={() => (confirmation === 'delete' ? deleteMutation.mutate({ data: { id: request.id } }) : onClose())}
       />
     </>
+  )
+}
+
+function ProductionControls({
+  request,
+  workflow,
+  busy,
+  onMove,
+}: {
+  request: PublicPrintRequest
+  workflow: WorkflowDefinition
+  busy: boolean
+  onMove: (from: string, to: string) => void
+}) {
+  return (
+    <section className="mb-4 rounded-lg border p-3" aria-label="Move copies through production">
+      <div className="mb-2">
+        <h3 className="font-heading text-sm font-semibold">Production copies</h3>
+        <p className="text-xs text-muted-foreground">Move one copy at a time with keyboard- and touch-accessible controls.</p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {workflow.statuses.map((status, index) => {
+          const count = request.counts[status.id] ?? 0
+          const previous = workflow.statuses[index - 1]
+          const next = workflow.statuses[index + 1]
+          return (
+            <div key={status.id} className="flex items-center gap-2 rounded-md bg-muted/30 p-2">
+              <div className="min-w-0 flex-1">
+                <div className="font-medium">{status.label}</div>
+                <div className="font-mono text-xs text-muted-foreground">{count} copies</div>
+              </div>
+              {previous && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon-sm"
+                  disabled={busy || count < 1}
+                  aria-label={`Move one copy from ${status.label} to ${previous.label}`}
+                  onClick={() => onMove(status.id, previous.id)}
+                >
+                  <ChevronLeft />
+                </Button>
+              )}
+              {next && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon-sm"
+                  disabled={busy || count < 1}
+                  aria-label={`Move one copy from ${status.label} to ${next.label}`}
+                  onClick={() => onMove(status.id, next.id)}
+                >
+                  <ChevronRight />
+                </Button>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </section>
   )
 }

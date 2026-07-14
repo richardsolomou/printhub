@@ -7,6 +7,7 @@ import type {
   MoveOperation,
   NewPrintRequest,
   PendingOperation,
+  PrintTechnology,
   PublicRequestQueryResult,
   Repository,
   RequestFilters,
@@ -15,7 +16,13 @@ import type {
   UploadStagingArea,
 } from './types'
 import { initialStatus, statusById, workflow } from './workflow'
-import { normalizePrinterProfile, type PrinterProfile } from './platePlanner'
+import {
+  analysisFitsPrinter,
+  modelAnalysisReady,
+  normalizePrinterProfile,
+  orientationAnalysisReady,
+  type PrinterProfile,
+} from './platePlanner'
 
 export class PrintHubService {
   constructor(
@@ -33,22 +40,34 @@ export class PrintHubService {
       visibleToEmail: !admin && privateRequests ? identity.email : undefined,
       searchPrivateMetadata: admin,
     })
-    const printers = new Map(
-      (this.repository.getSetting<PrinterProfile[]>('plate-planner-profiles') ?? []).map((profile) => {
-        const printer = normalizePrinterProfile(profile)
-        return [printer.id, { id: printer.id, name: printer.name }] as const
-      }),
-    )
+    const profiles = (this.repository.getSetting<PrinterProfile[]>('plate-planner-profiles') ?? []).map(normalizePrinterProfile)
+    const printers = new Map(profiles.map((profile) => [profile.id, printerSummary(profile)] as const))
     return {
       facets: result.facets,
       requests: result.requests.map(
         ({ fileName: _fileName, filePath: _filePath, requesterEmail, thumbnailPath: _thumbnailPath, previewPath, ...request }) => {
           const mine = requesterEmail === identity.email
           const started = workflow.statuses.slice(1).some((status) => request.counts[status.id] > 0)
+          const analysis = this.repository.getPlateModelAnalysis(request.id)
+          const analysisReady = modelAnalysisReady(analysis) && (request.technology === 'fdm' || orientationAnalysisReady(analysis))
+          const compatiblePrinterIds = analysisReady
+            ? profiles
+                .filter((profile) => profile.technology === request.technology && analysisFitsPrinter(analysis, profile))
+                .map((profile) => profile.id)
+            : undefined
+          const fitState = !compatiblePrinterIds
+            ? 'pending'
+            : compatiblePrinterIds.length === 0
+              ? 'none'
+              : request.printerId && compatiblePrinterIds.includes(request.printerId)
+                ? 'selected_printer'
+                : 'another_compatible_printer'
           return {
             ...request,
             mine,
             printer: request.printerId ? printers.get(request.printerId) : undefined,
+            compatiblePrinterIds,
+            fitState,
             hasPreview: !!previewPath,
             canEdit: admin || (mine && !started),
             canDelete: admin || (mine && !started),
@@ -67,9 +86,14 @@ export class PrintHubService {
   }
 
   createRequest(input: Parameters<Repository['createRequest']>[0], identity: Identity) {
-    const id = this.repository.createRequest(input)
+    const technology = input.technology ?? 'resin'
+    this.validateAssignment(technology, input.printerId)
+    const id = this.repository.createRequest({ ...input, technology })
     this.changed('request.created')
-    this.capture(identity.id, 'request_created', { request_id: id, quantity: input.quantity })
+    this.capture(identity.id, 'request_created', {
+      printer_technology: technology,
+      assignment_state: input.printerId ? 'assigned' : 'unassigned',
+    })
     return id
   }
 
@@ -81,6 +105,9 @@ export class PrintHubService {
   ) {
     const completed = this.repository.getCompletedUpload(uploadId, identity.id)
     if (completed) return completed
+    const technology = input.technology ?? 'resin'
+    this.validateAssignment(technology, input.printerId)
+    input = { ...input, technology }
     const filePath = this.assets.createPath(input.fileName)
     const operation: UploadOperation = {
       kind: 'upload',
@@ -102,7 +129,10 @@ export class PrintHubService {
     }
     const id = await this.resumeOperation(pending)
     this.changed('request.created')
-    this.capture(identity.id, 'request_created', { request_id: id, quantity: input.quantity })
+    this.capture(identity.id, 'request_created', {
+      printer_technology: technology,
+      assignment_state: input.printerId ? 'assigned' : 'unassigned',
+    })
     return id!
   }
 
@@ -147,7 +177,12 @@ export class PrintHubService {
       this.repository.moveCopies({ ...input, filePath })
     }
     this.changed('request.copiesMoved')
-    this.capture(identity.id, 'request_copies_moved', input)
+    this.capture(identity.id, 'request_copies_moved', {
+      printer_technology: request.technology,
+      copy_count: input.count,
+      from_status: input.from,
+      to_status: input.to,
+    })
   }
 
   reorder(id: string, status: string, order: number, identity: Identity) {
@@ -162,7 +197,15 @@ export class PrintHubService {
 
   update(
     id: string,
-    fields: { name?: string; quantity?: number; requesterName?: string; notes?: string; sourceUrl?: string; printerId?: string | null },
+    fields: {
+      name?: string
+      quantity?: number
+      requesterName?: string
+      notes?: string
+      sourceUrl?: string
+      technology?: PrintTechnology
+      printerId?: string | null
+    },
     identity: Identity,
   ) {
     if (
@@ -173,6 +216,7 @@ export class PrintHubService {
       (fields.notes !== undefined && (typeof fields.notes !== 'string' || fields.notes.length > 2000)) ||
       (fields.sourceUrl !== undefined &&
         (typeof fields.sourceUrl !== 'string' || (fields.sourceUrl.trim() !== '' && !validSourceUrl(fields.sourceUrl.trim())))) ||
+      (fields.technology !== undefined && fields.technology !== 'resin' && fields.technology !== 'fdm') ||
       (fields.printerId !== undefined &&
         fields.printerId !== null &&
         (typeof fields.printerId !== 'string' || fields.printerId.length > 100)) ||
@@ -182,14 +226,26 @@ export class PrintHubService {
       throw new Response('invalid update', { status: 400 })
     }
     const request = this.requiredRequest(id)
-    if (fields.printerId) {
-      const printers = this.repository.getSetting<PrinterProfile[]>('plate-planner-profiles') ?? []
-      if (!printers.some((printer) => printer.id === fields.printerId)) throw new Response('unknown printer', { status: 400 })
+    const technology = fields.technology ?? request.technology
+    let printerId = fields.printerId === undefined ? request.printerId : (fields.printerId ?? undefined)
+    if (fields.technology !== undefined && fields.printerId === undefined && request.printerId) {
+      const assigned = this.printer(request.printerId)
+      if (!assigned || printerTechnology(assigned) !== fields.technology) {
+        fields.printerId = null
+        printerId = undefined
+      }
     }
+    if (printerId) this.validateAssignment(technology, printerId)
     if (identity.role !== 'admin') {
       const started = workflow.statuses.slice(1).some((status) => request.counts[status.id] > 0)
       if (request.requesterEmail !== identity.email || started) throw new Response('forbidden', { status: 403 })
-      fields = { quantity: fields.quantity, notes: fields.notes, sourceUrl: fields.sourceUrl, printerId: fields.printerId }
+      fields = {
+        quantity: fields.quantity,
+        notes: fields.notes,
+        sourceUrl: fields.sourceUrl,
+        technology: fields.technology,
+        printerId: fields.printerId,
+      }
     }
     this.repository.updateRequest(id, {
       ...fields,
@@ -219,7 +275,7 @@ export class PrintHubService {
     this.repository.beginOperation(operationId, operation)
     await this.resumeOperation({ id: operationId, state: 'prepared', payload: operation })
     this.changed('request.deleted')
-    this.capture(identity.id, 'request_deleted', { request_id: id })
+    this.capture(identity.id, 'request_deleted', { printer_technology: request.technology })
   }
 
   async recoverOperations() {
@@ -309,6 +365,17 @@ export class PrintHubService {
     if (identity.role !== 'admin') throw new Response('forbidden', { status: 403 })
   }
 
+  private printer(id: string) {
+    return (this.repository.getSetting<PrinterProfile[]>('plate-planner-profiles') ?? []).find((printer) => printer.id === id)
+  }
+
+  private validateAssignment(technology: PrintTechnology, printerId?: string | null) {
+    if (!printerId) return
+    const printer = this.printer(printerId)
+    if (!printer) throw new Response('unknown printer', { status: 400 })
+    if (printerTechnology(printer) !== technology) throw new Response('printer technology does not match request', { status: 400 })
+  }
+
   private changed(event: AppEvent) {
     this.events.publish(event)
   }
@@ -316,6 +383,22 @@ export class PrintHubService {
   private capture(identity: string, event: string, properties?: Record<string, unknown>) {
     void this.telemetry.capture(identity, event, properties).catch(() => undefined)
   }
+}
+
+function printerTechnology(printer: PrinterProfile): PrintTechnology {
+  return Reflect.get(printer, 'technology') === 'fdm' ? 'fdm' : 'resin'
+}
+
+function printerSummary(printer: PrinterProfile) {
+  return printer.technology === 'fdm'
+    ? {
+        id: printer.id,
+        name: printer.name,
+        technology: printer.technology,
+        filamentDiameterMm: printer.filamentDiameterMm,
+        materialDensityGPerCm3: printer.materialDensityGPerCm3,
+      }
+    : { id: printer.id, name: printer.name, technology: printer.technology }
 }
 
 export function validSourceUrl(value: string) {

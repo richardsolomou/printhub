@@ -6,20 +6,20 @@ import { Item, ItemContent, ItemMedia } from '@/components/ui/item'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
-import type { PrinterSummary } from '../../core/types'
+import type { PrinterSummary, PrintTechnology } from '../../core/types'
 import type { UploadEntry } from './uploadTypes'
+
+type TechnologyUploadEntry = UploadEntry & { technology?: PrintTechnology }
 
 export function UploadRow({
   entry,
   printers,
-  showPrinterPicker,
   onPatch,
   onRemove,
 }: {
-  entry: UploadEntry
+  entry: TechnologyUploadEntry
   printers: PrinterSummary[]
-  showPrinterPicker: boolean
-  onPatch: (patch: Partial<UploadEntry>) => void
+  onPatch: (patch: Partial<TechnologyUploadEntry>) => void
   onRemove: () => void
 }) {
   return (
@@ -74,25 +74,63 @@ export function UploadRow({
             </Tooltip>
           )}
         </div>
-        {showPrinterPicker && (
+        <div className="grid gap-2 sm:grid-cols-2">
           <Select
-            items={printers.map((printer) => ({ value: printer.id, label: printer.name }))}
-            value={entry.printerId ?? printers[0]?.id}
-            onValueChange={(printerId) => printerId && onPatch({ printerId })}
+            items={
+              [
+                { value: '', label: 'Choose technology' },
+                { value: 'resin', label: 'Resin' },
+                { value: 'fdm', label: 'FDM' },
+              ] satisfies { value: string; label: string }[]
+            }
+            value={entry.technology ?? ''}
+            onValueChange={(technology) =>
+              (technology === 'resin' || technology === 'fdm') && onPatch({ technology, printerId: undefined })
+            }
             disabled={entry.state === 'done'}
+          >
+            <SelectTrigger className="w-full" aria-label={`Technology for ${entry.name}`}>
+              <SelectValue placeholder="Choose technology" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">Choose technology</SelectItem>
+              <SelectItem value="resin">Resin</SelectItem>
+              <SelectItem value="fdm">FDM</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select
+            items={[
+              { value: '', label: 'Any compatible printer' },
+              ...printers
+                .filter((printer) => printer.technology === entry.technology)
+                .map((printer) => ({ value: printer.id, label: printer.name })),
+            ]}
+            value={entry.printerId ?? ''}
+            onValueChange={(printerId) => onPatch({ printerId: printerId || undefined })}
+            disabled={entry.state === 'done' || !entry.technology}
           >
             <SelectTrigger className="w-full" aria-label={`Printer for ${entry.name}`}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {printers.map((printer) => (
-                <SelectItem key={printer.id} value={printer.id}>
-                  {printer.name}
-                </SelectItem>
-              ))}
+              <SelectItem value="">Any compatible printer</SelectItem>
+              {printers
+                .filter((printer) => printer.technology === entry.technology)
+                .map((printer) => (
+                  <SelectItem key={printer.id} value={printer.id}>
+                    {printer.name}
+                  </SelectItem>
+                ))}
             </SelectContent>
           </Select>
-        )}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {entry.technology
+            ? entry.printerId
+              ? 'PrintHub will check this model against the selected printer after analysis.'
+              : `Any compatible ${entry.technology === 'resin' ? 'resin' : 'FDM'} printer can be assigned after analysis.`
+            : 'Choose the intended printing technology before uploading.'}
+        </p>
         {entry.noteOpen && (
           <div className="flex items-start gap-2">
             <Textarea
