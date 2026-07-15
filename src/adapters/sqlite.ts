@@ -36,6 +36,8 @@ import type {
 import { initialStatus, workflow } from '../core/workflow'
 import { normalizePrinterProfile, type PlatePlannerDraft, type PrinterProfile } from '../core/platePlanner'
 import { backupDatabase } from './sqliteBackup'
+import { createDatabase, createQueries, type DrizzleQueries, type PrintHubDatabase } from './database'
+import { migrateDatabase } from './drizzleMigrations'
 
 type Migration = { version: number; sql: string; prepare?: (db: Database.Database) => void; foreignKeysOff?: boolean }
 
@@ -60,7 +62,7 @@ const migrations: Migration[] = [
   { version: 18, sql: requestPrintTypeCompatibilityMigration, prepare: prepareRequestPrintTypeCompatibility },
   { version: 19, sql: twoFactorMigration },
   { version: 20, sql: requestOwnershipMigration },
-  { version: 21, sql: requestOwnerUserMigration, foreignKeysOff: true },
+  { version: 21, sql: requestOwnerUserMigration, prepare: prepareRequestOwnerUser, foreignKeysOff: true },
 ]
 
 function prepareRequestPrintTypeCompatibility(db: Database.Database) {
@@ -78,6 +80,21 @@ function prepareRequestPrintTypeCompatibility(db: Database.Database) {
   }
 
   db.exec('UPDATE requests SET print_type=NULL WHERE printer_id IS NOT NULL')
+}
+
+function prepareRequestOwnerUser(db: Database.Database) {
+  const unmatched = db
+    .prepare(
+      `SELECT id,requester_email
+       FROM requests
+       WHERE NOT EXISTS (SELECT 1 FROM "user" WHERE email=requests.requester_email COLLATE NOCASE)
+       ORDER BY created_at
+       LIMIT 10`,
+    )
+    .all() as { id: string; requester_email: string }[]
+  if (unmatched.length === 0) return
+  const requests = unmatched.map(({ id, requester_email }) => `${id} (${requester_email})`).join(', ')
+  throw new Error(`cannot migrate request ownership because these requests have no matching account: ${requests}`)
 }
 
 type RequestRow = {
@@ -179,17 +196,24 @@ function escapeLike(value: string) {
 }
 
 export class SqliteRepository implements Repository {
-  // Shared with better-auth, which manages its own tables on this connection.
-  readonly database: Database.Database
+  readonly database: PrintHubDatabase
+  readonly sqlite: Database.Database
+  private db: DrizzleQueries
   private lastIntegrity = { integrity: 'unknown', checkedAt: 0 }
 
-  constructor(private db: Database.Database) {
-    this.database = db
-    this.db.pragma('journal_mode = WAL')
-    this.db.pragma('synchronous = FULL')
-    this.db.pragma('foreign_keys = ON')
-    this.db.pragma('busy_timeout = 5000')
-    this.migrate()
+  constructor(client: Database.Database) {
+    this.sqlite = client
+    this.sqlite.pragma('journal_mode = WAL')
+    this.sqlite.pragma('synchronous = FULL')
+    this.sqlite.pragma('foreign_keys = ON')
+    this.sqlite.pragma('busy_timeout = 5000')
+    this.database = createDatabase(client)
+    this.db = createQueries(this.database)
+    migrateDatabase(
+      this.database,
+      () => this.migrateLegacy(),
+      () => this.backupBeforeMigration(),
+    )
     this.maintain()
   }
 
@@ -199,27 +223,39 @@ export class SqliteRepository implements Repository {
   }
 
   close() {
-    this.db.close()
+    this.sqlite.close()
   }
 
   databaseInfo() {
-    const file = this.db.name
+    const file = this.sqlite.name
     const sizeBytes = file && file !== ':memory:' ? fs.statSync(file).size : 0
     return { path: file, sizeBytes, integrity: this.lastIntegrity.integrity, lastCheckedAt: this.lastIntegrity.checkedAt }
   }
 
   maintain() {
-    const result = this.db.pragma('quick_check', { simple: true })
+    const result = this.sqlite.pragma('quick_check', { simple: true })
     const integrity = typeof result === 'string' ? result : String(result)
     if (integrity !== 'ok') throw new Error(`database integrity check failed: ${integrity}`)
-    this.db.pragma('optimize')
-    this.db.pragma('wal_checkpoint(PASSIVE)')
+    this.sqlite.pragma('optimize')
+    this.sqlite.pragma('wal_checkpoint(PASSIVE)')
     this.lastIntegrity = { integrity, checkedAt: Date.now() }
     return { integrity, checkedAt: this.lastIntegrity.checkedAt }
   }
 
   async backup(destination: string) {
-    return backupDatabase(this.db, destination)
+    return backupDatabase(this.sqlite, destination)
+  }
+
+  private backupBeforeMigration() {
+    if (!this.sqlite.name || this.sqlite.name === ':memory:') return
+    const tables = this.sqlite
+      .prepare("SELECT count(*) count FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+      .get() as { count: number }
+    if (tables.count === 0) return
+    const directory = path.join(path.dirname(this.sqlite.name), 'backups')
+    fs.mkdirSync(directory, { recursive: true })
+    const timestamp = new Date().toISOString().replaceAll(':', '-')
+    this.sqlite.prepare('VACUUM INTO ?').run(path.join(directory, `printhub-pre-migration-${timestamp}.sqlite`))
   }
 
   listRequests() {
@@ -232,7 +268,7 @@ export class SqliteRepository implements Repository {
            LEFT JOIN plate_model_analysis analysis ON analysis.request_id=r.id
            ORDER BY r.created_at DESC`,
         )
-        .all() as RequestRow[],
+        .all<RequestRow>(),
     )
   }
 
@@ -295,7 +331,7 @@ export class SqliteRepository implements Repository {
 
   createRequest(request: NewPrintRequest) {
     const id = crypto.randomUUID()
-    this.db.transaction(() => this.insertRequest(id, request))()
+    this.db.transaction(() => this.insertRequest(id, request))
     return id
   }
 
@@ -319,7 +355,7 @@ export class SqliteRepository implements Repository {
       if (active >= maxIncomplete) throw new Response('too many incomplete uploads', { status: 429 })
       this.db.prepare('INSERT INTO upload_sessions (id,owner_id,expires_at) VALUES (?,?,?)').run(uploadId, ownerId, expiresAt)
       return { fresh: true }
-    })()
+    })
   }
 
   reserveUpload(uploadId: string, ownerId: string, bytes: number, expiresAt: number, limits: { count: number; bytes: number }) {
@@ -341,26 +377,26 @@ export class SqliteRepository implements Repository {
       }
       this.db.prepare('UPDATE upload_sessions SET bytes=?,expires_at=? WHERE id=?').run(bytes, expiresAt, uploadId)
       return true
-    })()
+    })
   }
 
   expireUploads(now: number) {
     return this.db.transaction(() => {
-      const ids = (
-        this.db.prepare('SELECT id FROM upload_sessions WHERE completed_request_id IS NULL AND expires_at<=?').all(now) as { id: string }[]
-      ).map(({ id }) => id)
+      const ids = this.db
+        .prepare('SELECT id FROM upload_sessions WHERE completed_request_id IS NULL AND expires_at<=?')
+        .all<{ id: string }>(now)
+        .map(({ id }) => id)
       this.db.prepare('DELETE FROM upload_sessions WHERE completed_request_id IS NULL AND expires_at<=?').run(now)
       return ids
-    })()
+    })
   }
 
   activeUploadIds(now: number) {
     return new Set(
-      (
-        this.db.prepare('SELECT id FROM upload_sessions WHERE completed_request_id IS NULL AND bytes>0 AND expires_at>?').all(now) as {
-          id: string
-        }[]
-      ).map(({ id }) => id),
+      this.db
+        .prepare('SELECT id FROM upload_sessions WHERE completed_request_id IS NULL AND bytes>0 AND expires_at>?')
+        .all<{ id: string }>(now)
+        .map(({ id }) => id),
     )
   }
 
@@ -373,7 +409,10 @@ export class SqliteRepository implements Repository {
   }
 
   uploadIdsOwnedBy(ownerId: string) {
-    return (this.db.prepare('SELECT id FROM upload_sessions WHERE owner_id=?').all(ownerId) as { id: string }[]).map(({ id }) => id)
+    return this.db
+      .prepare('SELECT id FROM upload_sessions WHERE owner_id=?')
+      .all<{ id: string }>(ownerId)
+      .map(({ id }) => id)
   }
 
   deleteUploadSessions(ownerId: string) {
@@ -382,11 +421,9 @@ export class SqliteRepository implements Repository {
 
   getCompletedUpload(uploadId: string, ownerId: string) {
     return (
-      (
-        this.db.prepare('SELECT completed_request_id id FROM upload_sessions WHERE id=? AND owner_id=?').get(uploadId, ownerId) as
-          | { id: string | null }
-          | undefined
-      )?.id ?? undefined
+      this.db
+        .prepare('SELECT completed_request_id id FROM upload_sessions WHERE id=? AND owner_id=?')
+        .get<{ id: string | null }>(uploadId, ownerId)?.id ?? undefined
     )
   }
 
@@ -411,7 +448,7 @@ export class SqliteRepository implements Repository {
         )
         .run(input.count, input.order ?? null, input.id, input.to)
       this.db.prepare('UPDATE requests SET file_path=?, updated_at=? WHERE id=?').run(input.filePath, Date.now(), input.id)
-    })()
+    })
   }
 
   reorderRequest(id: string, status: string, order: number) {
@@ -453,7 +490,7 @@ export class SqliteRepository implements Repository {
           Date.now(),
           id,
         )
-    })()
+    })
   }
 
   deleteRequest(id: string) {
@@ -461,17 +498,16 @@ export class SqliteRepository implements Repository {
   }
 
   requestsNeedingAssets() {
-    return (
-      this.db
-        .prepare(
-          `SELECT DISTINCT requests.id
+    return this.db
+      .prepare(
+        `SELECT DISTINCT requests.id
            FROM requests
            JOIN asset_generation_jobs jobs ON jobs.request_id=requests.id
            WHERE jobs.status IN ('pending','running')
            ORDER BY requests.created_at`,
-        )
-        .all() as { id: string }[]
-    ).map(({ id }) => id)
+      )
+      .all<{ id: string }>()
+      .map(({ id }) => id)
   }
 
   queueAssetGeneration(id: string) {
@@ -487,7 +523,7 @@ export class SqliteRepository implements Repository {
       if (!request.thumbnailPath) statement.run(id, 'thumbnail', now)
       if (!request.previewPath) statement.run(id, 'preview', now)
       this.db.prepare('UPDATE requests SET assets_generated_at=NULL WHERE id=?').run(id)
-    })()
+    })
   }
 
   requeueAssetGeneration(id: string, stages: import('../core/types').AssetGenerationStage[]) {
@@ -500,7 +536,7 @@ export class SqliteRepository implements Repository {
       const now = Date.now()
       for (const stage of stages) statement.run(now, id, stage)
       this.db.prepare('UPDATE requests SET assets_generated_at=NULL WHERE id=?').run(id)
-    })()
+    })
   }
 
   startAssetGeneration(id: string, stages: import('../core/types').AssetGenerationStage[]) {
@@ -511,7 +547,7 @@ export class SqliteRepository implements Repository {
     this.db.transaction(() => {
       const now = Date.now()
       for (const stage of stages) statement.run(now, id, stage)
-    })()
+    })
   }
 
   finishAssetGeneration(
@@ -540,19 +576,21 @@ export class SqliteRepository implements Repository {
         .prepare(`SELECT 1 FROM asset_generation_jobs WHERE request_id=? AND status IN ('pending','running') LIMIT 1`)
         .get(id)
       if (!unfinished) this.db.prepare('UPDATE requests SET assets_generated_at=?,updated_at=? WHERE id=?').run(now, now, id)
-    })()
+    })
   }
 
   listAssetGenerationJobs() {
-    return (this.db.prepare('SELECT * FROM asset_generation_jobs ORDER BY queued_at,stage').all() as AssetGenerationJobRow[]).map(
-      mapAssetGenerationJob,
-    )
+    return this.db
+      .prepare('SELECT * FROM asset_generation_jobs ORDER BY queued_at,stage')
+      .all<AssetGenerationJobRow>()
+      .map(mapAssetGenerationJob)
   }
 
   assetGenerationJobs(id: string) {
-    return (
-      this.db.prepare('SELECT * FROM asset_generation_jobs WHERE request_id=? ORDER BY stage').all(id) as AssetGenerationJobRow[]
-    ).map(mapAssetGenerationJob)
+    return this.db
+      .prepare('SELECT * FROM asset_generation_jobs WHERE request_id=? ORDER BY stage')
+      .all<AssetGenerationJobRow>(id)
+      .map(mapAssetGenerationJob)
   }
 
   requeueInterruptedAssetGeneration() {
@@ -570,10 +608,9 @@ export class SqliteRepository implements Repository {
     const resinPrinterIds = profiles.filter((profile) => printerPrintType(profile) === 'resin').map((profile) => profile.id)
     const resinTarget = ["(requests.printer_id IS NULL AND requests.print_type='resin')"]
     if (resinPrinterIds.length) resinTarget.push(`requests.printer_id IN (${resinPrinterIds.map(() => '?').join(',')})`)
-    return (
-      this.db
-        .prepare(
-          `SELECT requests.id
+    return this.db
+      .prepare(
+        `SELECT requests.id
            FROM requests
            LEFT JOIN orientation_analysis_jobs jobs ON jobs.request_id=requests.id
            LEFT JOIN plate_model_analysis analysis ON analysis.request_id=requests.id
@@ -583,9 +620,9 @@ export class SqliteRepository implements Repository {
               OR ((${resinTarget.join(' OR ')}) AND analysis.request_id IS NOT NULL
                   AND (analysis.orientation_candidates IS NULL OR analysis.orientation_candidates='[]'))
            ORDER BY requests.created_at`,
-        )
-        .all(analysisVersion, ...resinPrinterIds) as { id: string }[]
-    ).map(({ id }) => id)
+      )
+      .all<{ id: string }>(analysisVersion, ...resinPrinterIds)
+      .map(({ id }) => id)
   }
 
   queueOrientationAnalysis(id: string, analysisVersion: number) {
@@ -622,13 +659,12 @@ export class SqliteRepository implements Repository {
   }
 
   listOrientationAnalysisJobs() {
-    return (
-      this.db
-        .prepare(
-          `SELECT request_id,status,analysis_version,error,queued_at,started_at,finished_at
+    return this.db
+      .prepare(
+        `SELECT request_id,status,analysis_version,error,queued_at,started_at,finished_at
            FROM orientation_analysis_jobs ORDER BY queued_at`,
-        )
-        .all() as {
+      )
+      .all<{
         request_id: string
         status: import('../core/platePlanner').OrientationAnalysisJob['status']
         analysis_version: number
@@ -636,16 +672,16 @@ export class SqliteRepository implements Repository {
         queued_at: number
         started_at: number | null
         finished_at: number | null
-      }[]
-    ).map((job) => ({
-      requestId: job.request_id,
-      status: job.status,
-      analysisVersion: job.analysis_version,
-      error: job.error ?? undefined,
-      queuedAt: job.queued_at,
-      startedAt: job.started_at ?? undefined,
-      finishedAt: job.finished_at ?? undefined,
-    }))
+      }>()
+      .map((job) => ({
+        requestId: job.request_id,
+        status: job.status,
+        analysisVersion: job.analysis_version,
+        error: job.error ?? undefined,
+        queuedAt: job.queued_at,
+        startedAt: job.started_at ?? undefined,
+        finishedAt: job.finished_at ?? undefined,
+      }))
   }
 
   completeAssetGeneration(id: string, generated: { thumbnailPath?: string; previewPath?: string }) {
@@ -665,7 +701,7 @@ export class SqliteRepository implements Repository {
            WHERE request_id=?`,
         )
         .run(generated.thumbnailPath ?? null, generated.previewPath ?? null, now, id)
-    })()
+    })
   }
 
   getPlateModelAnalysis(requestId: string) {
@@ -733,7 +769,7 @@ export class SqliteRepository implements Repository {
           )
           .run(analysis.requestId, analysis.analysisVersion ?? 1, now, now, now)
       }
-    })()
+    })
   }
 
   findPlateModelAnalysisByContentHash(contentHash: string, analysisVersion: number) {
@@ -776,30 +812,30 @@ export class SqliteRepository implements Repository {
 
   // better-auth owns the user/session/account tables; this class only reads them.
   listPeople() {
-    return (this.db.prepare('SELECT name, color FROM "user" ORDER BY name').all() as { name: string; color: string | null }[]).map(
-      (row) => ({ name: row.name, color: row.color ?? undefined }),
-    )
+    return this.db
+      .prepare('SELECT name, color FROM "user" ORDER BY name')
+      .all<{ name: string; color: string | null }>()
+      .map((row) => ({ name: row.name, color: row.color ?? undefined }))
   }
 
   listUsers() {
-    return (
-      this.db
-        .prepare(`SELECT id, email, name, image, role FROM "user"
+    return this.db
+      .prepare(`SELECT id, email, name, image, role FROM "user"
         ORDER BY CASE role WHEN 'admin' THEN 0 ELSE 1 END, name COLLATE NOCASE`)
-        .all() as {
+      .all<{
         id: string
         email: string
         name: string
         image: string | null
         role: string | null
-      }[]
-    ).map((row) => ({
-      id: row.id,
-      email: row.email,
-      name: row.name,
-      image: row.image ?? undefined,
-      role: row.role === 'admin' ? ('admin' as const) : ('requester' as const),
-    }))
+      }>()
+      .map((row) => ({
+        id: row.id,
+        email: row.email,
+        name: row.name,
+        image: row.image ?? undefined,
+        role: row.role === 'admin' ? ('admin' as const) : ('requester' as const),
+      }))
   }
 
   getSetting<T>(key: string): T | undefined {
@@ -851,7 +887,7 @@ export class SqliteRepository implements Repository {
       this.setSetting('plate-planner-drafts', drafts)
       this.db.prepare("DELETE FROM settings WHERE key='plate-planner-draft'").run()
       return { reanalyzeRequestIds }
-    })()
+    })
   }
 
   countUsers() {
@@ -865,23 +901,24 @@ export class SqliteRepository implements Repository {
   }
 
   listInvites() {
-    return (
-      this.db.prepare('SELECT id,role,label,created_at,expires_at,used_at FROM invites ORDER BY created_at DESC').all() as {
+    return this.db
+      .prepare('SELECT id,role,label,created_at,expires_at,used_at FROM invites ORDER BY created_at DESC')
+      .all<{
         id: string
         role: Role
         label: string | null
         created_at: number
         expires_at: number
         used_at: number | null
-      }[]
-    ).map((row) => ({
-      id: row.id,
-      role: row.role,
-      label: row.label ?? undefined,
-      createdAt: row.created_at,
-      expiresAt: row.expires_at,
-      usedAt: row.used_at ?? undefined,
-    }))
+      }>()
+      .map((row) => ({
+        id: row.id,
+        role: row.role,
+        label: row.label ?? undefined,
+        createdAt: row.created_at,
+        expiresAt: row.expires_at,
+        usedAt: row.used_at ?? undefined,
+      }))
   }
 
   findInvite(tokenHash: string) {
@@ -953,7 +990,7 @@ export class SqliteRepository implements Repository {
           'INSERT OR IGNORE INTO operations (id,kind,request_id,upload_id,payload_json,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)',
         )
         .run(id, payload.kind, payload.requestId, payload.uploadId, JSON.stringify(payload), 'prepared', now, now)
-    })()
+    })
   }
 
   markOperationAssetsMoved(id: string) {
@@ -966,7 +1003,7 @@ export class SqliteRepository implements Repository {
       if (!operation || operation.state === 'committed') return
       this.moveCopies(input)
       this.db.prepare("UPDATE operations SET state='committed',updated_at=? WHERE id=?").run(Date.now(), id)
-    })()
+    })
   }
 
   completeDeleteOperation(id: string, requestId: string) {
@@ -975,7 +1012,7 @@ export class SqliteRepository implements Repository {
       if (!operation || operation.state === 'committed') return
       this.deleteRequest(requestId)
       this.db.prepare("UPDATE operations SET state='committed',updated_at=? WHERE id=?").run(Date.now(), id)
-    })()
+    })
   }
 
   completeUploadOperation(id: string, payload: UploadOperation) {
@@ -990,17 +1027,18 @@ export class SqliteRepository implements Repository {
         .run(payload.requestId, payload.uploadId, payload.ownerId)
       this.db.prepare("UPDATE operations SET state='committed',updated_at=? WHERE id=?").run(Date.now(), id)
       return payload.requestId
-    })()
+    })
   }
 
   listOperations() {
-    return (
-      this.db.prepare('SELECT id,state,payload_json FROM operations ORDER BY created_at').all() as {
+    return this.db
+      .prepare('SELECT id,state,payload_json FROM operations ORDER BY created_at')
+      .all<{
         id: string
         state: PendingOperation['state']
         payload_json: string
-      }[]
-    ).map((row) => ({ id: row.id, state: row.state, payload: JSON.parse(row.payload_json) as OperationPayload }))
+      }>()
+      .map((row) => ({ id: row.id, state: row.state, payload: JSON.parse(row.payload_json) as OperationPayload }))
   }
 
   finishOperation(id: string) {
@@ -1178,31 +1216,34 @@ export class SqliteRepository implements Repository {
     insertJob.run(id, 'preview', request.previewPath ? 'ready' : 'pending', now, request.previewPath ? now : null)
   }
 
-  private migrate() {
-    this.db.exec('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)')
+  private migrateLegacy() {
+    this.sqlite.exec('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)')
     const applied = new Set(
-      (this.db.prepare('SELECT version FROM schema_migrations').all() as { version: number }[]).map((row) => row.version),
+      this.db
+        .prepare('SELECT version FROM schema_migrations')
+        .all<{ version: number }>()
+        .map((row) => row.version),
     )
     for (const migration of migrations) {
       if (applied.has(migration.version)) continue
       const apply = () =>
-        this.db.transaction(() => {
-          migration.prepare?.(this.db)
-          this.db.exec(migration.sql)
-          if (migration.foreignKeysOff && (this.db.pragma('foreign_key_check') as unknown[]).length > 0) {
+        this.sqlite.transaction(() => {
+          migration.prepare?.(this.sqlite)
+          this.sqlite.exec(migration.sql)
+          if (migration.foreignKeysOff && (this.sqlite.pragma('foreign_key_check') as unknown[]).length > 0) {
             throw new Error(`migration ${migration.version} introduced foreign key violations`)
           }
-          this.db.prepare('INSERT INTO schema_migrations VALUES (?,?)').run(migration.version, Date.now())
+          this.sqlite.prepare('INSERT INTO schema_migrations VALUES (?,?)').run(migration.version, Date.now())
         })()
       if (!migration.foreignKeysOff) {
         apply()
         continue
       }
-      this.db.pragma('foreign_keys = OFF')
+      this.sqlite.pragma('foreign_keys = OFF')
       try {
         apply()
       } finally {
-        this.db.pragma('foreign_keys = ON')
+        this.sqlite.pragma('foreign_keys = ON')
       }
     }
   }
@@ -1219,7 +1260,7 @@ export class SqliteRepository implements Repository {
       }
       const insert = this.db.prepare('INSERT OR IGNORE INTO request_statuses (request_id,status_id,quantity) SELECT id,?,0 FROM requests')
       for (const status of workflow.statuses) insert.run(status.id)
-    })()
+    })
   }
 }
 

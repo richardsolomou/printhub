@@ -1,9 +1,12 @@
 import argon2 from 'argon2'
 import { betterAuth } from 'better-auth'
+import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { admin, twoFactor } from 'better-auth/plugins'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
-import type { Database } from 'better-sqlite3'
+import { sql } from 'drizzle-orm'
+import type { PrintHubDatabase } from '../adapters/database'
+import { schema } from '../adapters/schema'
 import { accessControl, accessRoles } from '../core/access'
 import type { AuthAdapterConfig } from '../core/auth'
 import { PASSWORD_MIN_LENGTH } from '../core/security'
@@ -20,7 +23,7 @@ function passwordFromMutation(path: string, body: unknown) {
 }
 
 export function createAuth(
-  database: Database,
+  database: PrintHubDatabase,
   secret: string,
   options?: {
     onUserCreated?: () => void
@@ -40,9 +43,9 @@ export function createAuth(
     ...(providerOptions('google') ? { google: providerOptions('google')! } : {}),
     ...(providerOptions('discord') ? { discord: providerOptions('discord')! } : {}),
   }
-  const countUsers = () => (database.prepare('SELECT count(*) count FROM "user"').get() as { count: number }).count
+  const countUsers = () => database.get<{ count: number }>(sql`SELECT count(*) count FROM "user"`)?.count ?? 0
   return betterAuth({
-    database,
+    database: drizzleAdapter(database, { provider: 'sqlite', schema }),
     secret,
     rateLimit: {
       enabled: true,

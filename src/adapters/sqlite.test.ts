@@ -21,6 +21,8 @@ import assetStageJobsMigration from './migrations/014_asset_stage_jobs.sql?raw'
 import resinVolumeMigration from './migrations/015_resin_volume.sql?raw'
 import requestPrinterMigration from './migrations/016_request_printer.sql?raw'
 import requestPrintTypeMigration from './migrations/017_request_print_type.sql?raw'
+import requestPrintTypeCompatibilityMigration from './migrations/018_request_print_type_compatibility.sql?raw'
+import twoFactorMigration from './migrations/019_two_factor.sql?raw'
 import requestOwnershipMigration from './migrations/020_request_ownership.sql?raw'
 import requestOwnerUserMigration from './migrations/021_request_owner_user.sql?raw'
 import type { PlatePlannerDraft, PrinterProfile } from '../core/platePlanner'
@@ -289,6 +291,23 @@ describe('SqliteRepository contract', () => {
     expect(repository.getRequest(id)).toBeUndefined()
   })
 
+  it('cascades completed upload receipts when deleting their request', () => {
+    const id = repository.createRequest({
+      name: 'Uploaded gear',
+      fileName: 'uploaded-gear.stl',
+      filePath: 'todo/uploaded-gear.stl',
+      quantity: 1,
+      ownerUserId: 'owner',
+      requesterEmail: 'owner@example.com',
+    })
+    repository.createUploadSession('completed-upload', 'owner', Date.now() + 60_000, 3)
+    repository.database.prepare('UPDATE upload_sessions SET completed_request_id=? WHERE id=?').run(id, 'completed-upload')
+
+    repository.deleteRequest(id)
+
+    expect(repository.database.prepare('SELECT id FROM upload_sessions WHERE id=?').get('completed-upload')).toBeUndefined()
+  })
+
   it('round-trips JSON settings by key', () => {
     expect(repository.getSetting('storage')).toBeUndefined()
     repository.setSetting('storage', { adapter: 'local', root: '/prints' })
@@ -549,6 +568,82 @@ describe('SqliteRepository contract', () => {
       requester_name: 'Uploader',
     })
     db.close()
+  })
+
+  it('rejects legacy requests whose owner has no matching account', () => {
+    const db = new Database(':memory:')
+    db.exec('CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)')
+    for (const [version, sql] of [
+      [1, initialMigration],
+      [2, operationsMigration],
+      [3, uploadsMigration],
+      [4, settingsMigration],
+      [5, betterAuthMigration],
+      [6, assetGenerationMigration],
+      [7, invitesMigration],
+      [8, authRateLimitMigration],
+      [9, adminRoleMigration],
+      [10, platePlannerMigration],
+      [11, resinOrientationMigration],
+      [12, resinOrientationCandidatesMigration],
+      [13, orientationAnalysisJobsMigration],
+      [14, assetStageJobsMigration],
+      [15, resinVolumeMigration],
+      [16, requestPrinterMigration],
+      [17, requestPrintTypeMigration],
+      [18, requestPrintTypeCompatibilityMigration],
+      [19, twoFactorMigration],
+      [20, requestOwnershipMigration],
+    ] as const) {
+      db.exec(sql)
+      db.prepare('INSERT INTO schema_migrations VALUES (?,?)').run(version, Date.now())
+    }
+    db.prepare(
+      'INSERT INTO requests (id,name,file_name,file_path,quantity,requester_email,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)',
+    ).run('unmatched-request', 'Unmatched', 'unmatched.stl', 'todo/unmatched.stl', 1, 'missing@example.com', 1, 1)
+
+    expect(() => new SqliteRepository(db)).toThrow(
+      'cannot migrate request ownership because these requests have no matching account: unmatched-request (missing@example.com)',
+    )
+    db.close()
+  })
+
+  it('uses only the Drizzle migration journal for fresh databases', () => {
+    const db = new Database(':memory:')
+    const migrated = new SqliteRepository(db)
+
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get()).toBeUndefined()
+    expect(db.prepare('SELECT count(*) count FROM __drizzle_migrations').get()).toEqual({ count: 1 })
+    migrated.close()
+  })
+
+  it('bridges a legacy journal once and creates one pre-migration backup', async () => {
+    const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-drizzle-bridge-'))
+    const file = path.join(directory, 'printhub.sqlite')
+    try {
+      SqliteRepository.open(file).close()
+      const legacy = new Database(file)
+      legacy.exec(
+        'DROP TABLE __drizzle_migrations; CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)',
+      )
+      const record = legacy.prepare('INSERT INTO schema_migrations VALUES (?,?)')
+      for (let version = 1; version <= 21; version += 1) record.run(version, Date.now())
+      legacy.close()
+
+      SqliteRepository.open(file).close()
+
+      const bridged = new Database(file)
+      expect(bridged.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get()).toBeUndefined()
+      expect(bridged.prepare('SELECT count(*) count FROM __drizzle_migrations').get()).toEqual({ count: 1 })
+      bridged.close()
+      expect(await fs.promises.readdir(path.join(directory, 'backups'))).toHaveLength(1)
+
+      SqliteRepository.open(file).close()
+
+      expect(await fs.promises.readdir(path.join(directory, 'backups'))).toHaveLength(1)
+    } finally {
+      await fs.promises.rm(directory, { recursive: true, force: true })
+    }
   })
 
   it('migrates legacy users, hashes, and roles into the better-auth tables', () => {
@@ -816,7 +911,8 @@ describe('SqliteRepository contract', () => {
     expect(db.prepare('PRAGMA table_info(requests)').all()).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ name: 'technology' })]),
     )
-    expect(db.prepare('SELECT version FROM schema_migrations WHERE version=18').get()).toEqual({ version: 18 })
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get()).toBeUndefined()
+    expect(db.prepare('SELECT count(*) count FROM __drizzle_migrations').get()).toEqual({ count: 1 })
     migrated.close()
   })
 

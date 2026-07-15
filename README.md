@@ -84,7 +84,7 @@ Back up `/data` and `/prints` together before upgrading:
 pnpm backup --output /path/to/printhub.sqlite
 ```
 
-Database migrations run automatically on startup. Keep `integration-secrets.key` with database backups that contain integration settings.
+Drizzle migrations run automatically on startup. Before changing an existing database, PrintHub writes a consistent snapshot under `/data/backups`; keep `integration-secrets.key` with backups that contain integration settings.
 
 ## Authentication
 
@@ -105,6 +105,8 @@ Point **Settings → Storage** at a writable directory such as `$PWD/prints-dev`
 pnpm check
 pnpm test:e2e
 ```
+
+Schema changes are defined in `src/adapters/schema.ts`. Generate and verify committed migrations with `pnpm db:generate` and `pnpm db:check`.
 
 ### Releases
 

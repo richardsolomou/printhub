@@ -44,12 +44,15 @@ CREATE TABLE upload_sessions_with_owner (
   owner_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE RESTRICT,
   bytes INTEGER NOT NULL DEFAULT 0,
   expires_at INTEGER NOT NULL,
-  completed_request_id TEXT
+  completed_request_id TEXT REFERENCES requests(id) ON DELETE CASCADE
 );
 
 INSERT INTO upload_sessions_with_owner (id, owner_id, bytes, expires_at, completed_request_id)
-SELECT id, owner_id, bytes, expires_at, completed_request_id
-FROM upload_sessions;
+SELECT sessions.id, sessions.owner_id, sessions.bytes, sessions.expires_at, sessions.completed_request_id
+FROM upload_sessions sessions
+JOIN "user" owner ON owner.id=sessions.owner_id
+WHERE sessions.completed_request_id IS NULL
+   OR EXISTS (SELECT 1 FROM requests WHERE requests.id=sessions.completed_request_id);
 
 DROP TABLE upload_sessions;
 ALTER TABLE upload_sessions_with_owner RENAME TO upload_sessions;
