@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { usePostHog } from '@posthog/react'
 import { Plus, X } from 'lucide-react'
@@ -11,8 +11,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import type { PrintTechnology, PublicPrintRequest } from '../../core/types'
-import { peopleQuery, sessionQuery } from '../queries'
+import type { Person, PrinterSummary, PrintTechnology, PublicPrintRequest } from '../../core/types'
 import { requesterLabel } from '../requester'
 import { deleteRequest, updateRequest } from '../../server/fns'
 import { DialogShell } from './DialogShell'
@@ -23,11 +22,15 @@ import { RequestDetails } from './RequestDetails'
 
 export function RequestModal({
   request,
+  people,
+  printers,
   isAdmin,
   hideRequester,
   onClose,
 }: {
   request: PublicPrintRequest
+  people: Person[]
+  printers: PrinterSummary[]
   isAdmin: boolean
   hideRequester: boolean
   onClose: () => void
@@ -35,9 +38,6 @@ export function RequestModal({
   // Requesters may adjust copies/notes on their own request until any copy starts.
   const canEdit = request.canEdit
   const posthog = usePostHog()
-  const { data: people } = useSuspenseQuery(peopleQuery())
-  const { data: session } = useSuspenseQuery(sessionQuery())
-  const printers = session.printers
   const callUpdate = useServerFn(updateRequest)
   const callDelete = useServerFn(deleteRequest)
   const queryClient = useQueryClient()

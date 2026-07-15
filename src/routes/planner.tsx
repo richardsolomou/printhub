@@ -17,7 +17,7 @@ import { RequestCard } from '../client/components/RequestCard'
 import { RequestModal } from '../client/components/RequestModal'
 import { loadPlateGeometry } from '../client/plateAnalysis'
 import { exportPlate } from '../client/plateExport'
-import { platePlannerQuery, requestsQuery, sessionQuery } from '../client/queries'
+import { peopleQuery, platePlannerQuery, requestsQuery, sessionQuery } from '../client/queries'
 import { savePlatePlannerDraft } from '../server/fns'
 import type { ResinOrientation } from '../core/mesh/resinOrientation'
 import {
@@ -68,6 +68,7 @@ function PlannerPage() {
   const filters = filtersFromSearch(search, 'created-asc')
   const { data, isFetching } = useQuery(requestsQuery(filters))
   const { data: allData } = useQuery(requestsQuery({ sort: 'created-asc' }))
+  const { data: people = [] } = useQuery(peopleQuery())
   const { data: storedPlanner } = useQuery(platePlannerQuery())
   const [printers, setPrinters] = useState(DEFAULT_PRINTERS)
   const [printerId, setPrinterId] = useState(DEFAULT_PRINTERS[0].id)
@@ -508,7 +509,14 @@ function PlannerPage() {
           </Card>
         </div>
         {selectedRequest && (
-          <RequestModal request={selectedRequest} isAdmin hideRequester={false} onClose={() => setOpenRequestId(undefined)} />
+          <RequestModal
+            request={selectedRequest}
+            people={people}
+            printers={session.printers}
+            isAdmin
+            hideRequester={false}
+            onClose={() => setOpenRequestId(undefined)}
+          />
         )}
       </main>
     </div>

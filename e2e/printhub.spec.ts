@@ -97,11 +97,28 @@ test('complete resin, FDM, mixed-fleet, settings, and invite journey', async ({ 
   await expect(fdmCard).toContainText('FDM')
   await expect(fdmCard).not.toContainText('Fits selected printer')
   await fdmCard.click()
+  await expect(page.getByRole('heading', { name: 'fdm-block' })).toBeVisible({ timeout: 1_000 })
   await expect(page.getByText(/≈1.24 g each/)).toBeVisible()
   await expect(page.getByText(/100%-solid equivalent/i)).toBeVisible()
   await expect(page.getByText(/1.75 mm filament at 1.24 g\/cm³/)).toBeVisible()
+  const longTitle = 'A very long descriptive print title that should stay readable without pushing the dialog beyond the viewport'
+  await page.getByLabel('Name').fill(longTitle)
+  await page.getByRole('button', { name: 'Save changes' }).click()
+  await requestCard(page, longTitle).click()
+  const dialogTitle = page.getByRole('heading', { name: longTitle })
+  await expect(dialogTitle).toBeVisible({ timeout: 1_000 })
+  await expect
+    .poll(() =>
+      dialogTitle.evaluate((element) => ({
+        clipped: element.scrollWidth > element.clientWidth,
+        overflow: getComputedStyle(element).textOverflow,
+        whiteSpace: getComputedStyle(element).whiteSpace,
+      })),
+    )
+    .toEqual({ clipped: true, overflow: 'ellipsis', whiteSpace: 'nowrap' })
   await mobileScreenshot(page, 'fdm-request-details-mobile')
-  await page.getByRole('button', { name: 'Close' }).click()
+  await page.getByLabel('Name').fill('fdm-block')
+  await page.getByRole('button', { name: 'Save changes' }).click()
   await mobileScreenshot(page, 'mixed-board-mobile')
 
   await page
