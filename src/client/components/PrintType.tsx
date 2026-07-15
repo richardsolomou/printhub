@@ -57,7 +57,9 @@ export function MaterialDetails({ request }: { request: PublicPrintRequest }) {
           </span>
         )}
         {estimate.printType === 'filament' && (
-          <span className="text-muted-foreground">≈{formatFilament(estimate.filamentMetersPerCopy)} m filament each</span>
+          <span className="text-muted-foreground">
+            <span aria-hidden="true">· </span>≈{formatFilament(estimate.filamentMetersPerCopy)} m of filament
+          </span>
         )}
       </div>
       <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{estimate.assumption}</p>

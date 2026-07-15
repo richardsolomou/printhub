@@ -135,6 +135,7 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
   await filamentCard.click()
   await expect(page.getByRole('heading', { name: 'filament-block' })).toBeVisible({ timeout: 1_000 })
   await expect(page.getByText(/≈1.24 g each/)).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText(/· ≈0.42 m of filament/)).toBeVisible({ timeout: 30_000 })
   await expect(page.getByText(/100%-solid equivalent/i)).toBeVisible({ timeout: 30_000 })
   await expect(page.getByText(/1.75 mm filament at 1.24 g\/cm³/)).toBeVisible({ timeout: 30_000 })
   await expect(page.getByRole('combobox', { name: 'Print type', exact: true })).toContainText('Filament')
