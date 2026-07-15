@@ -8,10 +8,11 @@ Requirements: Node 24.18 and pnpm 11.12+.
 
 ```sh
 pnpm install
-DATA_DIR=./data-dev pnpm dev
+mkdir -p data-dev prints-dev
+DATA_DIR=./data-dev PRINTS_DIR=./prints-dev pnpm dev
 ```
 
-The first visitor to `http://localhost:3000` claims the admin account. Point **Settings → Storage** at a writable folder like `$PWD/prints-dev`.
+The first visitor to `http://localhost:3000` claims the admin account.
 
 ## Checks
 
@@ -22,7 +23,7 @@ pnpm check
 pnpm test:e2e
 ```
 
-`pnpm check` runs formatting, linting, the production build, type checking, unit tests, and CLI smoke tests. The build runs before type checking because it generates `src/routeTree.gen.ts`. Install Chromium once with `pnpm test:e2e:install` before running the end-to-end suite.
+`pnpm check` runs formatting, linting, migration validation, the production build, type checking, unit tests, and CLI smoke tests. The build runs before type checking because it generates `src/routeTree.gen.ts`. Install Chromium once with `pnpm test:e2e:install` before running the end-to-end suite.
 
 The storage contract tests run against a real S3 endpoint when `MINIO_TEST_URL`, `MINIO_TEST_ACCESS_KEY`, and `MINIO_TEST_SECRET_KEY` are set; they skip otherwise. CI runs this contract weekly and on manual workflow dispatch against the pinned MinIO image.
 
@@ -32,10 +33,26 @@ Smoke-test the online backup command against disposable data with `DATA_DIR=/tmp
 
 Run `pnpm changeset` in pull requests that change the released application. Choose the appropriate patch, minor, or major bump and write a concise user-visible summary. Changes that only affect documentation, tests, refactoring, or release tooling do not need a changeset unless they affect application behavior.
 
+When changesets reach `main`, CI updates `package.json`, `deploy/truenas/printhub/app.yaml`, and `CHANGELOG.md`; creates the matching Git tag and GitHub Release; and publishes the multi-architecture container as `latest`, the release tag, and an immutable `sha-…` tag. PrintHub is not published to npm or another package registry.
+
+## Database changes
+
+The Drizzle schema lives in `src/db/schema.ts`, while the database connection and migration lifecycle live in `src/db/`. Application persistence should use Drizzle's typed query builder and `sql` template rather than direct driver queries.
+
+After changing the schema, generate and verify a new migration:
+
+```sh
+pnpm db:generate
+pnpm db:check
+```
+
+Commit the generated files under `drizzle/`. Never edit a migration that may already have been applied.
+
 ## Layout
 
 - `src/core` — isomorphic domain code: types, the request service, workflow, asset keys, access roles, and pure mesh code (`mesh/`: STL codec, software rasterizer) shared by server and browser. No IO, no framework imports.
-- `src/adapters` — implementations of the core boundaries: SQLite repository (+ numbered migrations), local/S3 asset stores, authentication configuration, outbound email, upload staging, event bus, telemetry.
+- `src/adapters` — implementations of the core boundaries: the Drizzle-backed SQLite repository, local/S3 asset stores, authentication configuration, outbound email, upload staging, event bus, and telemetry.
+- `src/db` — Drizzle schema, database connection, and migration lifecycle. Generated migrations live under `drizzle/`.
 - `src/server` — composition root (`app.ts`), better-auth config, server functions, HTTP guards, and the asset pipeline (`assets/`: preview decimation, PNG encoding, the generation queue, and the worker_thread entry that `pnpm build` bundles next to the server).
 - `src/client` — React components, hooks, and client utilities.
 - `src/routes` — TanStack Start file routes; keep them thin.
@@ -43,7 +60,7 @@ Run `pnpm changeset` in pull requests that change the released application. Choo
 ## Conventions
 
 - Keep PrintHub focused on self-hosted request intake and queue management. Payments, shipping, slicing, printer control, and general-purpose automation belong outside the core application.
-- Database changes are new numbered files in `src/adapters/migrations/`; never edit an applied migration.
+- Database changes use generated Drizzle migrations; never edit a migration that may already have been applied.
 - Product configuration belongs in **Settings** and the `settings` table. Environment variables are reserved for filesystem paths, operational controls, recovery, and read-only managed-deployment overrides.
 - Server-side state changes publish a typed `AppEvent` (see `src/core/types.ts`); additions are fine, renames are breaking.
 - New functionality comes with tests. Test behavior through the public surface (service methods, HTTP routes), not implementation details.
