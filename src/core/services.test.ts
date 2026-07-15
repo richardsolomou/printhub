@@ -444,6 +444,12 @@ describe('PrintHubService crash recovery', () => {
     expect(service.listRequests(requester, true).requests[0]).toMatchObject({ canDelete: false })
   })
 
+  it('lets requesters rename their own queued requests', async () => {
+    const id = await request()
+    service.update(id, { name: 'Renamed model' }, requester)
+    expect(repository.getRequest(id)?.name).toBe('Renamed model')
+  })
+
   it('returns public role-aware requests and enforces requester authorization', async () => {
     const id = await request()
     expect(service.listRequests(requester).requests[0]).toMatchObject({

@@ -345,6 +345,39 @@ describe('better-auth integration', () => {
     ).rejects.toMatchObject({ status: 'FORBIDDEN' })
   })
 
+  it('lets admins impersonate any user and return to their own session', async () => {
+    const { repository, auth } = build()
+    cleanup = () => repository.close()
+
+    const { headers } = await auth.api.signUpEmail({
+      body: { email: 'op@example.com', password: 'password1234', name: 'Op' },
+      returnHeaders: true,
+    })
+    const adminHeaders = cookieHeaders(headers)
+    const created = await createUser(auth, {
+      body: { email: 'other-admin@example.com', password: 'password1234', name: 'Other Admin', role: 'admin' },
+      headers: adminHeaders,
+    })
+
+    const impersonated = await auth.api.impersonateUser({
+      body: { userId: created.user.id },
+      headers: adminHeaders,
+      returnHeaders: true,
+    })
+    const impersonatedHeaders = mergeCookieHeaders(adminHeaders, impersonated.headers)
+    expect(await auth.api.getSession({ headers: impersonatedHeaders })).toMatchObject({
+      session: { impersonatedBy: expect.any(String) },
+      user: { email: 'other-admin@example.com', role: 'admin' },
+    })
+
+    const stopped = await auth.api.stopImpersonating({ headers: impersonatedHeaders, returnHeaders: true })
+    const restoredHeaders = mergeCookieHeaders(impersonatedHeaders, stopped.headers)
+    expect(await auth.api.getSession({ headers: restoredHeaders })).toMatchObject({
+      session: { impersonatedBy: null },
+      user: { email: 'op@example.com', role: 'admin' },
+    })
+  })
+
   it('admits exactly one sign-up per invite and honors expiry and revocation', async () => {
     const { repository, auth } = build()
     cleanup = () => repository.close()

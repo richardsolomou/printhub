@@ -8,6 +8,7 @@ export type Identity = {
   image?: string
   role: Role
   twoFactorEnabled?: boolean
+  impersonatedBy?: string
 }
 
 export type Person = { id: string; name: string; color?: string }

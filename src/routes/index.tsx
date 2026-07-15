@@ -159,13 +159,7 @@ function AuthenticatedHome() {
         />
       )}
       {selectedRequest && (
-        <RequestModal
-          request={selectedRequest}
-          people={people}
-          isAdmin={isAdmin}
-          hideRequester={hideRequester}
-          onClose={() => setOpenRequestId(null)}
-        />
+        <RequestModal request={selectedRequest} people={people} hideRequester={hideRequester} onClose={() => setOpenRequestId(null)} />
       )}
     </div>
   )

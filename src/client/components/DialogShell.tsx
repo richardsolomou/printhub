@@ -7,6 +7,7 @@ export function DialogShell({
   onClose,
   title,
   className,
+  contentClassName,
   children,
   preventClose = false,
 }: {
@@ -14,6 +15,7 @@ export function DialogShell({
   onClose: () => void
   title: string
   className?: string
+  contentClassName?: string
   children: ReactNode
   preventClose?: boolean
 }) {
@@ -41,7 +43,12 @@ export function DialogShell({
             {title}
           </DialogTitle>
         </DialogHeader>
-        <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
+        <div
+          className={cn(
+            'min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]',
+            contentClassName,
+          )}
+        >
           {children}
         </div>
       </DialogContent>

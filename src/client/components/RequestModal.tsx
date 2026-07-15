@@ -22,17 +22,15 @@ import { availablePrintTypes, printTypeLabel } from '../fleet'
 export function RequestModal({
   request,
   people,
-  isAdmin,
   hideRequester,
   onClose,
 }: {
   request: PublicPrintRequest
   people: Person[]
-  isAdmin: boolean
   hideRequester: boolean
   onClose: () => void
 }) {
-  // Requesters may adjust copies/notes on their own request until any copy starts.
+  // Requesters may adjust their own request until any copy starts.
   const canEdit = request.canEdit
   const posthog = usePostHog()
   const callUpdate = useServerFn(updateRequest)
@@ -111,7 +109,7 @@ export function RequestModal({
 
   return (
     <>
-      <DialogShell onClose={requestClose} title={request.name} preventClose={busy}>
+      <DialogShell onClose={requestClose} title={request.name} contentClassName="space-y-0" preventClose={busy}>
         <LazyStlViewer requestId={request.id} hasPreview={request.hasPreview} />
 
         <RequestDetails
@@ -128,18 +126,11 @@ export function RequestModal({
 
         {canEdit && (
           <form onSubmit={save}>
-            <div
-              className={cn(
-                'mb-3 grid gap-3 [&>[data-slot=field]]:min-w-0',
-                isAdmin ? 'grid-cols-[minmax(0,1fr)_5.5rem]' : 'grid-cols-[5.5rem]',
-              )}
-            >
-              {isAdmin && (
-                <Field>
-                  <FieldLabel htmlFor="request-name">Name</FieldLabel>
-                  <Input id="request-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} />
-                </Field>
-              )}
+            <div className="mb-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_5.5rem_minmax(9rem,0.65fr)] [&>[data-slot=field]]:min-w-0">
+              <Field>
+                <FieldLabel htmlFor="request-name">Name</FieldLabel>
+                <Input id="request-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} />
+              </Field>
               <Field>
                 <FieldLabel htmlFor="request-qty">Copies</FieldLabel>
                 <Input
@@ -152,8 +143,6 @@ export function RequestModal({
                   onChange={(e) => setQuantity(e.target.value)}
                 />
               </Field>
-            </div>
-            <div className="mb-3 grid gap-3 [&>[data-slot=field]]:min-w-0">
               <Field>
                 <FieldLabel htmlFor="request-print-type">Print type</FieldLabel>
                 <Select

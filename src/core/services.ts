@@ -286,6 +286,7 @@ export class PrintHubService {
       const started = workflow.statuses.slice(1).some((status) => request.counts[status.id] > 0)
       if (request.ownerUserId !== identity.id || started) throw new Response('forbidden', { status: 403 })
       fields = {
+        name: fields.name,
         quantity: fields.quantity,
         notes: fields.notes,
         sourceUrl: fields.sourceUrl,

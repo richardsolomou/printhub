@@ -540,13 +540,7 @@ function PlannerPage() {
           </Card>
         </div>
         {selectedRequest && (
-          <RequestModal
-            request={selectedRequest}
-            people={people}
-            isAdmin
-            hideRequester={false}
-            onClose={() => setOpenRequestId(undefined)}
-          />
+          <RequestModal request={selectedRequest} people={people} hideRequester={false} onClose={() => setOpenRequestId(undefined)} />
         )}
       </main>
     </div>
