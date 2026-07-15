@@ -248,6 +248,23 @@ describe('asset generation queue', () => {
       estimatedVolumeMm3: 4_000 / 3,
       orientationCandidates: undefined,
     })
+    expect(repository.listOrientationAnalysisJobs()).toEqual([expect.objectContaining({ requestId: id, status: 'ready' })])
+  })
+
+  it('adds resin orientation candidates when an analyzed FDM request changes technology', async () => {
+    const id = await requestWithFile(tetrahedronStl(20), 'fdm')
+    queue.enqueue(id)
+    await queue.idle()
+
+    repository.updateRequest(id, { technology: 'resin' })
+    expect(repository.requestsNeedingOrientationAnalysis(ORIENTATION_ANALYSIS_VERSION)).toEqual([id])
+    queue.backfill()
+    await queue.idle()
+
+    expect(repository.getPlateModelAnalysis(id)?.orientationCandidates).toEqual(
+      expect.arrayContaining([expect.objectContaining({ quaternion: expect.any(Array) })]),
+    )
+    expect(repository.requestsNeedingOrientationAnalysis(ORIENTATION_ANALYSIS_VERSION)).toEqual([])
   })
 
   it('stamps an unparseable file as processed so it is not retried forever', async () => {

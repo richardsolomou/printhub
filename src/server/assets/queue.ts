@@ -64,6 +64,12 @@ export class AssetGenerationQueue {
     this.updateMetrics()
   }
 
+  enqueueAnalysis(requestId: string) {
+    this.repository.queueOrientationAnalysis(requestId, ORIENTATION_ANALYSIS_VERSION)
+    this.enqueueOrientation(requestId)
+    this.updateMetrics()
+  }
+
   /** Queue requests without completed asset or orientation stamps. */
   backfill() {
     const requestIds = new Set([

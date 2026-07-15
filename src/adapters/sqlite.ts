@@ -534,9 +534,12 @@ export class SqliteRepository implements Repository {
           `SELECT requests.id
            FROM requests
            LEFT JOIN orientation_analysis_jobs jobs ON jobs.request_id=requests.id
+           LEFT JOIN plate_model_analysis analysis ON analysis.request_id=requests.id
            WHERE jobs.request_id IS NULL
               OR jobs.analysis_version<>?
               OR jobs.status IN ('pending','running')
+              OR (requests.technology='resin' AND analysis.request_id IS NOT NULL
+                  AND (analysis.orientation_candidates IS NULL OR analysis.orientation_candidates='[]'))
            ORDER BY requests.created_at`,
         )
         .all(analysisVersion) as { id: string }[]
@@ -679,16 +682,14 @@ export class SqliteRepository implements Repository {
           analysis.estimatedVolumeMm3 ?? analysis.orientationCandidates?.[0]?.estimatedVolumeMm3 ?? null,
           now,
         )
-        if (analysis.orientationCandidates?.length) {
-          this.db
-            .prepare(
-              `INSERT INTO orientation_analysis_jobs(request_id,status,analysis_version,error,queued_at,started_at,finished_at)
-               VALUES(?,'ready',?,NULL,?,?,?)
-               ON CONFLICT(request_id) DO UPDATE SET
-                 status='ready',analysis_version=excluded.analysis_version,error=NULL,finished_at=excluded.finished_at`,
-            )
-            .run(analysis.requestId, analysis.analysisVersion ?? 1, now, now, now)
-        }
+        this.db
+          .prepare(
+            `INSERT INTO orientation_analysis_jobs(request_id,status,analysis_version,error,queued_at,started_at,finished_at)
+             VALUES(?,'ready',?,NULL,?,?,?)
+             ON CONFLICT(request_id) DO UPDATE SET
+               status='ready',analysis_version=excluded.analysis_version,error=NULL,finished_at=excluded.finished_at`,
+          )
+          .run(analysis.requestId, analysis.analysisVersion ?? 1, now, now, now)
       }
     })()
   }

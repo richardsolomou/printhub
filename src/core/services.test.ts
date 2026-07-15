@@ -254,7 +254,9 @@ describe('PrintHubService crash recovery', () => {
 
     expect(repository.getRequest(id)).toMatchObject({ technology: 'fdm', printerId: fdmPrinter.id })
     expect(() => service.update(id, { printerId: slaPrinter.id }, admin)).toThrow(expect.objectContaining({ status: 400 }))
-    service.update(id, { technology: 'resin' }, admin)
+    expect(service.update(id, { technology: 'fdm' }, admin)).toEqual({ technologyChanged: false })
+    expect(service.update(id, { notes: 'Still FDM' }, admin)).toEqual({ technologyChanged: false })
+    expect(service.update(id, { technology: 'resin' }, admin)).toEqual({ technologyChanged: true })
     expect(repository.getRequest(id)).toMatchObject({ technology: 'resin', printerId: undefined })
   })
 

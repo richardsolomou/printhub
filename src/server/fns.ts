@@ -648,7 +648,8 @@ export const updateRequest = createServerFn({ method: 'POST' })
       const instance = await app()
       requireMutationOrigin()
       const { id, ...fields } = data
-      instance.service.update(id, fields, await me(instance))
+      const { technologyChanged } = instance.service.update(id, fields, await me(instance))
+      if (technologyChanged) instance.assetQueue.enqueueAnalysis(id)
     }),
   )
 

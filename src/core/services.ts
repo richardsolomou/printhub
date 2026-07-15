@@ -226,6 +226,7 @@ export class PrintHubService {
       throw new Response('invalid update', { status: 400 })
     }
     const request = this.requiredRequest(id)
+    const technologyChanged = fields.technology !== undefined && fields.technology !== request.technology
     const technology = fields.technology ?? request.technology
     let printerId = fields.printerId === undefined ? request.printerId : (fields.printerId ?? undefined)
     if (fields.technology !== undefined && fields.printerId === undefined && request.printerId) {
@@ -255,6 +256,7 @@ export class PrintHubService {
       sourceUrl: fields.sourceUrl?.trim(),
     })
     this.changed('request.updated')
+    return { technologyChanged }
   }
 
   async remove(id: string, identity: Identity) {
