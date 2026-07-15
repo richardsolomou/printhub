@@ -11,6 +11,7 @@ import '@fontsource/ibm-plex-sans/400.css'
 import '@fontsource/ibm-plex-sans/600.css'
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { ImpersonationBanner } from '../client/components/ImpersonationBanner'
 import { sessionQuery } from '../client/queries'
 import { TELEMETRY_HOST, TELEMETRY_TOKEN } from '../core/telemetry'
 import appCss from '../styles.css?url'
@@ -64,6 +65,7 @@ function RootComponent() {
   const content = (
     <TooltipProvider>
       <Outlet />
+      {identity?.impersonatedBy && <ImpersonationBanner identity={identity} />}
     </TooltipProvider>
   )
   return (

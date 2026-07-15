@@ -136,7 +136,14 @@ export function createAuth(
       }),
     },
     plugins: [
-      admin({ ac: accessControl, roles: accessRoles, adminRoles: ['admin'], defaultRole: 'requester' }),
+      admin({
+        ac: accessControl,
+        roles: accessRoles,
+        adminRoles: ['admin'],
+        defaultRole: 'requester',
+        allowImpersonatingAdmins: true,
+        impersonationSessionDuration: 60 * 60,
+      }),
       twoFactor({ issuer: 'PrintHub', allowPasswordless: true }),
       tanstackStartCookies(),
     ],

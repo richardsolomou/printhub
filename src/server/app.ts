@@ -93,6 +93,7 @@ async function createApp() {
         image: userImage(user.email, user.image),
         role: user.role === 'admin' ? 'admin' : 'requester',
         twoFactorEnabled: user.twoFactorEnabled ?? false,
+        impersonatedBy: session.session.impersonatedBy ?? undefined,
       }
     }
     const requireIdentity = async (headers: Headers) => {

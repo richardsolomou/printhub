@@ -3,6 +3,7 @@ import { useForm } from '@tanstack/react-form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { createColumnHelper, type ColumnDef } from '@tanstack/react-table'
+import { Ellipsis, Eye, KeyRound, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -11,6 +12,7 @@ import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui
 import { Input } from '@/components/ui/input'
 import { InputGroup, InputGroupButton, InputGroupInput } from '@/components/ui/input-group'
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@/components/ui/item'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
 import { PASSWORD_MIN_LENGTH } from '../../../core/security'
@@ -34,13 +36,17 @@ export function UsersPane({ me }: { me: Identity }) {
   const smtpConfigured = session?.email.configured === true
   const [adding, setAdding] = useState(false)
   const [inviting, setInviting] = useState(false)
-  const [selectedUser, setSelectedUser] = useState<Identity | null>(null)
+  const [dialog, setDialog] = useState<{ action: UserAction; user: Identity } | null>(null)
   return (
     <SettingsPage>
       <SettingsHeader title="Users" description="Manage admins, requesters, sign-in access, and invitations." />
-      <SettingsSection className="p-0">
+      <SettingsSection className="p-0 max-sm:[&_td]:px-1.5 max-sm:[&_td:nth-child(2)]:hidden max-sm:[&_th]:px-1.5 max-sm:[&_th:nth-child(2)]:hidden">
         <DataTable
-          columns={columns}
+          columns={userColumns({
+            me,
+            passwordEnabled,
+            onAction: (action, user) => setDialog({ action, user }),
+          })}
           data={users ?? []}
           search={{ label: 'Search users', placeholder: 'Search users…' }}
           filters={[
@@ -58,19 +64,12 @@ export function UsersPane({ me }: { me: Identity }) {
           ]}
           emptyMessage="No users match these filters."
           itemLabel={{ singular: 'user', plural: 'users' }}
-          onRowClick={setSelectedUser}
-          getRowLabel={(user) => `View ${user.name}`}
+          alignLastColumnRight
         />
       </SettingsSection>
-      {selectedUser && (
-        <UserDialog
-          key={selectedUser.id}
-          me={me}
-          user={selectedUser}
-          passwordEnabled={passwordEnabled}
-          onDone={() => setSelectedUser(null)}
-        />
-      )}
+      {dialog?.action === 'impersonate' && <ImpersonateUserDialog user={dialog.user} onDone={() => setDialog(null)} />}
+      {dialog?.action === 'role' && <ChangeRoleDialog user={dialog.user} onDone={() => setDialog(null)} />}
+      {dialog?.action === 'password' && <SetPasswordDialog user={dialog.user} onDone={() => setDialog(null)} />}
       {adding && <CreateUserDialog passwordEnabled={passwordEnabled} onDone={() => setAdding(false)} />}
       {inviting && <InviteDialog smtpConfigured={smtpConfigured} onDone={() => setInviting(false)} />}
       <SettingsActions>
@@ -87,19 +86,92 @@ export function UsersPane({ me }: { me: Identity }) {
 }
 
 const columnHelper = createColumnHelper<Identity>()
-const columns: ColumnDef<Identity>[] = [
-  columnHelper.accessor('name', {
-    header: 'Name',
-    cell: ({ row }) => (
-      <div className="flex items-center gap-2.5">
-        <UserAvatar name={row.original.name} image={row.original.image} size="sm" />
-        <span>{row.original.name}</span>
-      </div>
-    ),
-  }),
-  columnHelper.accessor('email', { header: 'Email' }),
-  columnHelper.accessor('role', { header: 'Role', cell: RoleCell }),
-]
+type UserAction = 'impersonate' | 'role' | 'password'
+
+function userColumns({
+  me,
+  passwordEnabled,
+  onAction,
+}: {
+  me: Identity
+  passwordEnabled: boolean
+  onAction: (action: UserAction, user: Identity) => void
+}): ColumnDef<Identity>[] {
+  return [
+    columnHelper.accessor('name', {
+      header: 'Name',
+      cell: ({ row }) => (
+        <div className="flex items-center gap-2.5">
+          <UserAvatar name={row.original.name} image={row.original.image} size="sm" />
+          <div className="min-w-0 max-w-28 sm:max-w-none">
+            <span className="block truncate">{row.original.name}</span>
+            <span className="block truncate text-xs text-muted-foreground sm:hidden">{row.original.email}</span>
+          </div>
+        </div>
+      ),
+    }),
+    columnHelper.accessor('email', { header: 'Email' }),
+    columnHelper.accessor('role', { header: 'Role', cell: RoleCell }),
+    columnHelper.display({
+      id: 'actions',
+      header: 'Actions',
+      cell: ({ row }) =>
+        row.original.id === me.id ? (
+          <span className="text-xs text-muted-foreground">You</span>
+        ) : (
+          <UserActions
+            user={row.original}
+            passwordEnabled={passwordEnabled}
+            impersonating={Boolean(me.impersonatedBy)}
+            onAction={onAction}
+          />
+        ),
+    }),
+  ]
+}
+
+function UserActions({
+  user,
+  passwordEnabled,
+  impersonating,
+  onAction,
+}: {
+  user: Identity
+  passwordEnabled: boolean
+  impersonating: boolean
+  onAction: (action: UserAction, user: Identity) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const choose = (action: UserAction) => {
+    setOpen(false)
+    onAction(action, user)
+  }
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger render={<Button type="button" variant="ghost" size="icon-sm" aria-label={`Actions for ${user.name}`} />}>
+        <Ellipsis />
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-48 gap-0.5 p-1">
+        {!impersonating && (
+          <Button type="button" variant="ghost" className="w-full justify-start" onClick={() => choose('impersonate')}>
+            <Eye />
+            View as user
+          </Button>
+        )}
+        <Button type="button" variant="ghost" className="w-full justify-start" onClick={() => choose('role')}>
+          <ShieldCheck />
+          Change role
+        </Button>
+        {passwordEnabled && (
+          <Button type="button" variant="ghost" className="w-full justify-start" onClick={() => choose('password')}>
+            <KeyRound />
+            Set password
+          </Button>
+        )}
+      </PopoverContent>
+    </Popover>
+  )
+}
 
 function RoleCell({ getValue }: { getValue: () => Identity['role'] }) {
   const role = getValue()
@@ -281,55 +353,99 @@ function PendingInvites() {
   )
 }
 
-function UserDialog({ me, user, passwordEnabled, onDone }: { me: Identity; user: Identity; passwordEnabled: boolean; onDone: () => void }) {
-  return user.id === me.id ? (
-    <CurrentUserDialog user={user} passwordEnabled={passwordEnabled} onDone={onDone} />
-  ) : (
-    <ManageUserDialog user={user} passwordEnabled={passwordEnabled} onDone={onDone} />
+function UserSummary({ user }: { user: Identity }) {
+  return (
+    <div className="flex items-center gap-3 rounded-lg border p-3">
+      <UserAvatar name={user.name} image={user.image} />
+      <div className="min-w-0">
+        <p className="font-medium">{user.name}</p>
+        <p className="truncate text-sm text-muted-foreground">{user.email}</p>
+      </div>
+      <Badge variant="secondary" className="ml-auto">
+        {user.role[0].toUpperCase() + user.role.slice(1)}
+      </Badge>
+    </div>
   )
 }
 
-function CurrentUserDialog({ user, passwordEnabled, onDone }: { user: Identity; passwordEnabled: boolean; onDone: () => void }) {
+function ImpersonateUserDialog({ user, onDone }: { user: Identity; onDone: () => void }) {
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await authClient.admin.impersonateUser({ userId: user.id })
+      if (error) throw new Error(`Could not view PrintHub as ${user.name}.`)
+    },
+    onSuccess: () => window.location.assign('/'),
+  })
+
   return (
-    <DialogShell title="User details" onClose={onDone}>
-      <div className="flex items-center gap-3 rounded-lg border p-3">
-        <UserAvatar name={user.name} image={user.image} />
-        <div className="min-w-0">
-          <p className="font-medium">{user.name}</p>
-          <p className="truncate text-sm text-muted-foreground">{user.email}</p>
-        </div>
-        <Badge variant="secondary" className="ml-auto">
-          You
-        </Badge>
-      </div>
+    <DialogShell title="View as user" onClose={onDone} preventClose={mutation.isPending}>
+      <UserSummary user={user} />
       <p className="text-sm text-muted-foreground">
-        {passwordEnabled
-          ? 'Manage your own password from the Account settings page.'
-          : 'This account signs in through a configured social provider.'}
+        You’ll use PrintHub with this user’s permissions for up to one hour, or until you exit impersonation.
       </p>
-      <div className="flex justify-end">
-        <Button type="button" variant="outline" onClick={onDone}>
-          Done
+      <FieldError>{mutation.error?.message}</FieldError>
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button type="button" variant="outline" onClick={onDone} disabled={mutation.isPending}>
+          Cancel
+        </Button>
+        <Button type="button" onClick={() => mutation.mutate()} disabled={mutation.isPending}>
+          {mutation.isPending && <Spinner />}
+          {mutation.isPending ? 'Switching…' : `View as ${user.name}`}
         </Button>
       </div>
     </DialogShell>
   )
 }
 
-function ManageUserDialog({ user, passwordEnabled, onDone }: { user: Identity; passwordEnabled: boolean; onDone: () => void }) {
+function ChangeRoleDialog({ user, onDone }: { user: Identity; onDone: () => void }) {
   const queryClient = useQueryClient()
   const [role, setRole] = useState<Role>(user.role)
-  const roleMutation = useMutation({
+  const mutation = useMutation({
     mutationFn: async (nextRole: Role) => {
       const { error } = await authClient.admin.setRole({ userId: user.id, role: nextRole })
       if (error) throw new Error('Could not update this user’s role.')
     },
-    onSuccess: async () => {
+    onSuccess: async (_, nextRole) => {
       await Promise.all([queryClient.invalidateQueries({ queryKey: ['people'] }), queryClient.invalidateQueries({ queryKey: ['users'] })])
-      toast.success(`${user.name} is now ${role === 'admin' ? 'an admin' : 'a requester'}.`)
+      toast.success(`${user.name} is now ${nextRole === 'admin' ? 'an admin' : 'a requester'}.`)
       onDone()
     },
   })
+
+  return (
+    <DialogShell title="Change role" onClose={onDone} preventClose={mutation.isPending}>
+      <UserSummary user={user} />
+      <Field>
+        <FieldLabel htmlFor={`role-${user.id}`}>Role</FieldLabel>
+        <Select items={ROLE_OPTIONS} value={role} onValueChange={(value) => setRole(value as Role)}>
+          <SelectTrigger className="w-full" id={`role-${user.id}`} aria-label={`Role for ${user.name}`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {ROLE_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <FieldDescription>Admins can manage users, settings, and every print request.</FieldDescription>
+        <FieldError>{mutation.error?.message}</FieldError>
+      </Field>
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button type="button" variant="outline" onClick={onDone} disabled={mutation.isPending}>
+          Cancel
+        </Button>
+        <Button type="button" disabled={role === user.role || mutation.isPending} onClick={() => mutation.mutate(role)}>
+          {mutation.isPending && <Spinner />}
+          {mutation.isPending ? 'Saving…' : 'Change role'}
+        </Button>
+      </div>
+    </DialogShell>
+  )
+}
+
+function SetPasswordDialog({ user, onDone }: { user: Identity; onDone: () => void }) {
   const mutation = useMutation({
     mutationFn: async (password: string) => {
       const { error } = await authClient.admin.setUserPassword({ userId: user.id, newPassword: password })
@@ -348,91 +464,53 @@ function ManageUserDialog({ user, passwordEnabled, onDone }: { user: Identity; p
   })
 
   return (
-    <DialogShell title={user.name} onClose={onDone}>
-      <div className="flex items-center gap-3 rounded-lg border p-3">
-        <UserAvatar name={user.name} image={user.image} />
-        <div className="min-w-0">
-          <p className="truncate text-sm text-muted-foreground">{user.email}</p>
-          <Badge variant="secondary" className="mt-1">
-            {user.role[0].toUpperCase() + user.role.slice(1)}
-          </Badge>
-        </div>
-      </div>
-      <Field>
-        <FieldLabel htmlFor={`role-${user.id}`}>Role</FieldLabel>
-        <div className="flex flex-wrap items-center gap-2">
-          <Select items={ROLE_OPTIONS} value={role} onValueChange={(value) => setRole(value as Role)}>
-            <SelectTrigger className="min-w-40 flex-1" id={`role-${user.id}`} aria-label={`Role for ${user.name}`}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {ROLE_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={role === user.role || roleMutation.isPending}
-            onClick={() => roleMutation.mutate(role)}
-          >
-            {roleMutation.isPending && <Spinner />}
-            {roleMutation.isPending ? 'Saving…' : 'Save role'}
-          </Button>
-        </div>
-        <FieldDescription>Admins can manage users, settings, and every print request.</FieldDescription>
-        <FieldError>{roleMutation.error?.message}</FieldError>
-      </Field>
-      {passwordEnabled && <p className="text-sm text-muted-foreground">Setting a new password signs this user out everywhere.</p>}
-      {passwordEnabled && (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault()
-            void form.handleSubmit()
+    <DialogShell title="Set password" onClose={onDone} preventClose={mutation.isPending}>
+      <UserSummary user={user} />
+      <p className="text-sm text-muted-foreground">Setting a new password signs this user out everywhere.</p>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault()
+          void form.handleSubmit()
+        }}
+        className="flex flex-col gap-3"
+      >
+        <form.Field
+          name="password"
+          validators={{
+            onChange: ({ value }) => (value.length >= PASSWORD_MIN_LENGTH ? undefined : `Use at least ${PASSWORD_MIN_LENGTH} characters`),
           }}
-          className="flex flex-col gap-3"
         >
-          <form.Field
-            name="password"
-            validators={{
-              onChange: ({ value }) => (value.length >= PASSWORD_MIN_LENGTH ? undefined : `Use at least ${PASSWORD_MIN_LENGTH} characters`),
-            }}
-          >
-            {(field) => (
-              <Field>
-                <FieldLabel htmlFor="set-password">New password for {user.name}</FieldLabel>
-                <Input
-                  id="set-password"
-                  type="password"
-                  value={field.state.value}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  minLength={PASSWORD_MIN_LENGTH}
-                  maxLength={256}
-                  autoComplete="new-password"
-                  required
-                />
-              </Field>
-            )}
-          </form.Field>
-          <FieldError>{mutation.error?.message}</FieldError>
-          <form.Subscribe selector={(state) => state.isSubmitting}>
-            {(busy) => (
-              <div className="flex flex-wrap justify-end gap-2">
-                <Button type="button" variant="outline" onClick={onDone}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={busy}>
-                  {busy && <Spinner />}
-                  {busy ? 'Setting…' : 'Set password'}
-                </Button>
-              </div>
-            )}
-          </form.Subscribe>
-        </form>
-      )}
+          {(field) => (
+            <Field>
+              <FieldLabel htmlFor="set-password">New password</FieldLabel>
+              <Input
+                id="set-password"
+                type="password"
+                value={field.state.value}
+                onChange={(event) => field.handleChange(event.target.value)}
+                minLength={PASSWORD_MIN_LENGTH}
+                maxLength={256}
+                autoComplete="new-password"
+                required
+              />
+            </Field>
+          )}
+        </form.Field>
+        <FieldError>{mutation.error?.message}</FieldError>
+        <form.Subscribe selector={(state) => state.isSubmitting}>
+          {(busy) => (
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="outline" onClick={onDone} disabled={busy}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={busy}>
+                {busy && <Spinner />}
+                {busy ? 'Setting…' : 'Set password'}
+              </Button>
+            </div>
+          )}
+        </form.Subscribe>
+      </form>
     </DialogShell>
   )
 }
