@@ -151,8 +151,6 @@ function AuthenticatedHome() {
       )}
       {uploadOpen && (
         <UploadForm
-          myName={me.name}
-          chooseFor={!privateRequests}
           initialFiles={droppedFiles}
           onClose={() => {
             setUploadOpen(false)

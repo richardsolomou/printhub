@@ -1,9 +1,12 @@
 import argon2 from 'argon2'
 import { betterAuth } from 'better-auth'
+import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { admin, twoFactor } from 'better-auth/plugins'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
-import type { Database } from 'better-sqlite3'
+import { count } from 'drizzle-orm'
+import type { PrintHubDatabase } from '../db'
+import { schema, user as userTable } from '../db/schema'
 import { accessControl, accessRoles } from '../core/access'
 import type { AuthAdapterConfig } from '../core/auth'
 import { PASSWORD_MIN_LENGTH } from '../core/security'
@@ -20,10 +23,11 @@ function passwordFromMutation(path: string, body: unknown) {
 }
 
 export function createAuth(
-  database: Database,
+  database: PrintHubDatabase,
   secret: string,
   options?: {
     onUserCreated?: () => void
+    onUserDeleting?: (userId: string) => Promise<void>
     claimInvite?: (token: string) => Invite | undefined
     completeInvite?: (id: string, userId: string) => void
     auth?: AuthAdapterConfig
@@ -39,9 +43,9 @@ export function createAuth(
     ...(providerOptions('google') ? { google: providerOptions('google')! } : {}),
     ...(providerOptions('discord') ? { discord: providerOptions('discord')! } : {}),
   }
-  const countUsers = () => (database.prepare('SELECT count(*) count FROM "user"').get() as { count: number }).count
+  const countUsers = () => database.select({ count: count() }).from(userTable).get()?.count ?? 0
   return betterAuth({
-    database,
+    database: drizzleAdapter(database, { provider: 'sqlite', schema }),
     secret,
     rateLimit: {
       enabled: true,
@@ -105,6 +109,11 @@ export function createAuth(
             const invite = claimedAuthInvite()
             if (invite) options?.completeInvite?.(invite.id, user.id)
             options?.onUserCreated?.()
+          },
+        },
+        delete: {
+          before: async (user) => {
+            await options?.onUserDeleting?.(user.id)
           },
         },
       },

@@ -1,42 +1,28 @@
 import { useEffect, useRef, useState } from 'react'
-import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { usePostHog } from '@posthog/react'
 import { useDropzone } from 'react-dropzone'
 import { Button } from '@/components/ui/button'
-import { Field, FieldError, FieldLabel } from '@/components/ui/field'
+import { FieldError } from '@/components/ui/field'
 import { Empty, EmptyDescription } from '@/components/ui/empty'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
 import { Spinner } from '@/components/ui/spinner'
-import { peopleQuery } from '../queries'
 import { renderRowThumbnail } from '../rowThumb'
 import { isIOS, isPhone } from '../device'
 import { DialogShell } from './DialogShell'
 import { ConfirmDialog } from './ConfirmDialog'
 import { LazyStlViewer } from './LazyStlViewer'
-import { PeopleCombobox } from './PeopleCombobox'
 import { UploadRow } from './UploadRow'
 import { uploadPrint } from './uploadTransport'
 import type { UploadEntry as Entry } from './uploadTypes'
 
 const MAX_FILE_BYTES = 1024 * 1024 * 1024
 let nextKey = 0
-export function UploadForm({
-  myName,
-  chooseFor,
-  initialFiles,
-  onClose,
-}: {
-  myName: string
-  chooseFor: boolean
-  initialFiles?: File[]
-  onClose: () => void
-}) {
+export function UploadForm({ initialFiles, onClose }: { initialFiles?: File[]; onClose: () => void }) {
   const posthog = usePostHog()
   const queryClient = useQueryClient()
-  const { data: people } = useSuspenseQuery(peopleQuery())
   const [entries, setEntries] = useState<Entry[]>([])
-  const [forName, setForName] = useState(myName)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState<number | null>(null)
@@ -50,7 +36,7 @@ export function UploadForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const dirty = entries.length > 0 || forName !== myName
+  const dirty = entries.length > 0
   const requestClose = () => {
     if (busy) return
     if (dirty) setConfirmClose(true)
@@ -129,7 +115,7 @@ export function UploadForm({
     for (const [index, entry] of pending.entries()) {
       patchEntry(entry.key, { state: 'uploading' })
       try {
-        await uploadPrint(entry, forName, (sent, total) => setProgress(index * share + (sent / total) * share))
+        await uploadPrint(entry, (sent, total) => setProgress(index * share + (sent / total) * share))
         await queryClient.invalidateQueries({ queryKey: ['requests'] })
         patchEntry(entry.key, { state: 'done' })
       } catch (err) {
@@ -187,21 +173,6 @@ export function UploadForm({
                 />
               ))}
             </div>
-          )}
-
-          {chooseFor && (
-            <Field>
-              <FieldLabel htmlFor="upload-for">For</FieldLabel>
-              <PeopleCombobox
-                id="upload-for"
-                value={forName}
-                onChange={setForName}
-                options={[
-                  ...(!people.some((person) => person.name === myName) ? [{ value: myName, label: myName }] : []),
-                  ...people.map((person) => ({ value: person.name, label: person.name })),
-                ]}
-              />
-            </Field>
           )}
 
           <FieldError>{error}</FieldError>

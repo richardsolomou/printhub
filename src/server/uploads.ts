@@ -1,23 +1,20 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { FileStore } from '@tus/file-store'
 import { Server } from '@tus/server'
 import { z } from 'zod'
-import { app, resolveBoardConfig } from './app'
+import { app } from './app'
 import { validSourceUrl } from '../core/services'
-import type { Identity, NewPrintRequest } from '../core/types'
+import { TusUploadStore, UPLOAD_TTL } from '../adapters/tus'
+import type { NewUploadedRequestInput } from '../core/services'
+import type { Identity } from '../core/types'
 import { UploadRequestLimiter, validSameOrigin } from './uploadGuards'
-import { uploadBytes, uploadsCompleted } from './metrics'
 import { assertUploadCapacity } from './operations'
 
 const MAX_TOTAL_BYTES = 1024 * 1024 * 1024
-const UPLOAD_TTL = 86_400_000
 const uploadRequests = new UploadRequestLimiter()
 const requestIdentities = new WeakMap<object, Identity>()
-const store = new FileStore({
-  directory: path.join(path.resolve(process.env.DATA_DIR ?? '/data'), 'tus'),
-  expirationPeriodInMilliseconds: UPLOAD_TTL,
-})
+const tusUploads = new TusUploadStore()
+const store = tusUploads.datastore
 
 const optionalMetadataString = (max: number) =>
   z.preprocess((value) => (value === null ? undefined : value), z.string().trim().max(max).optional())
@@ -30,7 +27,6 @@ const metadataSchema = z.object({
     .refine((value) => /\.stl$/i.test(value), 'only .stl files are accepted'),
   name: z.string().trim().min(1).max(120),
   quantity: z.coerce.number().int().min(1).max(50),
-  requesterName: optionalMetadataString(60),
   notes: optionalMetadataString(2000),
   sourceUrl: optionalMetadataString(500).refine((value) => !value || validSourceUrl(value), 'source URL must be an http(s) link'),
   requestedPrintType: z.enum(['resin', 'filament']),
@@ -71,24 +67,18 @@ async function finalizeUpload(
   const completed = instance.repository.getCompletedUpload(uploadId, identity.id)
   if (completed) return completed
   const parsed = metadataSchema.parse(metadata ?? {})
-  const requesterChoice = !resolveBoardConfig(instance.repository).privateRequests
-  const request: Omit<NewPrintRequest, 'filePath' | 'previewPath' | 'thumbnailPath'> = {
+  const request: NewUploadedRequestInput = {
     name: parsed.name,
     fileName: parsed.filename,
     quantity: parsed.quantity,
-    requesterEmail: identity.email,
-    requesterName: (requesterChoice ? parsed.requesterName : '') || identity.name || undefined,
     notes: parsed.notes || undefined,
     sourceUrl: parsed.sourceUrl || undefined,
     requestedPrintType: parsed.requestedPrintType,
   }
   const part = instance.staging.uploadPart(uploadId)
   if ((await instance.staging.size(part)) === 0) await instance.staging.copyUploadPart(sourcePath, part)
-  const completedBytes = await instance.staging.size(part)
   const requestId = await instance.service.createUploadedRequest(uploadId, part, request, identity)
   instance.assetQueue.enqueue(requestId)
-  uploadsCompleted.inc()
-  uploadBytes.inc(completedBytes)
   return requestId
 }
 

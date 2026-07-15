@@ -1,33 +1,82 @@
 import Database from 'better-sqlite3'
+import { and, count, eq, sql as drizzleSql } from 'drizzle-orm'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { SqliteRepository } from './sqlite'
-import initialMigration from './migrations/001_initial.sql?raw'
-import operationsMigration from './migrations/002_operations.sql?raw'
-import uploadsMigration from './migrations/003_uploads_and_reservations.sql?raw'
-import settingsMigration from './migrations/004_settings.sql?raw'
-import betterAuthMigration from './migrations/005_better_auth.sql?raw'
-import assetGenerationMigration from './migrations/006_asset_generation.sql?raw'
-import invitesMigration from './migrations/007_invites.sql?raw'
-import authRateLimitMigration from './migrations/008_auth_rate_limit.sql?raw'
-import adminRoleMigration from './migrations/009_admin_role.sql?raw'
-import platePlannerMigration from './migrations/010_plate_planner.sql?raw'
-import resinOrientationMigration from './migrations/011_resin_orientation.sql?raw'
-import resinOrientationCandidatesMigration from './migrations/012_resin_orientation_candidates.sql?raw'
-import orientationAnalysisJobsMigration from './migrations/013_orientation_analysis_jobs.sql?raw'
-import assetStageJobsMigration from './migrations/014_asset_stage_jobs.sql?raw'
-import resinVolumeMigration from './migrations/015_resin_volume.sql?raw'
-import requestPrinterMigration from './migrations/016_request_printer.sql?raw'
-import requestPrintTypeMigration from './migrations/017_request_print_type.sql?raw'
+import { createDatabase } from '../db'
 import type { PlatePlannerDraft, PrinterProfile } from '../core/platePlanner'
+import { requests, requestStatuses, uploadSessions, user } from '../db/schema'
+
+function insertUser(
+  repository: SqliteRepository,
+  values: { id: string; name: string; email: string; role?: 'admin' | 'requester'; color?: string },
+) {
+  const now = new Date()
+  repository.database
+    .insert(user)
+    .values({ ...values, role: values.role ?? 'requester', emailVerified: true, createdAt: now, updatedAt: now })
+    .run()
+}
+
+function createPreDrizzleDatabase(file = ':memory:', version = 19) {
+  const database = new Database(file)
+  const initialized = new SqliteRepository(createDatabase(database))
+  initialized.database.run(drizzleSql`PRAGMA foreign_keys = OFF`)
+  database.exec(`
+    DROP TABLE __drizzle_migrations;
+    DROP TABLE upload_sessions;
+    DROP TABLE requests;
+    CREATE TABLE requests (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      file_name TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      quantity INTEGER NOT NULL,
+      requester_email TEXT NOT NULL,
+      requester_name TEXT,
+      notes TEXT,
+      source_url TEXT,
+      thumbnail_path TEXT,
+      preview_path TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      assets_generated_at INTEGER,
+      printer_id TEXT,
+      print_type TEXT CHECK (print_type IN ('resin', 'filament'))
+    );
+    CREATE INDEX requests_created ON requests(created_at DESC);
+    CREATE INDEX requests_print_type ON requests(print_type);
+    CREATE INDEX requests_printer_id ON requests(printer_id);
+    CREATE TABLE upload_sessions (
+      id TEXT PRIMARY KEY,
+      owner_id TEXT NOT NULL,
+      bytes INTEGER NOT NULL DEFAULT 0,
+      expires_at INTEGER NOT NULL,
+      completed_request_id TEXT
+    );
+    CREATE INDEX upload_sessions_owner ON upload_sessions(owner_id, expires_at);
+    CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL);
+  `)
+  if (version === 18) {
+    database.exec('DROP TABLE twoFactor; ALTER TABLE "user" DROP COLUMN "twoFactorEnabled"')
+  }
+  initialized.database.run(drizzleSql`PRAGMA foreign_keys = ON`)
+  const record = database.prepare('INSERT INTO schema_migrations VALUES (?,?)')
+  for (let applied = 1; applied <= version; applied += 1) record.run(applied, Date.now())
+  return database
+}
 
 describe('SqliteRepository contract', () => {
   let repository: SqliteRepository
 
   beforeEach(() => {
-    repository = new SqliteRepository(new Database(':memory:'))
+    repository = new SqliteRepository(createDatabase(':memory:'))
+    insertUser(repository, { id: 'maker', name: 'Maker', email: 'maker@example.com' })
+    insertUser(repository, { id: 'other', name: 'Other', email: 'other@example.com' })
+    insertUser(repository, { id: 'owner', name: 'Owner', email: 'owner@example.com' })
+    insertUser(repository, { id: 'attacker', name: 'Attacker', email: 'attacker@example.com' })
   })
   afterEach(() => repository.close())
 
@@ -37,8 +86,7 @@ describe('SqliteRepository contract', () => {
       fileName: 'bracket.stl',
       filePath: 'todo/bracket.stl',
       quantity: 3,
-      requesterEmail: 'maker@example.com',
-      requesterName: 'Maker',
+      ownerUserId: 'maker',
       notes: 'PETG',
       sourceUrl: 'https://example.com/bracket',
       printerId: 'printer-id',
@@ -65,7 +113,7 @@ describe('SqliteRepository contract', () => {
       fileName: 'stages.stl',
       filePath: 'todo/stages.stl',
       quantity: 1,
-      requesterEmail: 'maker@example.com',
+      ownerUserId: 'maker',
     })
     expect(repository.assetGenerationJobs(id)).toEqual([
       expect.objectContaining({ stage: 'preview', status: 'pending' }),
@@ -87,8 +135,7 @@ describe('SqliteRepository contract', () => {
       fileName: 'secret-bracket.stl',
       filePath: 'todo/bracket.stl',
       quantity: 3,
-      requesterEmail: 'maker@example.com',
-      requesterName: 'Maker',
+      ownerUserId: 'maker',
       notes: 'Use orange PETG',
       sourceUrl: 'https://example.com/bracket',
       thumbnailPath: 'thumbs/bracket.png',
@@ -99,12 +146,11 @@ describe('SqliteRepository contract', () => {
       fileName: 'gear.stl',
       filePath: 'todo/gear.stl',
       quantity: 1,
-      requesterEmail: 'other@example.com',
-      requesterName: 'Other',
+      ownerUserId: 'other',
     })
     repository.moveCopies({ id: bracket, from: 'todo', to: 'in_progress', count: 1, filePath: 'todo/bracket.stl' })
-    repository.database.prepare('UPDATE requests SET created_at=?,updated_at=? WHERE id=?').run(100, 300, bracket)
-    repository.database.prepare('UPDATE requests SET created_at=?,updated_at=? WHERE id=?').run(200, 200, gear)
+    repository.database.update(requests).set({ createdAt: 100, updatedAt: 300 }).where(eq(requests.id, bracket)).run()
+    repository.database.update(requests).set({ createdAt: 200, updatedAt: 200 }).where(eq(requests.id, gear)).run()
 
     expect(
       repository.queryRequests({ filters: { query: 'orange', hasNotes: true, hasSource: true, hasThumbnail: true, hasPreview: true } })
@@ -123,11 +169,33 @@ describe('SqliteRepository contract', () => {
     ])
     expect(repository.queryRequests({ filters: { sort: 'quantity-desc' } }).requests.map((request) => request.quantity)).toEqual([3, 1])
 
-    const result = repository.queryRequests({ filters: { requester: 'Maker' } })
+    const result = repository.queryRequests({ filters: { requester: 'maker' } })
     expect(result.facets).toMatchObject({ total: 1, available: 2 })
     expect(result.facets.requesters).toEqual([
-      { value: 'Maker', label: 'Maker', count: 1 },
-      { value: 'Other', label: 'Other', count: 1 },
+      { value: 'maker', label: 'Maker', count: 1 },
+      { value: 'other', label: 'Other', count: 1 },
+    ])
+  })
+
+  it('keeps requesters with duplicate display names distinct', () => {
+    insertUser(repository, { id: 'alex-1', name: 'Alex', email: 'alex-1@example.com' })
+    insertUser(repository, { id: 'alex-2', name: 'Alex', email: 'alex-2@example.com' })
+    for (const ownerUserId of ['alex-1', 'alex-2']) {
+      repository.createRequest({
+        name: ownerUserId,
+        fileName: `${ownerUserId}.stl`,
+        filePath: `todo/${ownerUserId}.stl`,
+        quantity: 1,
+        ownerUserId,
+      })
+    }
+
+    expect(repository.queryRequests().facets.requesters.filter(({ label }) => label === 'Alex')).toEqual([
+      { value: 'alex-1', label: 'Alex', count: 1 },
+      { value: 'alex-2', label: 'Alex', count: 1 },
+    ])
+    expect(repository.queryRequests({ filters: { requester: 'alex-2' } }).requests.map(({ ownerUserId }) => ownerUserId)).toEqual([
+      'alex-2',
     ])
   })
 
@@ -137,7 +205,7 @@ describe('SqliteRepository contract', () => {
       fileName: 'resin.stl',
       filePath: 'todo/resin.stl',
       quantity: 1,
-      requesterEmail: 'maker@example.com',
+      ownerUserId: 'maker',
       printerId: 'resin-printer',
     })
     const filament = repository.createRequest({
@@ -145,7 +213,7 @@ describe('SqliteRepository contract', () => {
       fileName: 'filament.stl',
       filePath: 'todo/filament.stl',
       quantity: 1,
-      requesterEmail: 'maker@example.com',
+      ownerUserId: 'maker',
       printerId: 'filament-printer',
     })
     const unassigned = repository.createRequest({
@@ -153,7 +221,7 @@ describe('SqliteRepository contract', () => {
       fileName: 'unassigned.stl',
       filePath: 'todo/unassigned.stl',
       quantity: 1,
-      requesterEmail: 'maker@example.com',
+      ownerUserId: 'maker',
       requestedPrintType: 'filament',
     })
 
@@ -198,26 +266,35 @@ describe('SqliteRepository contract', () => {
   })
 
   it('applies visibility and ownership before returning requests or facets', () => {
+    insertUser(repository, { id: 'me', name: 'Me', email: 'me@example.com' })
+    insertUser(repository, { id: 'them', name: 'Them', email: 'them@example.com' })
     repository.createRequest({
       name: 'Mine',
       fileName: 'mine.stl',
       filePath: 'todo/mine.stl',
       quantity: 1,
-      requesterEmail: 'me@example.com',
-      requesterName: 'Me',
+      ownerUserId: 'me',
     })
     repository.createRequest({
       name: 'Theirs',
       fileName: 'theirs.stl',
       filePath: 'todo/theirs.stl',
       quantity: 1,
-      requesterEmail: 'them@example.com',
-      requesterName: 'Them',
+      ownerUserId: 'them',
     })
-    const privateResult = repository.queryRequests({ visibleToEmail: 'me@example.com' })
+    const privateResult = repository.queryRequests({ visibleToUserId: 'me' })
     expect(privateResult.requests.map((request) => request.name)).toEqual(['Mine'])
     expect(privateResult.facets).toMatchObject({ total: 1, available: 1 })
-    expect(repository.queryRequests({ ownerEmail: 'me@example.com' }).requests.map((request) => request.name)).toEqual(['Mine'])
+    expect(repository.queryRequests({ ownerUserId: 'me' }).requests.map((request) => request.name)).toEqual(['Mine'])
+
+    repository.database.update(user).set({ name: 'Renamed' }).where(eq(user.id, 'me')).run()
+    expect(repository.queryRequests({ ownerUserId: 'me' }).requests[0]).toMatchObject({ ownerName: 'Renamed' })
+
+    expect(() => repository.database.delete(user).where(eq(user.id, 'me')).run()).toThrow('FOREIGN KEY constraint failed')
+    expect(repository.listRequests().find((request) => request.name === 'Mine')).toMatchObject({
+      ownerUserId: 'me',
+      ownerName: 'Renamed',
+    })
   })
 
   it('only searches private file and email metadata when enabled', () => {
@@ -226,10 +303,10 @@ describe('SqliteRepository contract', () => {
       fileName: 'private-file.stl',
       filePath: 'todo/model.stl',
       quantity: 1,
-      requesterEmail: 'hidden@example.com',
+      ownerUserId: 'maker',
     })
     expect(repository.queryRequests({ filters: { query: 'private-file' } }).requests).toHaveLength(0)
-    expect(repository.queryRequests({ filters: { query: 'hidden@example.com' }, searchPrivateMetadata: true }).requests).toHaveLength(1)
+    expect(repository.queryRequests({ filters: { query: 'maker@example.com' }, searchPrivateMetadata: true }).requests).toHaveLength(1)
   })
 
   it('enforces quantity invariants and cascades status deletion', () => {
@@ -238,7 +315,7 @@ describe('SqliteRepository contract', () => {
       fileName: 'gear.stl',
       filePath: 'todo/gear.stl',
       quantity: 2,
-      requesterEmail: 'a@b.test',
+      ownerUserId: 'maker',
     })
     repository.moveCopies({ id, from: 'todo', to: 'done', count: 1, filePath: 'todo/gear.stl' })
     expect(() => repository.updateRequest(id, { quantity: 0 })).toThrow()
@@ -251,6 +328,22 @@ describe('SqliteRepository contract', () => {
     })
     repository.deleteRequest(id)
     expect(repository.getRequest(id)).toBeUndefined()
+  })
+
+  it('cascades completed upload receipts when deleting their request', () => {
+    const id = repository.createRequest({
+      name: 'Uploaded gear',
+      fileName: 'uploaded-gear.stl',
+      filePath: 'todo/uploaded-gear.stl',
+      quantity: 1,
+      ownerUserId: 'owner',
+    })
+    repository.createUploadSession('completed-upload', 'owner', Date.now() + 60_000, 3)
+    repository.database.update(uploadSessions).set({ completedRequestId: id }).where(eq(uploadSessions.id, 'completed-upload')).run()
+
+    repository.deleteRequest(id)
+
+    expect(repository.database.select().from(uploadSessions).where(eq(uploadSessions.id, 'completed-upload')).get()).toBeUndefined()
   })
 
   it('round-trips JSON settings by key', () => {
@@ -267,7 +360,7 @@ describe('SqliteRepository contract', () => {
       fileName: 'cached.stl',
       filePath: 'todo/cached.stl',
       quantity: 1,
-      requesterEmail: 'owner@example.com',
+      ownerUserId: 'maker',
     })
     repository.upsertPlateModelAnalyses([
       {
@@ -313,43 +406,16 @@ describe('SqliteRepository contract', () => {
     expect(repository.listPlateModelAnalyses()).toEqual([])
   })
 
-  it('backfills resin volume from existing orientation candidates', () => {
-    const db = new Database(':memory:')
-    db.exec(`CREATE TABLE requests (id TEXT PRIMARY KEY);
-      CREATE TABLE plate_model_analysis (
-        request_id TEXT PRIMARY KEY REFERENCES requests(id) ON DELETE CASCADE,
-        width_mm REAL NOT NULL,
-        depth_mm REAL NOT NULL,
-        height_mm REAL NOT NULL,
-        analyzed_at INTEGER NOT NULL,
-        orientation_candidates TEXT
-      );`)
-    db.prepare('INSERT INTO requests VALUES (?)').run('request-id')
-    db.prepare('INSERT INTO plate_model_analysis VALUES (?,?,?,?,?,?)').run(
-      'request-id',
-      10,
-      20,
-      30,
-      Date.now(),
-      JSON.stringify([{ estimatedVolumeMm3: 12_345 }]),
-    )
-
-    db.exec(resinVolumeMigration)
-
-    expect(db.prepare('SELECT estimated_volume_mm3 FROM plate_model_analysis').get()).toEqual({ estimated_volume_mm3: 12_345 })
-    db.close()
-  })
-
   it('maintains integrity, exposes database information, and installs the auth limiter table', () => {
     const maintenance = repository.maintain()
     expect(maintenance.integrity).toBe('ok')
     expect(maintenance.checkedAt).toBeGreaterThan(0)
     expect(repository.databaseInfo()).toMatchObject({ path: ':memory:', sizeBytes: 0, integrity: 'ok' })
-    expect(repository.database.pragma('journal_mode', { simple: true })).toBe('memory')
-    expect(repository.database.pragma('synchronous', { simple: true })).toBe(2)
-    expect(repository.database.pragma('foreign_keys', { simple: true })).toBe(1)
-    expect(repository.database.pragma('busy_timeout', { simple: true })).toBe(5000)
-    expect(repository.database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='rateLimit'").get()).toEqual({
+    expect(repository.database.get<{ journal_mode: string }>(drizzleSql`PRAGMA journal_mode`)?.journal_mode).toBe('memory')
+    expect(repository.database.get<{ synchronous: number }>(drizzleSql`PRAGMA synchronous`)?.synchronous).toBe(2)
+    expect(repository.database.get<{ foreign_keys: number }>(drizzleSql`PRAGMA foreign_keys`)?.foreign_keys).toBe(1)
+    expect(repository.database.get<{ timeout: number }>(drizzleSql`PRAGMA busy_timeout`)?.timeout).toBe(5000)
+    expect(repository.database.get(drizzleSql`SELECT name FROM sqlite_master WHERE type='table' AND name='rateLimit'`)).toEqual({
       name: 'rateLimit',
     })
   })
@@ -360,12 +426,13 @@ describe('SqliteRepository contract', () => {
     const destination = path.join(temporary, 'backups', 'copy.sqlite')
     const persisted = SqliteRepository.open(source)
     try {
+      insertUser(persisted, { id: 'maker', name: 'Maker', email: 'maker@example.com' })
       const id = persisted.createRequest({
         name: 'Backup probe',
         fileName: 'probe.stl',
         filePath: 'todo/probe.stl',
         quantity: 1,
-        requesterEmail: 'maker@example.com',
+        ownerUserId: 'maker',
       })
       await persisted.backup(destination)
       const copy = new Database(destination, { readonly: true })
@@ -385,20 +452,16 @@ describe('SqliteRepository contract', () => {
   })
 
   it('reads users and people from the better-auth user table', () => {
-    const iso = new Date().toISOString()
-    repository.database
-      .prepare('INSERT INTO "user" (id,name,email,emailVerified,createdAt,updatedAt,role,color) VALUES (?,?,?,0,?,?,?,?)')
-      .run('u1', 'Maker', 'maker@example.com', iso, iso, 'requester', '#fa0')
-    repository.database
-      .prepare('INSERT INTO "user" (id,name,email,emailVerified,createdAt,updatedAt,role) VALUES (?,?,?,0,?,?,?)')
-      .run('u2', 'Zed', 'zed@example.com', iso, iso, 'admin')
+    repository.database.delete(user).run()
+    insertUser(repository, { id: 'u1', name: 'Maker', email: 'maker@example.com', color: '#fa0' })
+    insertUser(repository, { id: 'u2', name: 'Zed', email: 'zed@example.com', role: 'admin' })
     expect(repository.listUsers()).toEqual([
       { id: 'u2', email: 'zed@example.com', name: 'Zed', role: 'admin' },
       { id: 'u1', email: 'maker@example.com', name: 'Maker', role: 'requester' },
     ])
     expect(repository.listPeople()).toEqual([
-      { name: 'Maker', color: '#fa0' },
-      { name: 'Zed', color: undefined },
+      { id: 'u1', name: 'Maker', color: '#fa0' },
+      { id: 'u2', name: 'Zed', color: undefined },
     ])
     expect(repository.countUsers()).toBe(2)
   })
@@ -409,7 +472,7 @@ describe('SqliteRepository contract', () => {
       fileName: 'gear.stl',
       filePath: 'todo/gear.stl',
       quantity: 1,
-      requesterEmail: 'a@b.test',
+      ownerUserId: 'maker',
     })
     const operationId = crypto.randomUUID()
     repository.beginOperation(operationId, {
@@ -435,7 +498,7 @@ describe('SqliteRepository contract', () => {
       fileName: 'gear.stl',
       filePath: 'todo/gear.stl',
       quantity: 1,
-      requesterEmail: 'a@b.test',
+      ownerUserId: 'maker',
     })
     repository.moveCopies({ id, from: 'todo', to: 'in_progress', count: 1, filePath: 'in-progress/gear.stl', order: 4 })
     repository.moveCopies({ id, from: 'in_progress', to: 'todo', count: 1, filePath: 'todo/gear.stl', order: 2 })
@@ -443,255 +506,108 @@ describe('SqliteRepository contract', () => {
     expect(repository.getRequest(id)?.orders).toMatchObject({ todo: undefined, in_progress: 9 })
   })
 
-  it('migrates legacy users, hashes, and roles into the better-auth tables', () => {
-    const db = new Database(':memory:')
-    db.exec('CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)')
-    for (const [version, sql] of [
-      [1, initialMigration],
-      [2, operationsMigration],
-      [3, uploadsMigration],
-      [4, settingsMigration],
-    ] as const) {
-      db.exec(sql)
-      db.prepare('INSERT INTO schema_migrations VALUES (?,?)').run(version, Date.now())
-    }
-    db.prepare('INSERT INTO users (id,email,name,password_hash,role,color,created_at) VALUES (?,?,?,?,?,?,?)').run(
-      'legacy-op',
-      'op@example.com',
-      'Op',
-      '$argon2id$fake',
-      'operator',
-      '#0af',
-      1700000000000,
+  it('transfers pre-Drizzle requests and assigns stable owner IDs', () => {
+    const database = createPreDrizzleDatabase()
+    const now = new Date().toISOString()
+    const insertOwner = database.prepare('INSERT INTO "user" (id,name,email,emailVerified,createdAt,updatedAt,role) VALUES (?,?,?,1,?,?,?)')
+    insertOwner.run('uploader', 'Uploader', 'uploader@example.com', now, now, 'requester')
+    insertOwner.run('owner', 'Actual Owner', 'owner@example.com', now, now, 'requester')
+    insertOwner.run('duplicate-1', 'Duplicate', 'duplicate-1@example.com', now, now, 'requester')
+    insertOwner.run('duplicate-2', 'Duplicate', 'duplicate-2@example.com', now, now, 'requester')
+    const insertRequest = database.prepare(
+      'INSERT INTO requests (id,name,file_name,file_path,quantity,requester_email,requester_name,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
     )
-    db.prepare('INSERT INTO users (id,email,name,password_hash,role,created_at) VALUES (?,?,?,NULL,?,?)').run(
-      'legacy-req',
-      'req@example.com',
-      'Req',
-      'requester',
-      1700000000000,
-    )
-    const migrated = new SqliteRepository(db)
-    expect(migrated.listUsers()).toEqual([
-      { id: 'legacy-op', email: 'op@example.com', name: 'Op', role: 'admin' },
-      { id: 'legacy-req', email: 'req@example.com', name: 'Req', role: 'requester' },
-    ])
-    const account = db.prepare('SELECT accountId, providerId, password FROM account WHERE userId=?').get('legacy-op')
-    expect(account).toEqual({ accountId: 'legacy-op', providerId: 'credential', password: '$argon2id$fake' })
-    expect(db.prepare('SELECT count(*) count FROM account').get()).toEqual({ count: 1 })
-    const created = db.prepare('SELECT createdAt FROM "user" WHERE id=?').get('legacy-op') as { createdAt: string }
-    expect(new Date(created.createdAt).getTime()).toBe(1700000000000)
+    insertRequest.run('matched', 'Matched', 'matched.stl', 'todo/matched.stl', 1, 'uploader@example.com', ' actual owner ', 1, 1)
+    insertRequest.run('ambiguous', 'Ambiguous', 'ambiguous.stl', 'todo/ambiguous.stl', 1, 'uploader@example.com', 'Duplicate', 1, 1)
+    insertRequest.run('missing', 'Missing', 'missing.stl', 'todo/missing.stl', 1, 'uploader@example.com', 'Missing', 1, 1)
+
+    const migrated = new SqliteRepository(createDatabase(database))
+
+    expect(database.prepare('SELECT owner_user_id FROM requests WHERE id=?').get('matched')).toEqual({ owner_user_id: 'owner' })
+    expect(database.prepare('SELECT owner_user_id FROM requests WHERE id=?').get('ambiguous')).toEqual({ owner_user_id: 'uploader' })
+    expect(database.prepare('SELECT owner_user_id FROM requests WHERE id=?').get('missing')).toEqual({ owner_user_id: 'uploader' })
+    expect(
+      database
+        .prepare('PRAGMA table_info(requests)')
+        .all()
+        .map((column: any) => column.name),
+    ).not.toContain('requester_email')
+    expect(migrated.getRequest('matched')).toMatchObject({
+      ownerUserId: 'owner',
+      ownerEmail: 'owner@example.com',
+      ownerName: 'Actual Owner',
+    })
     migrated.close()
   })
 
-  it('renames existing privileged users and outstanding invites to admin', () => {
-    const db = new Database(':memory:')
-    db.exec('CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)')
-    for (const [version, sql] of [
-      [1, initialMigration],
-      [2, operationsMigration],
-      [3, uploadsMigration],
-      [4, settingsMigration],
-    ] as const) {
-      db.exec(sql)
-      db.prepare('INSERT INTO schema_migrations VALUES (?,?)').run(version, Date.now())
-    }
-    db.prepare('INSERT INTO users (id,email,name,password_hash,role,created_at) VALUES (?,?,?,?,?,?)').run(
-      'legacy-admin',
-      'admin@example.com',
-      'Admin',
-      '$argon2id$fake',
-      'operator',
-      1700000000000,
+  it('rejects pre-Drizzle requests whose owner has no matching account', () => {
+    const database = createPreDrizzleDatabase()
+    database
+      .prepare('INSERT INTO requests (id,name,file_name,file_path,quantity,requester_email,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)')
+      .run('unmatched-request', 'Unmatched', 'unmatched.stl', 'todo/unmatched.stl', 1, 'missing@example.com', 1, 1)
+
+    expect(() => new SqliteRepository(createDatabase(database))).toThrow(
+      'cannot migrate request ownership because these requests have no matching account: unmatched-request (missing@example.com)',
     )
-    for (const [version, sql] of [
-      [5, betterAuthMigration],
-      [6, assetGenerationMigration],
-      [7, invitesMigration],
-      [8, authRateLimitMigration],
-    ] as const) {
-      db.exec(sql)
-      db.prepare('INSERT INTO schema_migrations VALUES (?,?)').run(version, Date.now())
-    }
-    db.prepare('INSERT INTO invites (id,token_hash,role,created_at,expires_at) VALUES (?,?,?,?,?)').run(
-      'legacy-invite',
-      'token-hash',
-      'operator',
-      1700000000000,
-      1800000000000,
+    database.close()
+  })
+
+  it('rejects unsupported pre-Drizzle schema versions', () => {
+    const database = createPreDrizzleDatabase()
+    database.prepare('DELETE FROM schema_migrations WHERE version>=18').run()
+
+    expect(() => new SqliteRepository(createDatabase(database))).toThrow(
+      'pre-Drizzle database must be on schema version 18 through 21 (found version 17)',
+    )
+    database.close()
+  })
+
+  it('adds the Better Auth two-factor schema when bootstrapping production version 18', () => {
+    const database = createPreDrizzleDatabase(':memory:', 18)
+    expect(database.prepare('PRAGMA table_info("user")').all()).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: 'twoFactorEnabled' })]),
     )
 
-    const migrated = new SqliteRepository(db)
+    const migrated = new SqliteRepository(createDatabase(database))
 
-    expect(migrated.listUsers()).toContainEqual(expect.objectContaining({ email: 'admin@example.com', role: 'admin' }))
-    expect(migrated.listInvites()).toContainEqual(expect.objectContaining({ id: 'legacy-invite', role: 'admin' }))
-    expect(() =>
-      migrated.database
-        .prepare('INSERT INTO invites (id,token_hash,role,created_at,expires_at) VALUES (?,?,?,?,?)')
-        .run('invalid-invite', 'invalid-token', 'operator', 1700000000000, 1800000000000),
-    ).toThrow()
+    expect(database.prepare('PRAGMA table_info("user")').all()).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: 'twoFactorEnabled', notnull: 1 })]),
+    )
+    expect(database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='twoFactor'").get()).toEqual({
+      name: 'twoFactor',
+    })
     migrated.close()
   })
 
-  it('migrates legacy unassigned requests to the resin print-type pool', () => {
-    const db = new Database(':memory:')
-    db.exec('CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)')
-    for (const [version, sql] of [
-      [1, initialMigration],
-      [2, operationsMigration],
-      [3, uploadsMigration],
-      [4, settingsMigration],
-      [5, betterAuthMigration],
-      [6, assetGenerationMigration],
-      [7, invitesMigration],
-      [8, authRateLimitMigration],
-      [9, adminRoleMigration],
-      [10, platePlannerMigration],
-      [11, resinOrientationMigration],
-      [12, resinOrientationCandidatesMigration],
-      [13, orientationAnalysisJobsMigration],
-      [14, assetStageJobsMigration],
-      [15, resinVolumeMigration],
-      [16, requestPrinterMigration],
-    ] as const) {
-      db.exec(sql)
-      db.prepare('INSERT INTO schema_migrations VALUES (?,?)').run(version, Date.now())
-    }
-    db.prepare(
-      'INSERT INTO requests (id,name,file_name,file_path,quantity,requester_email,printer_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
-    ).run('legacy-request', 'Legacy', 'legacy.stl', 'todo/legacy.stl', 1, 'owner@example.com', 'legacy-printer', 1, 1)
-    db.prepare(
-      'INSERT INTO requests (id,name,file_name,file_path,quantity,requester_email,printer_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
-    ).run('legacy-pool', 'Legacy pool', 'pool.stl', 'todo/pool.stl', 1, 'owner@example.com', null, 1, 1)
-    db.prepare('INSERT INTO request_statuses (request_id,status_id,quantity) VALUES (?,?,?)').run('legacy-request', 'todo', 1)
-    db.prepare('INSERT INTO request_statuses (request_id,status_id,quantity) VALUES (?,?,?)').run('legacy-pool', 'todo', 1)
-    db.prepare('INSERT INTO settings (key,value_json,updated_at) VALUES (?,?,?)').run(
-      'plate-planner-profiles',
-      JSON.stringify([
-        {
-          id: 'legacy-resin',
-          name: 'Legacy resin',
-          technology: 'resin',
-          enabled: true,
-          widthMm: 100,
-          depthMm: 60,
-          heightMm: 150,
-          spacingMm: 2,
-          supportMarginMm: 2,
-          adhesionMarginMm: 1,
-          heightAllowanceMm: 4,
-          maxHeightDifferenceMm: 20,
-        },
-        {
-          id: 'legacy-filament',
-          name: 'Legacy FDM',
-          technology: 'fdm',
-          enabled: false,
-          widthMm: 220,
-          depthMm: 220,
-          heightMm: 250,
-          spacingMm: 3,
-          brimMarginMm: 2,
-          filamentDiameterMm: 1.75,
-          materialDensityGPerCm3: 1.24,
-        },
-      ]),
-      1,
-    )
+  it('uses only the Drizzle migration journal for fresh databases', () => {
+    const database = new Database(':memory:')
+    const migrated = new SqliteRepository(createDatabase(database))
 
-    db.exec(requestPrintTypeMigration)
-    db.prepare('INSERT INTO schema_migrations VALUES (?,?)').run(17, Date.now())
-
-    const migrated = new SqliteRepository(db)
-
-    expect(migrated.getRequest('legacy-request')).toMatchObject({ requestedPrintType: undefined, printerId: 'legacy-printer' })
-    expect(migrated.getRequest('legacy-pool')).toMatchObject({ requestedPrintType: 'resin', printerId: undefined })
-    expect(migrated.getSetting<PrinterProfile[]>('plate-planner-profiles')).toEqual([
-      expect.objectContaining({ id: 'legacy-resin', printType: 'resin', enabled: true }),
-      expect.objectContaining({ id: 'legacy-filament', printType: 'filament', enabled: false }),
-    ])
-    expect(JSON.stringify(migrated.getSetting('plate-planner-profiles'))).not.toContain('technology')
-    expect(() =>
-      migrated.database
-        .prepare(
-          'INSERT INTO requests (id,name,file_name,file_path,quantity,requester_email,print_type,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
-        )
-        .run('invalid', 'Invalid', 'invalid.stl', 'todo/invalid.stl', 1, 'owner@example.com', 'powder', 1, 1),
-    ).toThrow()
+    expect(database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get()).toBeUndefined()
+    expect(database.prepare('SELECT count(*) count FROM __drizzle_migrations').get()).toEqual({ count: 2 })
     migrated.close()
   })
 
-  it('upgrades databases that already applied the request technology migration', () => {
-    const db = new Database(':memory:')
-    db.exec('CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)')
-    for (const [version, sql] of [
-      [1, initialMigration],
-      [2, operationsMigration],
-      [3, uploadsMigration],
-      [4, settingsMigration],
-      [5, betterAuthMigration],
-      [6, assetGenerationMigration],
-      [7, invitesMigration],
-      [8, authRateLimitMigration],
-      [9, adminRoleMigration],
-      [10, platePlannerMigration],
-      [11, resinOrientationMigration],
-      [12, resinOrientationCandidatesMigration],
-      [13, orientationAnalysisJobsMigration],
-      [14, assetStageJobsMigration],
-      [15, resinVolumeMigration],
-      [16, requestPrinterMigration],
-    ] as const) {
-      db.exec(sql)
-      db.prepare('INSERT INTO schema_migrations VALUES (?,?)').run(version, Date.now())
+  it('bridges the final pre-Drizzle schema once and creates one pre-migration backup', async () => {
+    const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-drizzle-bridge-'))
+    const file = path.join(directory, 'printhub.sqlite')
+    try {
+      createPreDrizzleDatabase(file, 18).close()
+
+      SqliteRepository.open(file).close()
+
+      const bridged = new Database(file)
+      expect(bridged.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get()).toBeUndefined()
+      expect(bridged.prepare('SELECT count(*) count FROM __drizzle_migrations').get()).toEqual({ count: 2 })
+      bridged.close()
+      expect(await fs.promises.readdir(path.join(directory, 'backups'))).toHaveLength(1)
+
+      SqliteRepository.open(file).close()
+
+      expect(await fs.promises.readdir(path.join(directory, 'backups'))).toHaveLength(1)
+    } finally {
+      await fs.promises.rm(directory, { recursive: true, force: true })
     }
-    db.exec("ALTER TABLE requests ADD COLUMN technology TEXT NOT NULL DEFAULT 'resin' CHECK (technology IN ('resin', 'fdm'))")
-    db.exec('CREATE INDEX requests_technology ON requests(technology)')
-    db.exec('CREATE INDEX requests_printer_id ON requests(printer_id)')
-    db.prepare('INSERT INTO schema_migrations VALUES (?,?)').run(17, Date.now())
-    db.prepare(
-      'INSERT INTO requests (id,name,file_name,file_path,quantity,requester_email,technology,printer_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
-    ).run('legacy-assigned', 'Assigned', 'assigned.stl', 'todo/assigned.stl', 1, 'owner@example.com', 'fdm', 'filament-printer', 1, 1)
-    db.prepare(
-      'INSERT INTO requests (id,name,file_name,file_path,quantity,requester_email,technology,printer_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
-    ).run('legacy-pool', 'Pool', 'pool.stl', 'todo/pool.stl', 1, 'owner@example.com', 'fdm', null, 1, 1)
-    db.prepare('INSERT INTO request_statuses (request_id,status_id,quantity) VALUES (?,?,?)').run('legacy-assigned', 'todo', 1)
-    db.prepare('INSERT INTO request_statuses (request_id,status_id,quantity) VALUES (?,?,?)').run('legacy-pool', 'todo', 1)
-    db.prepare('INSERT INTO settings (key,value_json,updated_at) VALUES (?,?,?)').run(
-      'plate-planner-profiles',
-      JSON.stringify([
-        {
-          id: 'filament-printer',
-          name: 'Legacy FDM',
-          technology: 'fdm',
-          enabled: true,
-          widthMm: 220,
-          depthMm: 220,
-          heightMm: 250,
-          spacingMm: 3,
-          brimMarginMm: 2,
-          filamentDiameterMm: 1.75,
-          materialDensityGPerCm3: 1.24,
-        },
-      ]),
-      1,
-    )
-
-    const migrated = new SqliteRepository(db)
-
-    expect(migrated.getRequest('legacy-assigned')).toMatchObject({ requestedPrintType: undefined, printerId: 'filament-printer' })
-    expect(migrated.getRequest('legacy-pool')).toMatchObject({ requestedPrintType: 'filament', printerId: undefined })
-    expect(migrated.getSetting<PrinterProfile[]>('plate-planner-profiles')).toEqual([
-      expect.objectContaining({ id: 'filament-printer', printType: 'filament', enabled: true }),
-    ])
-    expect(db.prepare('PRAGMA table_info(requests)').all()).toEqual(
-      expect.arrayContaining([expect.objectContaining({ name: 'print_type' })]),
-    )
-    expect(db.prepare('PRAGMA table_info(requests)').all()).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ name: 'technology' })]),
-    )
-    expect(db.prepare('SELECT version FROM schema_migrations WHERE version=18').get()).toEqual({ version: 18 })
-    migrated.close()
   })
 
   it('keeps assignments for planning changes while pruning their drafts', () => {
@@ -728,7 +644,7 @@ describe('SqliteRepository contract', () => {
       fileName: 'resin.stl',
       filePath: 'todo/resin.stl',
       quantity: 1,
-      requesterEmail: 'owner@example.com',
+      ownerUserId: 'maker',
       printerId: resin.id,
     })
     const filamentRequest = repository.createRequest({
@@ -736,7 +652,7 @@ describe('SqliteRepository contract', () => {
       fileName: 'filament.stl',
       filePath: 'todo/filament.stl',
       quantity: 1,
-      requesterEmail: 'owner@example.com',
+      ownerUserId: 'maker',
       printerId: filament.id,
     })
     const draft = (printerId: string): PlatePlannerDraft => ({
@@ -791,7 +707,7 @@ describe('SqliteRepository contract', () => {
       fileName: 'assigned.stl',
       filePath: 'todo/assigned.stl',
       quantity: 1,
-      requesterEmail: 'owner@example.com',
+      ownerUserId: 'maker',
       printerId: printer.id,
     })
 
@@ -821,7 +737,7 @@ describe('SqliteRepository contract', () => {
       fileName: 'assigned.stl',
       filePath: 'todo/assigned.stl',
       quantity: 1,
-      requesterEmail: 'owner@example.com',
+      ownerUserId: 'maker',
       printerId: printer.id,
     })
 
@@ -836,13 +752,15 @@ describe('SqliteRepository contract', () => {
       fileName: 'gear.stl',
       filePath: 'todo/gear.stl',
       quantity: 1,
-      requesterEmail: 'a@b.test',
+      ownerUserId: 'maker',
     })
-    const raw = (repository as unknown as { db: Database.Database }).db
-    raw.prepare("DELETE FROM request_statuses WHERE request_id=? AND status_id='done'").run(id)
+    repository.database
+      .delete(requestStatuses)
+      .where(and(eq(requestStatuses.requestId, id), eq(requestStatuses.statusId, 'done')))
+      .run()
     repository.reconcileWorkflow()
     expect(repository.getRequest(id)?.counts.done).toBe(0)
-    raw.prepare("INSERT INTO request_statuses VALUES (?, 'retired', 1, NULL)").run(id)
+    repository.database.insert(requestStatuses).values({ requestId: id, statusId: 'retired', quantity: 1 }).run()
     expect(() => repository.reconcileWorkflow()).toThrow('still has copies')
   })
 
@@ -855,6 +773,7 @@ describe('SqliteRepository contract', () => {
     expect(() => repository.createUploadSession('persisted-upload-id', 'attacker', expires, 3)).toThrow(
       expect.objectContaining({ status: 409 }),
     )
+    expect(() => repository.database.delete(user).where(eq(user.id, 'owner')).run()).toThrow('FOREIGN KEY constraint failed')
   })
 
   it('atomically reserves a request against overlapping durable operations', () => {
@@ -863,7 +782,7 @@ describe('SqliteRepository contract', () => {
       fileName: 'gear.stl',
       filePath: 'todo/gear.stl',
       quantity: 1,
-      requesterEmail: 'a@b.test',
+      ownerUserId: 'maker',
     })
     repository.beginOperation(crypto.randomUUID(), {
       kind: 'move',
@@ -888,8 +807,9 @@ describe('SqliteRepository contract', () => {
       expect(repository.reserveUpload(id, 'owner', 1, expires, { count: 3, bytes: 100 })).toBe(true)
     }
     expect(() => repository.createUploadSession('quota-upload-four', 'owner', expires, 3)).toThrow(expect.objectContaining({ status: 429 }))
-    const raw = (repository as unknown as { db: Database.Database }).db
-    expect((raw.prepare('SELECT count(*) count FROM upload_sessions WHERE owner_id=?').get('owner') as { count: number }).count).toBe(3)
+    expect(
+      repository.database.select({ count: count() }).from(uploadSessions).where(eq(uploadSessions.ownerId, 'owner')).get()?.count,
+    ).toBe(3)
     repository.expireUploads(expires + 1)
     expect(repository.createUploadSession('quota-upload-four', 'owner', expires + 60_000, 3)).toEqual({ fresh: true })
   })
@@ -910,6 +830,7 @@ describe('SqliteRepository contract', () => {
     const file = path.join(directory, 'test.sqlite')
     const expires = Date.now() + 60_000
     const first = SqliteRepository.open(file)
+    insertUser(first, { id: 'owner', name: 'Owner', email: 'owner@example.com' })
     first.createUploadSession('restart-upload-one', 'owner', expires, 3)
     expect(first.reserveUpload('restart-upload-one', 'owner', 70, expires, { count: 2, bytes: 100 })).toBe(true)
     first.createUploadSession('restart-upload-two', 'owner', expires, 2)

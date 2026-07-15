@@ -10,7 +10,7 @@ export type Identity = {
   twoFactorEnabled?: boolean
 }
 
-export type Person = { name: string; color?: string }
+export type Person = { id: string; name: string; color?: string }
 export type PrinterSummary = {
   id: string
   name: string
@@ -39,8 +39,9 @@ export type PrintRequest = {
   fileName: string
   filePath: string
   quantity: number
-  requesterEmail: string
-  requesterName?: string
+  ownerUserId: string
+  ownerEmail: string
+  ownerName: string
   counts: Record<string, number>
   orders: Record<string, number | undefined>
   notes?: string
@@ -57,8 +58,10 @@ export type PrintRequest = {
 
 export type PublicPrintRequest = Omit<
   PrintRequest,
-  'fileName' | 'filePath' | 'requesterEmail' | 'thumbnailPath' | 'previewPath' | 'requestedPrintType'
+  'fileName' | 'filePath' | 'ownerUserId' | 'ownerEmail' | 'ownerName' | 'thumbnailPath' | 'previewPath' | 'requestedPrintType'
 > & {
+  requesterId: string
+  requesterName: string
   mine: boolean
   canEdit: boolean
   canDelete: boolean
@@ -119,8 +122,8 @@ export type RequestFacets = {
 
 export type RequestQuery = {
   filters?: RequestFilters
-  visibleToEmail?: string
-  ownerEmail?: string
+  visibleToUserId?: string
+  ownerUserId?: string
   searchPrivateMetadata?: boolean
 }
 
@@ -135,8 +138,7 @@ export type NewPrintRequest = Pick<
   | 'fileName'
   | 'filePath'
   | 'quantity'
-  | 'requesterEmail'
-  | 'requesterName'
+  | 'ownerUserId'
   | 'notes'
   | 'sourceUrl'
   | 'thumbnailPath'
@@ -159,6 +161,8 @@ export type MoveOperation = {
 export type DeleteOperation = {
   kind: 'delete'
   requestId: string
+  ownerUserId?: string
+  purgeBeforeDelete?: boolean
   assets: { originalPath: string; trashPath: string }[]
 }
 
@@ -190,6 +194,8 @@ export interface Repository {
   expireUploads(now: number): string[]
   activeUploadIds(now: number): Set<string>
   incompleteUploadStats(now: number): { count: number; bytes: number }
+  uploadIdsOwnedBy(ownerId: string): string[]
+  deleteUploadSessions(ownerId: string): void
   getCompletedUpload(uploadId: string, ownerId: string): string | undefined
   moveCopies(input: { id: string; from: string; to: string; count: number; filePath: string; order?: number }): void
   reorderRequest(id: string, status: string, order: number): void
@@ -198,7 +204,6 @@ export interface Repository {
     fields: {
       name?: string
       quantity?: number
-      requesterName?: string
       notes?: string
       sourceUrl?: string
       requestedPrintType?: PrintType | null
@@ -286,6 +291,10 @@ export interface UploadStagingArea {
   remove(filePath: string): Promise<void>
   sweepUploads(exclude?: ReadonlySet<string>): Promise<void>
   writable(): Promise<void>
+}
+
+export interface UploadStore {
+  remove(uploadId: string): Promise<void>
 }
 
 export type TelemetryConfig = { enabled: boolean }

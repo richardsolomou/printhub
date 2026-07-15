@@ -1,12 +1,13 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import Database from 'better-sqlite3'
 import { build } from 'esbuild'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LocalAssetStore } from '../../adapters/filesystem'
 import { LocalEventBus } from '../../adapters/events'
 import { SqliteRepository } from '../../adapters/sqlite'
+import { createDatabase } from '../../db'
+import { user } from '../../db/schema'
 import type { AppEvent, Telemetry } from '../../core/types'
 import { ORIENTATION_ANALYSIS_VERSION } from '../../core/platePlanner'
 import { AssetGenerationQueue } from './queue'
@@ -70,7 +71,19 @@ describe('asset generation queue', () => {
 
   beforeEach(async () => {
     root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-assets-'))
-    repository = new SqliteRepository(new Database(':memory:'))
+    repository = new SqliteRepository(createDatabase(':memory:'))
+    repository.database
+      .insert(user)
+      .values({
+        id: 'owner',
+        name: 'Owner',
+        email: 'owner@example.com',
+        emailVerified: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        role: 'requester',
+      })
+      .run()
     assets = new LocalAssetStore(root)
     await assets.initialize()
     events = new LocalEventBus()
@@ -89,7 +102,7 @@ describe('asset generation queue', () => {
       fileName: 'model.stl',
       filePath: 'todo/model.stl',
       quantity: 1,
-      requesterEmail: 'owner@example.com',
+      ownerUserId: 'owner',
       requestedPrintType,
     })
   }
@@ -112,10 +125,10 @@ describe('asset generation queue', () => {
     expect(queue.stats()).toEqual({
       queued: 0,
       pending: 0,
-      concurrency: 1,
+      concurrency: 8,
       worker: false,
-      visual: { queued: 0, running: 0, concurrency: 1 },
-      orientation: { queued: 0, running: 0, concurrency: 1 },
+      visual: { queued: 0, running: 0, concurrency: 8 },
+      orientation: { queued: 0, running: 0, concurrency: 8 },
     })
     queue.enqueue(id)
     expect(queue.stats().visual.queued + queue.stats().visual.running).toBe(1)

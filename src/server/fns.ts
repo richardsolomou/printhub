@@ -1,8 +1,10 @@
 import crypto from 'node:crypto'
 import { createServerFn } from '@tanstack/react-start'
 import { getRequest, setCookie } from '@tanstack/react-start/server'
+import { eq } from 'drizzle-orm'
 import { resolveAuthAdapterConfig } from '../adapters/auth'
 import { buildEmailDelivery, resolveSmtpConfig } from '../adapters/email'
+import { user } from '../db/schema'
 import { app, buildAssetStore, hashInviteToken, resetApp, resolveBoardConfig, resolveTelemetryConfig } from './app'
 import { workflow } from '../core/workflow'
 import { SOCIAL_AUTH_PROVIDERS, type IntegrationConfig } from '../core/auth'
@@ -362,7 +364,7 @@ export const listUsers = createServerFn({ method: 'GET' }).handler(async () =>
   rpc(async () => {
     const instance = await app()
     if ((await me(instance)).role !== 'admin') throw new Response('forbidden', { status: 403 })
-    return instance.repository.listUsers().map((user) => ({ ...user, image: userImage(user.email, user.image) }))
+    return instance.repository.listUsers().map((account) => ({ ...account, image: userImage(account.email, account.image) }))
   }),
 )
 
@@ -470,7 +472,7 @@ export const acceptInvite = createServerFn({ method: 'POST' })
       const invite = instance.repository.findInvite(tokenHash)
       if (!invite || invite.usedAt || invite.expiresAt <= Date.now())
         throw new Response('this invite link is no longer valid', { status: 410 })
-      if (instance.repository.listUsers().some((user) => user.email === data.email)) {
+      if (instance.repository.listUsers().some((account) => account.email === data.email)) {
         throw new Response('an account with this email already exists — sign in instead', { status: 409 })
       }
 
@@ -482,7 +484,7 @@ export const acceptInvite = createServerFn({ method: 'POST' })
         }),
       )
       if (invite.role === 'admin') {
-        instance.repository.database.prepare('UPDATE "user" SET role=? WHERE id=?').run('admin', created.user.id)
+        instance.repository.database.update(user).set({ role: 'admin' }).where(eq(user.id, created.user.id)).run()
       }
     }),
   )

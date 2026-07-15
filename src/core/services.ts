@@ -7,12 +7,14 @@ import type {
   MoveOperation,
   NewPrintRequest,
   PendingOperation,
+  PrintRequest,
   PrintType,
   PublicRequestQueryResult,
   Repository,
   RequestFilters,
   Telemetry,
   UploadOperation,
+  UploadStore,
   UploadStagingArea,
 } from './types'
 import { initialStatus, statusById, workflow } from './workflow'
@@ -24,6 +26,9 @@ import {
   type PrinterProfile,
 } from './platePlanner'
 
+export type NewRequestInput = Omit<NewPrintRequest, 'ownerUserId'>
+export type NewUploadedRequestInput = Omit<NewRequestInput, 'filePath' | 'previewPath' | 'thumbnailPath'>
+
 export class PrintHubService {
   constructor(
     private repository: Repository,
@@ -31,13 +36,14 @@ export class PrintHubService {
     private staging: UploadStagingArea,
     private events: EventBus,
     private telemetry: Telemetry,
+    private uploads: UploadStore,
   ) {}
 
   listRequests(identity: Identity, privateRequests = false, filters: RequestFilters = {}): PublicRequestQueryResult {
     const admin = identity.role === 'admin'
     const result = this.repository.queryRequests({
       filters,
-      visibleToEmail: !admin && privateRequests ? identity.email : undefined,
+      visibleToUserId: !admin && privateRequests ? identity.id : undefined,
       searchPrivateMetadata: admin,
     })
     const profiles = (this.repository.getSetting<PrinterProfile[]>('plate-planner-profiles') ?? []).map(normalizePrinterProfile)
@@ -49,13 +55,15 @@ export class PrintHubService {
         ({
           fileName: _fileName,
           filePath: _filePath,
-          requesterEmail,
+          ownerUserId,
+          ownerEmail: _ownerEmail,
+          ownerName,
           thumbnailPath: _thumbnailPath,
           previewPath,
           requestedPrintType,
           ...request
         }) => {
-          const mine = requesterEmail === identity.email
+          const mine = ownerUserId === identity.id
           const started = workflow.statuses.slice(1).some((status) => request.counts[status.id] > 0)
           const printer = request.printerId ? printers.get(request.printerId) : undefined
           const printType = printer?.printType ?? requestedPrintType
@@ -88,6 +96,8 @@ export class PrintHubService {
                     : 'another_compatible_printer'
           return {
             ...request,
+            requesterId: ownerUserId,
+            requesterName: ownerName,
             mine,
             printType,
             requestedPrintType,
@@ -112,9 +122,13 @@ export class PrintHubService {
     return this.repository.getRequest(id)
   }
 
-  createRequest(input: Parameters<Repository['createRequest']>[0], identity: Identity) {
+  createRequest(input: NewRequestInput, identity: Identity) {
     this.validateTarget(input.requestedPrintType, input.printerId)
-    const id = this.repository.createRequest({ ...input, requestedPrintType: input.printerId ? undefined : input.requestedPrintType })
+    const id = this.repository.createRequest({
+      ...input,
+      ownerUserId: identity.id,
+      requestedPrintType: input.printerId ? undefined : input.requestedPrintType,
+    })
     const printType = input.printerId ? printerPrintType(this.printer(input.printerId)!) : input.requestedPrintType
     this.changed('request.created')
     this.capture(identity.id, 'request_created', {
@@ -124,18 +138,17 @@ export class PrintHubService {
     return id
   }
 
-  async createUploadedRequest(
-    uploadId: string,
-    partPath: string,
-    input: Omit<NewPrintRequest, 'filePath' | 'previewPath' | 'thumbnailPath'>,
-    identity: Identity,
-  ) {
+  async createUploadedRequest(uploadId: string, partPath: string, input: NewUploadedRequestInput, identity: Identity) {
     const completed = this.repository.getCompletedUpload(uploadId, identity.id)
     if (completed) return completed
     this.validateTarget(input.requestedPrintType, input.printerId)
-    input = { ...input, requestedPrintType: input.printerId ? undefined : input.requestedPrintType }
-    const printType = input.printerId ? printerPrintType(this.printer(input.printerId)!) : input.requestedPrintType
-    const filePath = this.assets.createPath(input.fileName)
+    const request: Omit<NewPrintRequest, 'filePath' | 'previewPath' | 'thumbnailPath'> = {
+      ...input,
+      ownerUserId: identity.id,
+      requestedPrintType: input.printerId ? undefined : input.requestedPrintType,
+    }
+    const printType = request.printerId ? printerPrintType(this.printer(request.printerId)!) : request.requestedPrintType
+    const filePath = this.assets.createPath(request.fileName)
     const operation: UploadOperation = {
       kind: 'upload',
       uploadId,
@@ -143,7 +156,7 @@ export class PrintHubService {
       requestId: crypto.randomUUID(),
       partPath,
       destinationPath: filePath,
-      request: input,
+      request,
     }
     this.repository.beginUploadOperation(crypto.randomUUID(), operation)
     const pending = this.repository
@@ -217,7 +230,7 @@ export class PrintHubService {
     if (!Number.isFinite(order)) throw new Error('invalid order')
     const request = this.requiredRequest(id)
     // Requesters may rearrange their own cards; only admins touch others'.
-    if (identity.role !== 'admin' && request.requesterEmail !== identity.email) throw new Response('forbidden', { status: 403 })
+    if (identity.role !== 'admin' && request.ownerUserId !== identity.id) throw new Response('forbidden', { status: 403 })
     this.repository.reorderRequest(id, status, order)
     this.changed('request.reordered')
   }
@@ -227,7 +240,6 @@ export class PrintHubService {
     fields: {
       name?: string
       quantity?: number
-      requesterName?: string
       notes?: string
       sourceUrl?: string
       requestedPrintType?: PrintType | null
@@ -239,7 +251,6 @@ export class PrintHubService {
       typeof id !== 'string' ||
       id.length > 100 ||
       (fields.name !== undefined && (typeof fields.name !== 'string' || !fields.name.trim() || fields.name.length > 120)) ||
-      (fields.requesterName !== undefined && (typeof fields.requesterName !== 'string' || fields.requesterName.length > 60)) ||
       (fields.notes !== undefined && (typeof fields.notes !== 'string' || fields.notes.length > 2000)) ||
       (fields.sourceUrl !== undefined &&
         (typeof fields.sourceUrl !== 'string' || (fields.sourceUrl.trim() !== '' && !validSourceUrl(fields.sourceUrl.trim())))) ||
@@ -273,7 +284,7 @@ export class PrintHubService {
     const printTypeChanged = printType !== previousPrintType
     if (identity.role !== 'admin') {
       const started = workflow.statuses.slice(1).some((status) => request.counts[status.id] > 0)
-      if (request.requesterEmail !== identity.email || started) throw new Response('forbidden', { status: 403 })
+      if (request.ownerUserId !== identity.id || started) throw new Response('forbidden', { status: 403 })
       fields = {
         quantity: fields.quantity,
         notes: fields.notes,
@@ -285,7 +296,6 @@ export class PrintHubService {
     this.repository.updateRequest(id, {
       ...fields,
       name: fields.name?.trim(),
-      requesterName: fields.requesterName?.trim(),
       notes: fields.notes?.trim(),
       sourceUrl: fields.sourceUrl?.trim(),
     })
@@ -298,20 +308,49 @@ export class PrintHubService {
     if (identity.role !== 'admin') {
       // Requesters may withdraw their own request until a copy starts.
       const started = workflow.statuses.slice(1).some((status) => request.counts[status.id] > 0)
-      if (request.requesterEmail !== identity.email || started) throw new Response('forbidden', { status: 403 })
+      if (request.ownerUserId !== identity.id || started) throw new Response('forbidden', { status: 403 })
     }
+    await this.removeRequest(request)
+    this.changed('request.deleted')
+    this.capture(identity.id, 'request_deleted', { print_type: this.requestPrintType(request) })
+  }
+
+  async removeOwnedRequests(userId: string) {
+    const pending = this.repository.listOperations().filter((operation) => {
+      if (operation.payload.kind === 'upload') return operation.payload.ownerId === userId
+      const requestOwnerId = this.repository.getRequest(operation.payload.requestId)?.ownerUserId
+      return operation.payload.kind === 'delete'
+        ? operation.payload.ownerUserId === userId || requestOwnerId === userId
+        : requestOwnerId === userId
+    })
+    for (const operation of pending) {
+      await this.resumeOperation(operation)
+      if (this.repository.listOperations().some(({ id }) => id === operation.id)) throw new Error('storage cleanup is incomplete')
+    }
+    const requests = this.repository.queryRequests({ ownerUserId: userId }).requests
+    for (const request of requests) await this.removeRequest(request, true)
+    const uploadIds = this.repository.uploadIdsOwnedBy(userId)
+    for (const uploadId of uploadIds) {
+      await this.uploads.remove(uploadId)
+      await this.staging.remove(this.staging.uploadPart(uploadId))
+    }
+    this.repository.deleteUploadSessions(userId)
+    if (requests.length > 0) this.changed('request.deleted')
+  }
+
+  private async removeRequest(request: PrintRequest, purgeBeforeDelete = false) {
     const operationId = crypto.randomUUID()
     const operation: DeleteOperation = {
       kind: 'delete',
-      requestId: id,
+      requestId: request.id,
+      ownerUserId: request.ownerUserId,
+      purgeBeforeDelete,
       assets: [request.filePath, request.previewPath, request.thumbnailPath]
         .filter((value): value is string => !!value)
         .map((originalPath) => ({ originalPath, trashPath: this.assets.trashPath(operationId, originalPath) })),
     }
     this.repository.beginOperation(operationId, operation)
     await this.resumeOperation({ id: operationId, state: 'prepared', payload: operation })
-    this.changed('request.deleted')
-    this.capture(identity.id, 'request_deleted', { print_type: this.requestPrintType(request) })
   }
 
   async recoverOperations() {
@@ -385,6 +424,12 @@ export class PrintHubService {
         await this.assets.ensureMoved(asset.originalPath, asset.trashPath)
       }
       this.repository.markOperationAssetsMoved(operation.id)
+    }
+    if (operation.payload.purgeBeforeDelete && operation.state !== 'committed') {
+      await Promise.all(operation.payload.assets.map((asset) => this.assets.purgeTrash(asset.trashPath)))
+      this.repository.completeDeleteOperation(operation.id, operation.payload.requestId)
+      this.repository.finishOperation(operation.id)
+      return
     }
     if (operation.state !== 'committed') this.repository.completeDeleteOperation(operation.id, operation.payload.requestId)
     const purged = await Promise.allSettled(operation.payload.assets.map((asset) => this.assets.purgeTrash(asset.trashPath)))

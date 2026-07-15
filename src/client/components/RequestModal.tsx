@@ -12,12 +12,10 @@ import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import type { Person, PrintType, PublicPrintRequest } from '../../core/types'
-import { requesterLabel } from '../requester'
 import { deleteRequest, updateRequest } from '../../server/fns'
 import { DialogShell } from './DialogShell'
 import { ConfirmDialog } from './ConfirmDialog'
 import { LazyStlViewer } from './LazyStlViewer'
-import { PeopleCombobox } from './PeopleCombobox'
 import { RequestDetails } from './RequestDetails'
 import { availablePrintTypes, printTypeLabel } from '../fleet'
 
@@ -42,7 +40,6 @@ export function RequestModal({
   const queryClient = useQueryClient()
   const [name, setName] = useState(request.name)
   const [quantity, setQuantity] = useState(String(request.quantity))
-  const [forName, setForName] = useState(requesterLabel(request))
   const [notes, setNotes] = useState(request.notes ?? '')
   const [sourceUrl, setSourceUrl] = useState(request.sourceUrl ?? '')
   const originalPrintType = request.printType ?? ''
@@ -82,7 +79,6 @@ export function RequestModal({
     canEdit &&
     (name !== request.name ||
       Number(quantity) !== request.quantity ||
-      forName !== requesterLabel(request) ||
       notes !== (request.notes ?? '') ||
       sourceUrl !== (request.sourceUrl ?? '') ||
       printType !== originalPrintType)
@@ -104,7 +100,6 @@ export function RequestModal({
         id: request.id,
         name: name.trim() || request.name,
         quantity: Math.min(50, Math.max(1, Math.round(Number(quantity) || request.quantity))),
-        requesterName: forName.trim(),
         notes: notes.trim(),
         sourceUrl: sourceUrl.trim(),
         requestedPrintType: printType,
@@ -158,8 +153,8 @@ export function RequestModal({
                 />
               </Field>
             </div>
-            <div className="mb-3 grid gap-3 sm:grid-cols-2 [&>[data-slot=field]]:min-w-0">
-              <Field className={cn(!isAdmin && 'sm:col-span-2')}>
+            <div className="mb-3 grid gap-3 [&>[data-slot=field]]:min-w-0">
+              <Field>
                 <FieldLabel htmlFor="request-print-type">Print type</FieldLabel>
                 <Select
                   items={printTypes.map((value) => ({ value, label: printTypeLabel(value) }))}
@@ -178,20 +173,6 @@ export function RequestModal({
                   </SelectContent>
                 </Select>
               </Field>
-              {isAdmin && (
-                <Field>
-                  <FieldLabel htmlFor="request-for">For</FieldLabel>
-                  <PeopleCombobox
-                    id="request-for"
-                    value={forName}
-                    onChange={setForName}
-                    options={[
-                      ...(!people.some((person) => person.name === forName) ? [{ value: forName, label: forName }] : []),
-                      ...people.map((person) => ({ value: person.name, label: person.name })),
-                    ]}
-                  />
-                </Field>
-              )}
             </div>
             {notesOpen && (
               <div className="mb-2.5 flex items-start gap-2">
