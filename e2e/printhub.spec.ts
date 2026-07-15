@@ -182,7 +182,8 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
   await filamentEnabled.click()
   await expect(filamentEnabled).not.toBeChecked()
   await page.getByRole('button', { name: 'Save changes' }).click()
-  await expect(page.getByText('Printers updated.')).toBeVisible()
+  await expect(page.getByText('Printers updated.').last()).toBeVisible()
+  await expect(page.getByText('Printers updated.')).not.toBeVisible({ timeout: 10_000 })
 
   await mainNav(page, 'Board').click()
   await expect(requestCard(page, 'filament-block').getByLabel('Assigned printer is disabled')).toBeVisible()
@@ -217,8 +218,11 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
   await expect(restoredFilamentEnabled).toBeChecked()
   await page.getByRole('button', { name: 'Save changes' }).click()
   await expect(page.getByText('Printers updated.').last()).toBeVisible()
+  await expect(page.getByText('Printers updated.')).not.toBeVisible({ timeout: 10_000 })
   await mainNav(page, 'Board').click()
-  await expect(requestCard(page, 'filament-block').getByLabel('Assigned printer is disabled')).toHaveCount(0)
+  const restoredFilamentCard = requestCard(page, 'filament-block')
+  await expect(restoredFilamentCard).toBeVisible()
+  await expect(restoredFilamentCard.getByLabel('Assigned printer is disabled')).toHaveCount(0)
 
   await page
     .getByRole('region', { name: 'Board filters' })
