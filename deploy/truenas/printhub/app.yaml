@@ -1,6 +1,6 @@
 annotations:
   min_scale_version: 24.10.2.2
-app_version: 0.17.0
+app_version: 0.18.0
 capabilities: []
 categories:
   - productivity
@@ -8,8 +8,8 @@ changelog_url: https://github.com/richardsolomou/printhub/releases
 date_added: '2026-07-12'
 description: >-
   PrintHub is a private, self-hosted 3D-print production queue for resin and
-  filament printers. Accept STL requests, manage mixed printer fleets, plan build plates, and
-  track each copy while files stay on storage you control.
+  filament printers. Accept STL requests, manage mixed printer fleets, plan
+  build plates, and track each copy while files stay on storage you control.
 home: https://github.com/richardsolomou/printhub
 host_mounts: []
 icon: https://media.sys.truenas.net/apps/printhub/icons/icon.svg
