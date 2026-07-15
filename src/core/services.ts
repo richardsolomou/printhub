@@ -81,9 +81,11 @@ export class PrintHubService {
               ? 'pending'
               : compatiblePrinterIds.length === 0
                 ? 'none'
-                : request.printerId && compatiblePrinterIds.includes(request.printerId)
-                  ? 'selected_printer'
-                  : 'another_compatible_printer'
+                : !request.printerId
+                  ? undefined
+                  : compatiblePrinterIds.includes(request.printerId)
+                    ? 'selected_printer'
+                    : 'another_compatible_printer'
           return {
             ...request,
             mine,

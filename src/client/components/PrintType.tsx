@@ -2,9 +2,7 @@ import { CircleAlert, LoaderCircle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { estimateMaterialUsage, type MaterialEstimate } from '../../core/material'
 import type { PrintType, PublicPrintRequest } from '../../core/types'
-import { printTypeLabel } from '../fleet'
-
-type FitState = 'pending' | 'selected_printer' | 'another_compatible_printer' | 'none'
+import { fitState, printTypeLabel } from '../fleet'
 
 export { printTypeLabel }
 
@@ -133,15 +131,6 @@ export function FitAlertIcon({ request }: { request: PublicPrintRequest }) {
     )
   }
   return null
-}
-
-export function fitState(request: PublicPrintRequest): FitState | undefined {
-  if (request.fitState) return request.fitState
-  if (request.compatiblePrinterIds?.length === 0) return 'none'
-  if (request.compatiblePrinterIds?.length) {
-    return request.printerId && request.compatiblePrinterIds.includes(request.printerId) ? 'selected_printer' : 'another_compatible_printer'
-  }
-  return undefined
 }
 
 export function formatMaterial(value: number) {

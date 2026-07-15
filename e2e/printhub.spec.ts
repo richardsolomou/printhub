@@ -160,6 +160,20 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
   await mobileScreenshot(page, 'filament-request-details-mobile')
   await page.getByLabel('Name').fill('filament-block')
   await page.getByRole('button', { name: 'Save changes' }).click()
+
+  await upload(page, {
+    name: 'pooled-filament',
+    target: 'Any Filament printer',
+    buffer: boxStl('pooled-filament', 10, 10, 10),
+    targetChoice: true,
+  })
+  const pooledFilamentCard = requestCard(page, 'pooled-filament')
+  await pooledFilamentCard.click()
+  await expect(page.getByText(/≈1.24 g each/)).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText('Assigned printer does not fit; another enabled printer does')).toHaveCount(0)
+  await screenshot(page, 'pooled-compatible-request-desktop')
+  await page.getByRole('button', { name: 'Close' }).click()
+  await expect(pooledFilamentCard.getByLabel('Assigned printer does not fit')).toHaveCount(0)
   await mobileScreenshot(page, 'mixed-board-mobile')
 
   await mainNav(page, 'Settings').click()

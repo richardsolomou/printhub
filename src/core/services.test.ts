@@ -334,6 +334,29 @@ describe('PrintHubService crash recovery', () => {
     expect(service.listRequests(admin).requests[0]).toMatchObject({ compatiblePrinterIds: [], fitState: 'none' })
   })
 
+  it('does not report a bad assignment for requests targeting any compatible printer', () => {
+    repository.setSetting('plate-planner-profiles', [filamentPrinter])
+    const id = service.createRequest(
+      {
+        name: 'Pooled filament model',
+        fileName: 'pooled-filament.stl',
+        filePath: 'todo/pooled-filament.stl',
+        quantity: 1,
+        requesterEmail: 'owner@example.com',
+        requestedPrintType: 'filament',
+      },
+      admin,
+    )
+    repository.upsertPlateModelAnalyses([
+      { requestId: id, analysisVersion: 7, widthMm: 100, depthMm: 80, heightMm: 50, estimatedVolumeMm3: 10_000 },
+    ])
+
+    expect(service.listRequests(admin).requests[0]).toMatchObject({
+      compatiblePrinterIds: [filamentPrinter.id],
+      fitState: undefined,
+    })
+  })
+
   it('blocks requester deletion once a copy has started', async () => {
     const id = await request()
     const requester: Identity = { id: 'requester', email: 'owner@example.com', name: 'Owner', role: 'requester' }

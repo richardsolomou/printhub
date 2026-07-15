@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { PrinterSummary } from '../core/types'
 import {
   automaticPrinterId,
+  fitState,
   fleetPrintTypes,
   initialRequestTarget,
   printersForPrintType,
@@ -46,5 +47,13 @@ describe('fleet helpers', () => {
       value: 'type:filament',
       label: 'Any Filament printer',
     })
+  })
+
+  it('does not treat a compatible pooled request as a bad assignment', () => {
+    expect(fitState({ compatiblePrinterIds: ['printer-id'] })).toBeUndefined()
+  })
+
+  it('reports an incompatible explicit assignment when another printer fits', () => {
+    expect(fitState({ printerId: 'assigned-printer', compatiblePrinterIds: ['compatible-printer'] })).toBe('another_compatible_printer')
   })
 })
