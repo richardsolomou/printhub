@@ -201,8 +201,8 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
   await expect(page.getByRole('heading', { name: 'Printer' })).toBeVisible()
   await page.getByLabel('Printer', { exact: true }).click()
   await expect(page.getByRole('option', { name: /Workshop Filament/ })).toHaveCount(0)
-  await page.keyboard.press('Escape')
-  await mainNav(page, 'Settings').click({ trial: true })
+  await page.getByRole('option', { name: /Resin Station/ }).click()
+  await expect(page.locator('[data-slot="select-content"]')).not.toBeVisible()
 
   await mainNav(page, 'Settings').click()
   await page.getByRole('link', { name: 'Printers' }).click()
