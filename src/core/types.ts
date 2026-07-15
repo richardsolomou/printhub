@@ -1,4 +1,5 @@
 export type Role = 'admin' | 'requester'
+export type PrintType = 'resin' | 'filament'
 
 export type Identity = {
   id: string
@@ -9,7 +10,19 @@ export type Identity = {
 }
 
 export type Person = { name: string; color?: string }
-export type PrinterSummary = { id: string; name: string }
+export type PrinterSummary = {
+  id: string
+  name: string
+  printType: PrintType
+  enabled: boolean
+  filamentDiameterMm?: number
+  materialDensityGPerCm3?: number
+}
+
+export type FilamentAssumptions = {
+  filamentDiameterMm: number
+  materialDensityGPerCm3: number
+}
 
 export type Invite = {
   id: string
@@ -35,18 +48,27 @@ export type PrintRequest = {
   thumbnailPath?: string
   previewPath?: string
   hasThumbnail: boolean
+  requestedPrintType?: PrintType
   printerId?: string
-  estimatedResinMl?: number
+  estimatedVolumeMm3?: number
   createdAt: number
   updatedAt: number
 }
 
-export type PublicPrintRequest = Omit<PrintRequest, 'fileName' | 'filePath' | 'requesterEmail' | 'thumbnailPath' | 'previewPath'> & {
+export type PublicPrintRequest = Omit<
+  PrintRequest,
+  'fileName' | 'filePath' | 'requesterEmail' | 'thumbnailPath' | 'previewPath' | 'requestedPrintType'
+> & {
   mine: boolean
   canEdit: boolean
   canDelete: boolean
   hasPreview: boolean
+  printType?: PrintType
+  requestedPrintType?: PrintType
   printer?: PrinterSummary
+  filamentAssumptions?: FilamentAssumptions
+  compatiblePrinterIds?: string[]
+  fitState?: 'pending' | 'selected_printer' | 'another_compatible_printer' | 'none'
 }
 
 export type AssetGenerationStage = 'thumbnail' | 'preview'
@@ -84,6 +106,8 @@ export type RequestFilters = {
   hasSource?: boolean
   hasThumbnail?: boolean
   hasPreview?: boolean
+  printType?: PrintType
+  printerId?: string | null
   sort?: RequestSort
 }
 
@@ -118,6 +142,7 @@ export type NewPrintRequest = Pick<
   | 'thumbnailPath'
   | 'previewPath'
   | 'printerId'
+  | 'requestedPrintType'
 >
 
 export type MoveOperation = {
@@ -176,6 +201,7 @@ export interface Repository {
       requesterName?: string
       notes?: string
       sourceUrl?: string
+      requestedPrintType?: PrintType | null
       printerId?: string | null
     },
   ): void
@@ -212,6 +238,7 @@ export interface Repository {
   deleteInvite(id: string): void
   getSetting<T>(key: string): T | undefined
   setSetting(key: string, value: unknown): void
+  replacePrinterProfiles(profiles: import('./platePlanner').PrinterProfile[]): { reanalyzeRequestIds: string[] }
   countUsers(): number
   databaseInfo(): { path: string; sizeBytes: number; integrity: string; lastCheckedAt: number }
   maintain(): { integrity: string; checkedAt: number }

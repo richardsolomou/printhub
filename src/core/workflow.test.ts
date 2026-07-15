@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { workflow } from './workflow'
 
-describe('resin workflow', () => {
-  it('tracks a print through resin post-processing', () => {
+describe('production workflow', () => {
+  it('keeps stable statuses with print-type-neutral labels', () => {
     expect(workflow.statuses.map((status) => status.id)).toEqual(['todo', 'in_progress', 'post_processing', 'done'])
+    expect(workflow.statuses.map((status) => status.label)).toEqual(['Queue', 'Printing', 'Finishing', 'Ready'])
   })
 })

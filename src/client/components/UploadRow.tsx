@@ -8,20 +8,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@/lib/utils'
 import type { PrinterSummary } from '../../core/types'
 import type { UploadEntry } from './uploadTypes'
+import { requestTargetOptions, showRequestTarget } from '../fleet'
 
 export function UploadRow({
   entry,
   printers,
-  showPrinterPicker,
   onPatch,
   onRemove,
 }: {
   entry: UploadEntry
   printers: PrinterSummary[]
-  showPrinterPicker: boolean
   onPatch: (patch: Partial<UploadEntry>) => void
   onRemove: () => void
 }) {
+  const showTarget = showRequestTarget(printers)
+  const targetOptions = requestTargetOptions(printers)
+
   return (
     <Item variant="muted" className={cn('items-start max-sm:flex-col', entry.state === 'error' && 'ring-1 ring-destructive')}>
       <ItemMedia className="grid size-12 place-items-center overflow-hidden rounded-md border bg-background [background-image:var(--grid)] [background-size:12px_12px] max-sm:size-16">
@@ -74,20 +76,20 @@ export function UploadRow({
             </Tooltip>
           )}
         </div>
-        {showPrinterPicker && (
+        {showTarget && (
           <Select
-            items={printers.map((printer) => ({ value: printer.id, label: printer.name }))}
-            value={entry.printerId ?? printers[0]?.id}
-            onValueChange={(printerId) => printerId && onPatch({ printerId })}
+            items={targetOptions}
+            value={entry.target}
+            onValueChange={(target) => target && onPatch({ target })}
             disabled={entry.state === 'done'}
           >
-            <SelectTrigger className="w-full" aria-label={`Printer for ${entry.name}`}>
+            <SelectTrigger className="w-full" aria-label={`Target for ${entry.name}`}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {printers.map((printer) => (
-                <SelectItem key={printer.id} value={printer.id}>
-                  {printer.name}
+              {targetOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
                 </SelectItem>
               ))}
             </SelectContent>

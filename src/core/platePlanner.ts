@@ -2,18 +2,33 @@ import { MaxRectsPacker, Rectangle } from 'maxrects-packer'
 
 export const ORIENTATION_ANALYSIS_VERSION = 7
 
-export type PrinterProfile = {
+type BasePrinterProfile = {
   id: string
   name: string
+  printType: 'resin' | 'filament'
+  enabled: boolean
   widthMm: number
   depthMm: number
   heightMm: number
   spacingMm: number
+}
+
+export type ResinPrinterProfile = BasePrinterProfile & {
+  printType: 'resin'
   supportMarginMm: number
   adhesionMarginMm: number
   heightAllowanceMm: number
   maxHeightDifferenceMm: number
 }
+
+export type FilamentPrinterProfile = BasePrinterProfile & {
+  printType: 'filament'
+  brimMarginMm: number
+  filamentDiameterMm: number
+  materialDensityGPerCm3: number
+}
+
+export type PrinterProfile = ResinPrinterProfile | FilamentPrinterProfile
 
 export type PlateCandidate = {
   copyId: string
@@ -52,6 +67,10 @@ export function orientationAnalysisReady(
   return analysis?.analysisVersion === ORIENTATION_ANALYSIS_VERSION && !!analysis.orientationCandidates?.length
 }
 
+export function modelAnalysisReady(analysis?: PlateModelAnalysis): analysis is PlateModelAnalysis {
+  return analysis?.analysisVersion === ORIENTATION_ANALYSIS_VERSION && analysis.widthMm > 0 && analysis.depthMm > 0 && analysis.heightMm > 0
+}
+
 export type OrientationAnalysisJob = {
   requestId: string
   status: 'pending' | 'running' | 'ready' | 'failed'
@@ -79,7 +98,7 @@ const PLACEMENT_EPSILON_MM = 1e-6
 export function placementDimensions(placement: Pick<PlatePlacement, 'footprint' | 'rotationZDegrees'>, printer?: PrinterProfile) {
   const quarterTurn = Math.abs(Math.round(placement.rotationZDegrees / 90)) % 2 === 1
   const footprint = quarterTurn ? { widthMm: placement.footprint.depthMm, depthMm: placement.footprint.widthMm } : placement.footprint
-  const margin = printer ? printer.supportMarginMm + printer.adhesionMarginMm : 0
+  const margin = printer ? planningMarginMm(printer) : 0
   return { widthMm: footprint.widthMm + margin * 2, depthMm: footprint.depthMm + margin * 2 }
 }
 
@@ -88,6 +107,36 @@ export function candidateFitsPrinter(candidate: PlateCandidate, printer: Printer
   const fitsFlat = size.widthMm <= printer.widthMm && size.depthMm <= printer.depthMm
   const fitsRotated = size.depthMm <= printer.widthMm && size.widthMm <= printer.depthMm
   return candidate.estimatedSupportedHeightMm <= printer.heightMm && (fitsFlat || fitsRotated)
+}
+
+export function analysisFitsPrinter(analysis: PlateModelAnalysis, printer: PrinterProfile) {
+  if (!modelAnalysisReady(analysis)) return false
+  if (printer.printType === 'filament') {
+    return candidateFitsPrinter(
+      {
+        copyId: 'fit-check',
+        requestId: analysis.requestId,
+        name: 'Fit check',
+        footprint: { widthMm: analysis.widthMm, depthMm: analysis.depthMm, known: true },
+        estimatedSupportedHeightMm: analysis.heightMm,
+      },
+      printer,
+    )
+  }
+  return (
+    analysis.orientationCandidates?.some((orientation) =>
+      candidateFitsPrinter(
+        {
+          copyId: 'fit-check',
+          requestId: analysis.requestId,
+          name: 'Fit check',
+          footprint: { widthMm: orientation.widthMm, depthMm: orientation.depthMm, known: true },
+          estimatedSupportedHeightMm: orientation.heightMm + printer.heightAllowanceMm,
+        },
+        printer,
+      ),
+    ) ?? false
+  )
 }
 
 function bounds(placement: PlatePlacement, printer: PrinterProfile, padding = 0) {
@@ -160,7 +209,7 @@ export function planPlates(candidates: PlateCandidate[], printer: PrinterProfile
   let remaining = [...candidates]
 
   while (remaining.length) {
-    const compatible = bestHeightBand(remaining, printer)
+    const compatible = printer.printType === 'resin' ? bestHeightBand(remaining, printer) : remaining
     const compatibleIds = new Set(compatible.map((candidate) => candidate.copyId))
     const packable: PlateCandidate[] = []
     for (const candidate of compatible) {
@@ -172,9 +221,10 @@ export function planPlates(candidates: PlateCandidate[], printer: PrinterProfile
 
     plates.push(...packGeometry(packable, printer))
   }
-  const heightPreferred = orderPlates(plates, printer)
-  const filled = backfillShorterModels(heightPreferred, printer)
-  return { plates: orderPlates(consolidatePlates(filled, printer), printer), skipped }
+  const ordered = printer.printType === 'resin' ? orderPlates(plates, printer) : plates
+  const filled = printer.printType === 'resin' ? backfillShorterModels(ordered, printer) : ordered
+  const consolidated = consolidatePlates(filled, printer)
+  return { plates: printer.printType === 'resin' ? orderPlates(consolidated, printer) : consolidated, skipped }
 }
 
 function packGeometry(candidates: PlateCandidate[], printer: PrinterProfile) {
@@ -293,7 +343,7 @@ function approximately(first: number, second: number) {
   return Math.abs(first - second) < 1e-6
 }
 
-function bestHeightBand(candidates: PlateCandidate[], printer: PrinterProfile) {
+function bestHeightBand(candidates: PlateCandidate[], printer: ResinPrinterProfile) {
   if (!candidates.length || printer.maxHeightDifferenceMm <= 0) return candidates
   const byHeight = [...candidates].sort((first, second) => first.estimatedSupportedHeightMm - second.estimatedSupportedHeightMm)
   let best: PlateCandidate[] = []
@@ -321,17 +371,38 @@ function bestHeightBand(candidates: PlateCandidate[], printer: PrinterProfile) {
 
 export function normalizePrinterProfile(
   profile: Partial<PrinterProfile> & Pick<PrinterProfile, 'id' | 'name' | 'widthMm' | 'depthMm' | 'heightMm'>,
-) {
-  return {
+): PrinterProfile {
+  const common = {
     id: profile.id,
     name: profile.name,
+    printType: profile.printType ?? 'resin',
+    enabled: profile.enabled ?? true,
     widthMm: profile.widthMm,
     depthMm: profile.depthMm,
     heightMm: profile.heightMm,
     spacingMm: profile.spacingMm ?? 5,
-    supportMarginMm: profile.supportMarginMm ?? 4,
-    adhesionMarginMm: profile.adhesionMarginMm ?? 2,
-    heightAllowanceMm: profile.heightAllowanceMm ?? 5,
-    maxHeightDifferenceMm: profile.maxHeightDifferenceMm ?? 20,
-  } satisfies PrinterProfile
+  }
+  if (common.printType === 'filament') {
+    const filament = profile as Partial<FilamentPrinterProfile> & { adhesionMarginMm?: number }
+    return {
+      ...common,
+      printType: 'filament',
+      brimMarginMm: filament.brimMarginMm ?? filament.adhesionMarginMm ?? 0,
+      filamentDiameterMm: filament.filamentDiameterMm ?? 1.75,
+      materialDensityGPerCm3: filament.materialDensityGPerCm3 ?? 1.24,
+    }
+  }
+  const resin = profile as Partial<ResinPrinterProfile>
+  return {
+    ...common,
+    printType: 'resin',
+    supportMarginMm: resin.supportMarginMm ?? 4,
+    adhesionMarginMm: resin.adhesionMarginMm ?? 2,
+    heightAllowanceMm: resin.heightAllowanceMm ?? 5,
+    maxHeightDifferenceMm: resin.maxHeightDifferenceMm ?? 20,
+  }
+}
+
+export function planningMarginMm(printer: PrinterProfile) {
+  return printer.printType === 'resin' ? printer.supportMarginMm + printer.adhesionMarginMm : printer.brimMarginMm
 }

@@ -37,18 +37,32 @@ export const acceptInviteSchema = z.object({
 export const telemetrySettingsSchema = z.object({ enabled: z.boolean() })
 export const boardSettingsSchema = z.object({ privateRequests: z.boolean() })
 
-const printerProfileSchema = z.object({
+const printerProfileBaseSchema = z.object({
   id: id,
   name: z.string().trim().min(1).max(100),
+  enabled: z.boolean().default(true),
   widthMm: z.number().positive().max(10_000),
   depthMm: z.number().positive().max(10_000),
   heightMm: z.number().positive().max(10_000),
   spacingMm: z.number().nonnegative().max(1_000),
+})
+
+const resinPrinterProfileSchema = printerProfileBaseSchema.extend({
+  printType: z.literal('resin').default('resin'),
   supportMarginMm: z.number().nonnegative().max(1_000),
   adhesionMarginMm: z.number().nonnegative().max(1_000),
   heightAllowanceMm: z.number().nonnegative().max(10_000),
   maxHeightDifferenceMm: z.number().nonnegative().max(10_000),
 })
+
+const filamentPrinterProfileSchema = printerProfileBaseSchema.extend({
+  printType: z.literal('filament'),
+  brimMarginMm: z.number().nonnegative().max(1_000),
+  filamentDiameterMm: z.number().positive().max(10),
+  materialDensityGPerCm3: z.number().positive().max(30),
+})
+
+const printerProfileSchema = z.union([resinPrinterProfileSchema, filamentPrinterProfileSchema])
 
 const footprintSchema = z.object({ widthMm: z.number().positive(), depthMm: z.number().positive(), known: z.boolean() })
 const orientationSchema = z.object({
@@ -83,7 +97,13 @@ const platePlacementSchema = plateCandidateSchema.extend({
   rotationZDegrees: z.number().finite(),
 })
 
-export const printerProfilesSchema = z.object({ profiles: z.array(printerProfileSchema).max(50) })
+export const printerProfilesSchema = z.object({ profiles: z.array(printerProfileSchema).max(50) }).superRefine(({ profiles }, context) => {
+  const ids = new Set<string>()
+  for (const [index, profile] of profiles.entries()) {
+    if (ids.has(profile.id)) context.addIssue({ code: 'custom', path: ['profiles', index, 'id'], message: 'printer IDs must be unique' })
+    ids.add(profile.id)
+  }
+})
 export const plateModelAnalysesSchema = z.object({
   analyses: z
     .array(
@@ -164,6 +184,8 @@ export const requestFiltersSchema = z
     hasSource: z.boolean().optional(),
     hasThumbnail: z.boolean().optional(),
     hasPreview: z.boolean().optional(),
+    printType: z.enum(['resin', 'filament']).optional(),
+    printerId: id.nullable().optional(),
     sort: requestSortSchema.optional(),
   })
   .superRefine((filters, context) => {
@@ -215,12 +237,19 @@ export const reorderRequestSchema = z.object({
   order: z.number().finite(),
 })
 
-export const updateRequestSchema = z.object({
-  id,
-  name: z.string().min(1).max(120).optional(),
-  quantity: z.number().int().min(1).max(50).optional(),
-  requesterName: z.string().max(60).optional(),
-  notes: z.string().max(2000).optional(),
-  sourceUrl: optionalSourceUrl.optional(),
-  printerId: id.nullable().optional(),
-})
+export const updateRequestSchema = z
+  .object({
+    id,
+    name: z.string().min(1).max(120).optional(),
+    quantity: z.number().int().min(1).max(50).optional(),
+    requesterName: z.string().max(60).optional(),
+    notes: z.string().max(2000).optional(),
+    sourceUrl: optionalSourceUrl.optional(),
+    requestedPrintType: z.enum(['resin', 'filament']).nullable().optional(),
+    printerId: id.nullable().optional(),
+  })
+  .superRefine((request, context) => {
+    if (request.requestedPrintType && request.printerId) {
+      context.addIssue({ code: 'custom', path: ['requestedPrintType'], message: 'choose a printer or print type, not both' })
+    }
+  })

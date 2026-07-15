@@ -2,40 +2,35 @@ import { useEffect, useRef, useState } from 'react'
 import { combine } from '@atlaskit/pragmatic-drag-and-drop/combine'
 import { draggable, dropTargetForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter'
 import { attachClosestEdge, extractClosestEdge, type Edge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { StatusId } from '../../core/workflow'
-import type { Person, PublicPrintRequest } from '../../core/types'
-import { formatResinMl, RESIN_ESTIMATE_DESCRIPTION, resinVolumeMl } from '../../core/resin'
+import type { PublicPrintRequest } from '../../core/types'
 import { LazyThumb } from './LazyThumb'
-import { requesterColor, requesterLabel } from '../requester'
+import { FitAlertIcon, printTypeLabel } from './PrintType'
 
 export function RequestCard({
   request,
-  people,
   status,
   count,
   canDrag,
   settling,
-  hideRequester,
+  showPrintType = false,
   showPrinter = false,
   onOpen,
 }: {
   request: PublicPrintRequest
-  people: Person[]
   status: StatusId
   count: number
   canDrag: boolean
   settling: boolean
-  hideRequester: boolean
+  showPrintType?: boolean
   showPrinter?: boolean
   onOpen: () => void
 }) {
   const ref = useRef<HTMLButtonElement>(null)
   const [dragging, setDragging] = useState(false)
   const [closestEdge, setClosestEdge] = useState<Edge | null>(null)
-  const resinMl = resinVolumeMl(request, count)
 
   useEffect(() => {
     const element = ref.current
@@ -87,34 +82,20 @@ export function RequestCard({
         </div>
       )}
       <div className="min-w-0 flex-1">
-        <div className="truncate font-semibold">{request.name}</div>
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          <Badge variant="outline" className="font-mono">
+        <div className="flex min-w-0 items-start gap-1.5">
+          <div className="min-w-0 flex-1 truncate font-semibold">{request.name}</div>
+          <FitAlertIcon request={request} />
+        </div>
+        <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+          {showPrintType && request.printType && <span>{printTypeLabel(request.printType)}</span>}
+          <span className={cn('font-mono', showPrintType && 'ml-auto')}>
             {count === request.quantity ? `×${count}` : `×${count} of ${request.quantity}`}
-          </Badge>
-          {showPrinter && request.printer && (
-            <Badge variant="outline" className="max-w-full overflow-hidden text-ellipsis font-mono whitespace-nowrap">
-              {request.printer.name}
-            </Badge>
-          )}
-          {resinMl !== undefined && (
-            <Badge variant="outline" className="font-mono text-muted-foreground" title={RESIN_ESTIMATE_DESCRIPTION}>
-              ≈{formatResinMl(resinMl)} ml
-            </Badge>
-          )}
-          {!hideRequester && (
-            <Badge
-              variant="outline"
-              className="max-w-full overflow-hidden text-ellipsis font-mono whitespace-nowrap"
-              style={{ color: requesterColor(request, people), borderColor: requesterColor(request, people) }}
-            >
-              {requesterLabel(request)}
-            </Badge>
-          )}
-          {request.notes && (
-            <Badge variant="outline" className="font-mono text-muted-foreground" title={request.notes}>
-              ✎ notes
-            </Badge>
+          </span>
+          {showPrinter && (
+            <span className="basis-full truncate font-mono" title={request.printer?.name ?? 'Any compatible printer'}>
+              {request.printer?.name ?? (request.printType ? `Any ${printTypeLabel(request.printType)} printer` : 'Decide later')}
+              {request.printer && !request.printer.enabled && ' (disabled)'}
+            </span>
           )}
         </div>
       </div>

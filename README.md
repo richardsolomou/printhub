@@ -3,9 +3,9 @@
 
 # PrintHub
 
-A privacy-first, self-hosted production queue for resin printing.
+A private, self-hosted 3D-print production queue for resin and filament printers.
 
-Accept STL requests, plan resin plates, and track every copy through **Queue → Printing → Post-processing → Ready**. There is no hosted service or required cloud account, and files stay on storage you control.
+Accept STL requests, plan build plates across mixed printer fleets, and track every copy through **Queue → Printing → Finishing → Ready**. No vendor cloud or printer account is required, and files stay on storage you control.
 
 <img src="docs/media/printhub-demo.gif" alt="PrintHub tour showing the request board, interactive STL viewer, and plate planner" width="1200" />
 </div>
@@ -13,18 +13,27 @@ Accept STL requests, plan resin plates, and track every copy through **Queue →
 ## What it does ✨
 
 - Accepts private STL requests with quantities, notes, source links, and requester accounts.
-- Tracks individual copies through printing, post-processing, and completion.
-- Estimates solid resin volume per model and across every production stage.
-- Assigns requests to manually configured resin printers without connecting a vendor account.
-- Finds resin-friendly orientations and packs outstanding models across build plates.
+- Tracks individual copies through printing, finishing, and completion.
+- Supports resin and filament printers together in one installation.
+- Assigns requests directly to a printer, or keeps them in an unassigned same-print-type pool as the fleet changes.
+- Checks model fit against configured compatible printers and highlights models that fit none.
+- Estimates material using print-type-appropriate units with explicit assumptions.
+- Filters the backlog and plans outstanding models across resin and filament build plates.
+- Exports geometry and plate layouts as 3MF files ready to open and finish configuring in a slicer.
 - Generates thumbnails and lightweight browser previews inside your installation.
 - Supports local folders or S3-compatible storage.
 - Sends anonymous usage telemetry by default without model or request data and supports opting out at any time.
 - Includes accounts, invites, optional Google or Discord login, SMTP, backups, health checks, and metrics.
 
+### Material estimates and plate output
+
+- **Resin:** estimates are solid model volume in milliliters. Supports, drainage losses, failed prints, and other waste are excluded.
+- **Filament:** estimates are 100%-solid equivalents in grams and filament length, calculated from the configured material density and filament diameter. Infill, walls, supports, brims, rafts, purge, and other slicer settings are excluded.
+- **3MF export:** generated files contain model geometry and the planned layout. Open them in a print-type-appropriate slicer to choose orientation details, supports, adhesion, infill, material, and printer settings before printing.
+
 ## Why self-hosted only
 
-PrintHub is designed for print shops, labs, and makerspaces that do not want customer models copied into another vendor's cloud. The application, database, model analysis, previews, and production history run in your installation. S3-compatible storage is optional and uses credentials you configure.
+PrintHub is designed for print shops, labs, and makerspaces that do not want customer models copied into another vendor's cloud. The application, database, files, model analysis, planner state, previews, and production history remain in your installation. S3-compatible storage is optional and uses credentials you configure.
 
 PrintHub deliberately does not provide a public model gallery, marketplace, hosted file library, printer-vendor account, or mandatory remote service.
 

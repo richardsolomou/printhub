@@ -54,23 +54,23 @@ export function AuthScreen({ setupRequired, auth }: { setupRequired: boolean; au
           <OnboardingProgress step={1} />
           <Card className="shadow-xl shadow-black/10">
             <CardHeader>
-              <CardTitle>Your private resin print queue</CardTitle>
-              <CardDescription>Accept STL requests and take them from upload to collection.</CardDescription>
+              <CardTitle>Your private 3D-print production queue</CardTitle>
+              <CardDescription>Accept STL requests and take resin and filament prints from upload to collection.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <div className="grid gap-3 sm:grid-cols-3">
                 <IntroductionItem icon={ShieldCheck} title="Private requests">
                   Models and production history stay on storage you control.
                 </IntroductionItem>
-                <IntroductionItem icon={Boxes} title="Resin workflow">
-                  Move each copy through Queue, Printing, Post-processing, and Ready.
+                <IntroductionItem icon={Boxes} title="Production tracking">
+                  Move each copy through Queue, Printing, Finishing, and Ready.
                 </IntroductionItem>
                 <IntroductionItem icon={Printer} title="Plate planning">
-                  Configure build volumes, estimate resin, and generate compatible plates.
+                  Configure mixed printer fleets, check model fit, and build useful plates.
                 </IntroductionItem>
               </div>
               <div className="rounded-lg border bg-muted/30 p-3.5 text-sm text-muted-foreground">
-                <p>Next: create the admin, choose storage, and add your printers.</p>
+                <p>Next: create the admin, choose private storage, and add your resin or filament printers.</p>
                 <p className="mt-1">Anonymous usage telemetry is enabled by default and can be disabled in Settings.</p>
               </div>
               <Button type="button" className="self-end" disabled={!hydrated} onClick={() => setShowIntroduction(false)}>

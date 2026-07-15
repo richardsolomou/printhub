@@ -4,33 +4,34 @@ import { dropTargetForElements } from '@atlaskit/pragmatic-drag-and-drop/element
 import { autoScrollForElements } from '@atlaskit/pragmatic-drag-and-drop-auto-scroll/element'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { StatusId, WorkflowStatus } from '../../core/workflow'
-import type { Person, PublicPrintRequest } from '../../core/types'
+import type { PrinterSummary, PublicPrintRequest } from '../../core/types'
 import { cn } from '@/lib/utils'
 import { Card, CardHeader } from '@/components/ui/card'
 import { Empty, EmptyDescription } from '@/components/ui/empty'
 import { RequestCard } from './RequestCard'
-import { formatResinMl, RESIN_ESTIMATE_DESCRIPTION, summarizeResinMl } from '../../core/resin'
+import { formatMaterial, materialEstimate } from './PrintType'
+import { printersForPrintType } from '../fleet'
 
 export function Column({
   status,
   definition,
-  people,
   entries,
   isAdmin,
   dragEnabled,
-  hideRequester,
-  showPrinter,
+  showPrintType,
+  printers,
+  filtered,
   settlingIds,
   onOpenRequest,
 }: {
   status: StatusId
   definition: WorkflowStatus
-  people: Person[]
   entries: { request: PublicPrintRequest; count: number }[]
   isAdmin: boolean
   dragEnabled: boolean
-  hideRequester: boolean
-  showPrinter: boolean
+  showPrintType: boolean
+  printers: PrinterSummary[]
+  filtered: boolean
   settlingIds: Set<string>
   onOpenRequest: (requestId: string) => void
 }) {
@@ -64,19 +65,21 @@ export function Column({
   }, [dragEnabled, isAdmin, status])
 
   const total = entries.reduce((sum, entry) => sum + entry.count, 0)
-  const resin = summarizeResinMl(entries)
-  const resinLabel =
-    resin.unknownCopies === resin.resinCopies
-      ? '… ml'
-      : resin.unknownCopies > 0
-        ? `≥${formatResinMl(resin.knownMl)} ml`
-        : `${formatResinMl(resin.knownMl)} ml`
-  const resinTitle = [
-    RESIN_ESTIMATE_DESCRIPTION,
-    resin.unknownCopies > 0 ? `No volume estimate is available for ${resin.unknownCopies} copies yet.` : undefined,
-  ]
-    .filter(Boolean)
-    .join(' ')
+  const materialTotals = entries.reduce(
+    (totals, entry) => {
+      const printType = entry.request.printType
+      if (!printType) return totals
+      totals[printType].copies += entry.count
+      const estimate = materialEstimate(entry.request, entry.count)
+      if (estimate) totals[printType].known += estimate.total
+      else totals[printType].unknown += entry.count
+      return totals
+    },
+    {
+      resin: { copies: 0, known: 0, unknown: 0, unit: 'ml' },
+      filament: { copies: 0, known: 0, unknown: 0, unit: 'g' },
+    },
+  )
   const virtualizer = useVirtualizer({
     count: entries.length,
     getScrollElement: () => bodyRef.current,
@@ -100,16 +103,28 @@ export function Column({
         <span className="ml-auto rounded-full bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground" title="Copies">
           {total}
         </span>
-        {resin.resinCopies > 0 && (
-          <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground" title={resinTitle}>
-            {resinLabel}
-          </span>
-        )}
+        {(['resin', 'filament'] as const).map((printType) => {
+          const summary = materialTotals[printType]
+          if (!summary.copies) return null
+          const label =
+            summary.unknown === summary.copies
+              ? `… ${summary.unit}`
+              : `${summary.unknown ? '≥' : ''}${formatMaterial(summary.known)} ${summary.unit}`
+          return (
+            <span
+              key={printType}
+              className="rounded-full bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground"
+              aria-label={`${printType === 'resin' ? 'Resin' : 'Filament'} material total: ${label}`}
+            >
+              {label}
+            </span>
+          )
+        })}
       </CardHeader>
       <div ref={bodyRef} className="column-body virtualized relative flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-2.5">
         {entries.length === 0 && (
           <Empty className="border-0 py-6">
-            <EmptyDescription>{definition.empty}</EmptyDescription>
+            <EmptyDescription>{filtered ? 'No matching prints in this stage.' : definition.empty}</EmptyDescription>
           </Empty>
         )}
         <div className="virtual-list relative w-full" style={{ height: virtualizer.getTotalSize() }}>
@@ -119,13 +134,14 @@ export function Column({
               <VirtualRow key={request.id} index={item.index} start={item.start} measureElement={virtualizer.measureElement}>
                 <RequestCard
                   request={request}
-                  people={people}
                   status={status}
                   count={count}
                   canDrag={dragEnabled && (isAdmin || request.mine)}
                   settling={settlingIds.has(request.id)}
-                  hideRequester={hideRequester}
-                  showPrinter={showPrinter}
+                  showPrintType={showPrintType}
+                  showPrinter={
+                    printersForPrintType(printers, request.printType).length > 1 || (!!request.printer && !request.printer.enabled)
+                  }
                   onOpen={() => onOpenRequest(request.id)}
                 />
               </VirtualRow>

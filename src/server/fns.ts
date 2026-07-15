@@ -64,10 +64,18 @@ export const sessionInfo = createServerFn({ method: 'GET' }).handler(async () =>
     const instance = await app()
     const identity = await instance.identity(getRequest().headers)
     const storedPrinters = instance.repository.getSetting<PrinterProfile[]>('plate-planner-profiles')
-    const printers = (storedPrinters ?? []).map((profile) => {
-      const printer = normalizePrinterProfile(profile)
-      return { id: printer.id, name: printer.name }
-    })
+    const printers = (storedPrinters ?? []).map(normalizePrinterProfile).map((profile) =>
+      profile.printType === 'filament'
+        ? {
+            id: profile.id,
+            name: profile.name,
+            printType: profile.printType,
+            enabled: profile.enabled,
+            filamentDiameterMm: profile.filamentDiameterMm,
+            materialDensityGPerCm3: profile.materialDensityGPerCm3,
+          }
+        : { id: profile.id, name: profile.name, printType: profile.printType, enabled: profile.enabled },
+    )
     return {
       identity,
       setupRequired: instance.repository.countUsers() === 0,
@@ -88,9 +96,12 @@ export const getPlatePlannerState = createServerFn({ method: 'GET' }).handler(as
   rpc(async () => {
     const instance = await app()
     await admin(instance)
+    const profiles = instance.repository.getSetting<PrinterProfile[]>('plate-planner-profiles')?.map(normalizePrinterProfile)
+    const enabledPrinterIds = new Set(profiles?.filter((profile) => profile.enabled).map((profile) => profile.id))
+    const drafts = instance.repository.getSetting<Record<string, PlatePlannerDraft>>('plate-planner-drafts') ?? {}
     return {
-      profiles: instance.repository.getSetting<PrinterProfile[]>('plate-planner-profiles'),
-      draft: instance.repository.getSetting<PlatePlannerDraft>('plate-planner-draft'),
+      profiles,
+      drafts: Object.fromEntries(Object.entries(drafts).filter(([printerId]) => enabledPrinterIds.has(printerId))),
       analyses: instance.repository.listPlateModelAnalyses(),
       analysisJobs: instance.repository.listOrientationAnalysisJobs(),
       queue: instance.assetQueue.stats(),
@@ -105,14 +116,9 @@ export const savePlatePlannerProfiles = createServerFn({ method: 'POST' })
       const instance = await app()
       requireMutationOrigin()
       await admin(instance)
-      instance.repository.setSetting('plate-planner-profiles', data.profiles)
-      const printerIds = new Set(data.profiles.map((profile) => profile.id))
-      const fallbackPrinterId = data.profiles[0]?.id ?? null
-      for (const request of instance.repository.listRequests()) {
-        if (!request.printerId || !printerIds.has(request.printerId)) {
-          instance.repository.updateRequest(request.id, { printerId: fallbackPrinterId })
-        }
-      }
+      const reanalyzeRequestIds = instance.repository.replacePrinterProfiles(data.profiles)?.reanalyzeRequestIds ?? []
+      for (const requestId of reanalyzeRequestIds) instance.assetQueue.enqueueAnalysis(requestId)
+      instance.events.publish('settings.changed')
       return { saved: true }
     }),
   )
@@ -136,7 +142,13 @@ export const savePlatePlannerDraft = createServerFn({ method: 'POST' })
       const instance = await app()
       requireMutationOrigin()
       await admin(instance)
-      instance.repository.setSetting('plate-planner-draft', data.draft)
+      const profiles = instance.repository.getSetting<PrinterProfile[]>('plate-planner-profiles') ?? []
+      const printer = profiles.find((profile) => profile.id === data.draft.printerId)
+      if (!printer) throw new Response('unknown printer', { status: 400 })
+      if (!normalizePrinterProfile(printer).enabled) throw new Response('printer is disabled', { status: 400 })
+      const drafts = instance.repository.getSetting<Record<string, PlatePlannerDraft>>('plate-planner-drafts') ?? {}
+      drafts[data.draft.printerId] = data.draft
+      instance.repository.setSetting('plate-planner-drafts', drafts)
       return { saved: true }
     }),
   )
@@ -646,7 +658,8 @@ export const updateRequest = createServerFn({ method: 'POST' })
       const instance = await app()
       requireMutationOrigin()
       const { id, ...fields } = data
-      instance.service.update(id, fields, await me(instance))
+      const { printTypeChanged } = instance.service.update(id, fields, await me(instance))
+      if (printTypeChanged) instance.assetQueue.enqueueAnalysis(id)
     }),
   )
 

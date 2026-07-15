@@ -1,3 +1,5 @@
+import type { RequestTarget } from '../fleet'
+
 export type UploadEntry = {
   key: string
   file: File
@@ -5,7 +7,7 @@ export type UploadEntry = {
   quantity: string
   notes: string
   sourceUrl: string
-  printerId?: string
+  target: RequestTarget
   noteOpen: boolean
   linkOpen: boolean
   thumbnail?: string

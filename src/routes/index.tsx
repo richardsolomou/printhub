@@ -14,7 +14,8 @@ import { BoardFilters, filtersFromSearch, updateRequestSearch, validateRequestSe
 import { Brand } from '../client/components/Brand'
 import { OnboardingProgress } from '../client/components/OnboardingProgress'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { requestsQuery, peopleQuery, sessionQuery } from '../client/queries'
+import { peopleQuery, requestsQuery, sessionQuery } from '../client/queries'
+import { enabledPrinters, fleetPrintTypes } from '../client/fleet'
 export const Route = createFileRoute('/')({ validateSearch: validateRequestSearch, component: Home })
 
 function Home() {
@@ -52,7 +53,8 @@ function AuthenticatedHome() {
   const me = identity!
   const isAdmin = me.role === 'admin'
   const hideRequester = privateRequests && !isAdmin
-  const showPrinters = printers.length > 1
+  const activePrinters = enabledPrinters(printers)
+  const showPrintTypes = fleetPrintTypes(printers).length > 1
   const filters = filtersFromSearch(search)
   const { data: result, isFetching } = useQuery(requestsQuery(filters))
   const { data: people = [] } = useQuery(peopleQuery())
@@ -112,7 +114,7 @@ function AuthenticatedHome() {
   const selectedRequest = requests.find((request) => request.id === openRequestId)
   return (
     <div className="relative flex h-dvh flex-col">
-      <AppHeader active="board" isAdmin={isAdmin} showPlanner={printers.length > 0}>
+      <AppHeader active="board" isAdmin={isAdmin} showPlanner={activePrinters.length > 0}>
         <Button
           type="button"
           onClick={() => {
@@ -126,20 +128,21 @@ function AuthenticatedHome() {
       <BoardFilters
         search={search}
         facets={facets}
+        printers={printers}
         isFetching={isFetching}
         onChange={(patch, replace = false) => void navigate({ to: '/', search: updateRequestSearch(search, patch), replace })}
       />
       <Board
         requests={requests}
         workflow={workflow}
-        people={people}
         isAdmin={isAdmin}
-        hideRequester={hideRequester}
-        showPrinters={showPrinters}
+        showPrintTypes={showPrintTypes}
+        printers={printers}
+        filtered={Object.entries(filters).some(([key, value]) => key !== 'sort' && value !== undefined)}
         sort={filters.sort ?? 'board'}
         onOpenRequest={(id) => {
           setOpenRequestId(id)
-          posthog.capture('request_viewed', { request_id: id })
+          posthog.capture('request_viewed', { print_type: requests.find((request) => request.id === id)?.printType })
         }}
       />
       {!result && <div className="absolute inset-0 grid place-items-center bg-background/70 text-muted-foreground">Loading board…</div>}
@@ -163,7 +166,8 @@ function AuthenticatedHome() {
       {selectedRequest && (
         <RequestModal
           request={selectedRequest}
-          workflow={workflow}
+          people={people}
+          printers={printers}
           isAdmin={isAdmin}
           hideRequester={hideRequester}
           onClose={() => setOpenRequestId(null)}

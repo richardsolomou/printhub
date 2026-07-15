@@ -19,10 +19,10 @@ import { UploadRow } from './UploadRow'
 import { uploadPrint } from './uploadTransport'
 import type { UploadEntry as Entry } from './uploadTypes'
 import type { PrinterSummary } from '../../core/types'
+import { initialRequestTarget, requestTargetFields } from '../fleet'
 
 const MAX_FILE_BYTES = 1024 * 1024 * 1024
 let nextKey = 0
-
 export function UploadForm({
   myName,
   chooseFor,
@@ -45,7 +45,6 @@ export function UploadForm({
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState<number | null>(null)
   const [confirmClose, setConfirmClose] = useState(false)
-  const showPrinterPicker = printers.length > 1
 
   const initialAdded = useRef(false)
   useEffect(() => {
@@ -85,7 +84,7 @@ export function UploadForm({
         quantity: '1',
         notes: '',
         sourceUrl: '',
-        printerId: printers[0]?.id,
+        target: initialRequestTarget(printers),
         noteOpen: false,
         linkOpen: false,
         state: 'pending',
@@ -146,6 +145,7 @@ export function UploadForm({
     if (failures === 0) {
       posthog.capture('requests_submitted', {
         file_count: pending.length,
+        targeted_count: pending.filter((entry) => Object.keys(requestTargetFields(entry.target)).length > 0).length,
       })
       onClose()
     } else {
@@ -183,7 +183,6 @@ export function UploadForm({
                   key={entry.key}
                   entry={entry}
                   printers={printers}
-                  showPrinterPicker={showPrinterPicker}
                   onPatch={(patch) => patchEntry(entry.key, patch)}
                   onRemove={() => setEntries((previous) => previous.filter((candidate) => candidate.key !== entry.key))}
                 />
