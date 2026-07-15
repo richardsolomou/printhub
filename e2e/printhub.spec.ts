@@ -181,6 +181,7 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
     .setInputFiles({ name: 'new-target.stl', mimeType: 'model/stl', buffer: boxStl('new-target', 10, 10, 10) })
   const disabledTarget = page.getByLabel('Target for new target')
   await disabledTarget.click()
+  await expect(page.locator('[data-slot="select-content"]')).toBeVisible()
   await expect(page.getByRole('option', { name: 'Workshop Filament · Filament', exact: true })).toHaveCount(0)
   await page.keyboard.press('Escape')
   await expect(page.locator('[data-slot="select-content"]')).not.toBeVisible()
@@ -189,6 +190,7 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
 
   await mainNav(page, 'Planner').click()
   await page.getByLabel('Profile').click()
+  await expect(page.locator('[data-slot="select-content"]')).toBeVisible()
   await expect(page.getByRole('option', { name: 'Workshop Filament · Filament', exact: true })).toHaveCount(0)
   await page.keyboard.press('Escape')
   await expect(page.locator('[data-slot="select-content"]')).not.toBeVisible()
