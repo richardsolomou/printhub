@@ -14,7 +14,7 @@ import { BoardFilters, filtersFromSearch, updateRequestSearch, validateRequestSe
 import { Brand } from '../client/components/Brand'
 import { OnboardingProgress } from '../client/components/OnboardingProgress'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { requestsQuery, peopleQuery, sessionQuery } from '../client/queries'
+import { requestsQuery, sessionQuery } from '../client/queries'
 export const Route = createFileRoute('/')({ validateSearch: validateRequestSearch, component: Home })
 
 function Home() {
@@ -55,7 +55,6 @@ function AuthenticatedHome() {
   const showPrinters = printers.length > 1
   const filters = filtersFromSearch(search)
   const { data: result, isFetching } = useQuery(requestsQuery(filters))
-  const { data: people = [] } = useQuery(peopleQuery())
   const requests = result?.requests ?? []
   const facets = result?.facets ?? { requesters: [], total: 0, available: 0 }
   const posthog = usePostHog()
@@ -133,9 +132,7 @@ function AuthenticatedHome() {
       <Board
         requests={requests}
         workflow={workflow}
-        people={people}
         isAdmin={isAdmin}
-        hideRequester={hideRequester}
         showPrinters={showPrinters}
         filtered={Object.entries(filters).some(([key, value]) => key !== 'sort' && value !== undefined)}
         sort={filters.sort ?? 'board'}
@@ -163,13 +160,7 @@ function AuthenticatedHome() {
         />
       )}
       {selectedRequest && (
-        <RequestModal
-          request={selectedRequest}
-          workflow={workflow}
-          isAdmin={isAdmin}
-          hideRequester={hideRequester}
-          onClose={() => setOpenRequestId(null)}
-        />
+        <RequestModal request={selectedRequest} isAdmin={isAdmin} hideRequester={hideRequester} onClose={() => setOpenRequestId(null)} />
       )}
     </div>
   )

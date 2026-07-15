@@ -4,7 +4,7 @@ import { extractClosestEdge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/clo
 import { useServerFn } from '@tanstack/react-start'
 import { usePostHog } from '@posthog/react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import type { Person, PublicPrintRequest, RequestSort } from '../../core/types'
+import type { PublicPrintRequest, RequestSort } from '../../core/types'
 import type { StatusId, WorkflowDefinition } from '../../core/workflow'
 import { moveCopies, reorderRequest } from '../../server/fns'
 import { Column } from './Column'
@@ -16,9 +16,7 @@ type PendingMove = { requestId: string; from: StatusId; to: StatusId; max: numbe
 export function Board({
   requests,
   workflow,
-  people,
   isAdmin,
-  hideRequester,
   showPrinters,
   filtered = false,
   sort,
@@ -26,9 +24,7 @@ export function Board({
 }: {
   requests: PublicPrintRequest[]
   workflow: WorkflowDefinition
-  people: Person[]
   isAdmin: boolean
-  hideRequester: boolean
   showPrinters: boolean
   filtered?: boolean
   sort: RequestSort
@@ -225,14 +221,12 @@ export function Board({
             key={status}
             status={status}
             definition={definition}
-            people={people}
             entries={requests
               .filter((request) => countsOf(request)[status] > 0)
               .sort((a, b) => compare(a, b, status))
               .map((request) => ({ request, count: countsOf(request)[status] }))}
             isAdmin={isAdmin}
             dragEnabled={dragEnabled}
-            hideRequester={hideRequester}
             showPrinter={showPrinters}
             filtered={filtered}
             settlingIds={settlingIds}

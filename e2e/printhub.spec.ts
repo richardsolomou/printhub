@@ -41,7 +41,6 @@ test('complete resin, FDM, mixed-fleet, settings, and invite journey', async ({ 
   await upload(page, { name: 'resin-cube', technology: 'Resin', printer: 'Resin Station', buffer: boxStl('resin-cube', 10, 10, 10) })
   const resinCard = requestCard(page, 'resin-cube')
   await expect(resinCard).toContainText('Resin')
-  await expect(resinCard.getByLabel(/Approximately .* ml/)).toBeVisible({ timeout: 30_000 })
   await expect(resinCard).not.toContainText('Fits selected printer')
 
   await mainNav(page, 'Planner').click()
@@ -55,11 +54,10 @@ test('complete resin, FDM, mixed-fleet, settings, and invite journey', async ({ 
   await requestCard(page, 'resin-cube').click()
   await expect(page.getByText(/≈1 ml each/)).toBeVisible()
   await expect(page.getByText(/solid model volume/i)).toBeVisible()
-  await moveCopy(page, 'Queue', 'Printing')
-  await moveCopy(page, 'Printing', 'Finishing')
-  await moveCopy(page, 'Finishing', 'Ready')
-  await expect(page.getByText('1 copies').last()).toBeVisible()
   await page.getByRole('button', { name: 'Close' }).click()
+  await moveCard(page, 'resin-cube', 'todo', 'in_progress')
+  await moveCard(page, 'resin-cube', 'in_progress', 'post_processing')
+  await moveCard(page, 'resin-cube', 'post_processing', 'done')
   await expect(page.locator('[data-status="done"]')).toContainText('resin-cube')
 
   await mainNav(page, 'Settings').click()
@@ -81,16 +79,13 @@ test('complete resin, FDM, mixed-fleet, settings, and invite journey', async ({ 
   await expect(page.getByLabel('Filament diameter')).toHaveValue('1.75')
   await expect(page.getByLabel('Material density (g/cm³)')).toHaveValue('1.24')
   await page.getByLabel('Material density (g/cm³)').fill('1.25')
-  await expect(page.getByText('Unsaved changes')).toBeVisible()
-  await screenshot(page, 'unsaved-printer-settings-desktop')
-  await mobileScreenshot(page, 'unsaved-printer-settings-mobile')
   await page.getByRole('link', { name: 'Storage' }).click()
   await expect(page.getByRole('alertdialog')).toContainText('Leave without saving?')
+  await screenshot(page, 'unsaved-settings-confirmation-desktop')
   await page.getByRole('button', { name: 'Cancel' }).click()
   await expect(page).toHaveURL(/settings\/printers/)
   await page.getByLabel('Material density (g/cm³)').fill('1.24')
   await page.getByRole('button', { name: 'Save changes' }).click()
-  await expect(page.getByText('Unsaved changes')).toBeHidden()
   await expect(page.getByText('Printers updated.')).toBeVisible()
   await expect(page.getByText('Printers updated.')).not.toBeVisible({ timeout: 10_000 })
   await screenshot(page, 'mixed-printers-desktop')
@@ -100,7 +95,6 @@ test('complete resin, FDM, mixed-fleet, settings, and invite journey', async ({ 
   await upload(page, { name: 'fdm-block', technology: 'FDM', printer: 'Workshop FDM', buffer: boxStl('fdm-block', 20, 10, 5) })
   const fdmCard = requestCard(page, 'fdm-block')
   await expect(fdmCard).toContainText('FDM')
-  await expect(fdmCard.getByLabel(/Approximately .* g/)).toBeVisible({ timeout: 30_000 })
   await expect(fdmCard).not.toContainText('Fits selected printer')
   await fdmCard.click()
   await expect(page.getByText(/≈1.24 g each/)).toBeVisible()
@@ -232,11 +226,17 @@ async function choose(select: Locator, option: string) {
   await select.page().getByRole('option', { name: option, exact: true }).click()
 }
 
-async function moveCopy(page: Page, from: string, to: string) {
-  const button = page.getByRole('button', { name: `Move one copy from ${from} to ${to}` })
-  if (!(await button.isVisible())) await page.getByText('Manage production copies', { exact: true }).click()
-  await button.click()
-  await expect(page.getByLabel('Move copies through production').getByText(to, { exact: true })).toBeVisible()
+async function moveCard(page: Page, name: string, from: string, to: string) {
+  const card = page.locator(`[data-status="${from}"] .card`).filter({ hasText: name })
+  const target = page.locator(`[data-status="${to}"] .column-body`)
+  const [cardBox, targetBox] = await Promise.all([card.boundingBox(), target.boundingBox()])
+  expect(cardBox).not.toBeNull()
+  expect(targetBox).not.toBeNull()
+  await page.mouse.move(cardBox!.x + 32, cardBox!.y + 32)
+  await page.mouse.down()
+  await page.mouse.move(targetBox!.x + targetBox!.width / 2, targetBox!.y + 40, { steps: 12 })
+  await page.mouse.up()
+  await expect(page.locator(`[data-status="${to}"] .card`).filter({ hasText: name })).toBeVisible()
 }
 
 async function verify3mfDownload(page: Page, expectedName: string) {

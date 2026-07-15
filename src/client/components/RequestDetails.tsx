@@ -7,33 +7,37 @@ export function RequestDetails({
   request,
   people,
   hideRequester,
+  showMetadata = true,
   showSource = true,
 }: {
   request: PublicPrintRequest
   people: { name: string; color?: string }[]
   hideRequester: boolean
+  showMetadata?: boolean
   showSource?: boolean
 }) {
   return (
     <>
-      <div className="mb-3 grid grid-cols-2 gap-2 text-sm">
-        <RequestMetadata label="Technology">
-          <TechnologyBadge technology={request.technology} />
-        </RequestMetadata>
-        <RequestMetadata label="Copies">
-          <span className="font-mono">×{request.quantity}</span>
-        </RequestMetadata>
-        <RequestMetadata label="Printer">
-          <span className="truncate">{request.printer?.name ?? 'Any compatible printer'}</span>
-        </RequestMetadata>
-        {!hideRequester && (
-          <RequestMetadata label="Requester">
-            <Badge variant="outline" style={{ color: requesterColor(request, people), borderColor: requesterColor(request, people) }}>
-              {requesterLabel(request)}
-            </Badge>
+      {showMetadata && (
+        <div className="mb-3 grid grid-cols-2 gap-2 text-sm">
+          <RequestMetadata label="Technology">
+            <TechnologyBadge technology={request.technology} />
           </RequestMetadata>
-        )}
-      </div>
+          <RequestMetadata label="Copies">
+            <span className="font-mono">×{request.quantity}</span>
+          </RequestMetadata>
+          <RequestMetadata label="Printer">
+            <span className="truncate">{request.printer?.name ?? 'Any compatible printer'}</span>
+          </RequestMetadata>
+          {!hideRequester && (
+            <RequestMetadata label="Requester">
+              <Badge variant="outline" style={{ color: requesterColor(request, people), borderColor: requesterColor(request, people) }}>
+                {requesterLabel(request)}
+              </Badge>
+            </RequestMetadata>
+          )}
+        </div>
+      )}
       <div className="mb-3">
         <FitBadge request={request} />
       </div>

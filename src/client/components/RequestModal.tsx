@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { usePostHog } from '@posthog/react'
-import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react'
+import { Plus, X } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
@@ -12,10 +12,9 @@ import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import type { PrintTechnology, PublicPrintRequest } from '../../core/types'
-import type { WorkflowDefinition } from '../../core/workflow'
 import { peopleQuery, sessionQuery } from '../queries'
 import { requesterLabel } from '../requester'
-import { deleteRequest, moveCopies, updateRequest } from '../../server/fns'
+import { deleteRequest, updateRequest } from '../../server/fns'
 import { DialogShell } from './DialogShell'
 import { ConfirmDialog } from './ConfirmDialog'
 import { LazyStlViewer } from './LazyStlViewer'
@@ -24,13 +23,11 @@ import { RequestDetails } from './RequestDetails'
 
 export function RequestModal({
   request,
-  workflow,
   isAdmin,
   hideRequester,
   onClose,
 }: {
   request: PublicPrintRequest
-  workflow: WorkflowDefinition
   isAdmin: boolean
   hideRequester: boolean
   onClose: () => void
@@ -43,7 +40,6 @@ export function RequestModal({
   const printers = session.printers
   const callUpdate = useServerFn(updateRequest)
   const callDelete = useServerFn(deleteRequest)
-  const callMoveCopies = useServerFn(moveCopies)
   const queryClient = useQueryClient()
   const [name, setName] = useState(request.name)
   const [quantity, setQuantity] = useState(String(request.quantity))
@@ -80,15 +76,7 @@ export function RequestModal({
       setError("Couldn't delete this request.")
     },
   })
-  const moveMutation = useMutation({
-    mutationFn: callMoveCopies,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['requests'] }),
-    onError: (failure) => {
-      posthog.captureException(failure, { action: 'move_request_copy' })
-      setError("Couldn't move that copy. Refresh and try again.")
-    },
-  })
-  const busy = updateMutation.isPending || deleteMutation.isPending || moveMutation.isPending
+  const busy = updateMutation.isPending || deleteMutation.isPending
 
   const dirty =
     canEdit &&
@@ -129,22 +117,18 @@ export function RequestModal({
       <DialogShell onClose={requestClose} title={request.name} preventClose={busy}>
         <LazyStlViewer requestId={request.id} hasPreview={request.hasPreview} />
 
-        <RequestDetails request={request} people={people} hideRequester={hideRequester} showSource={!canEdit} />
-
-        {isAdmin && (
-          <ProductionControls
-            request={request}
-            workflow={workflow}
-            busy={moveMutation.isPending}
-            onMove={(from, to) => moveMutation.mutate({ data: { id: request.id, from, to, count: 1 } })}
-          />
-        )}
+        <RequestDetails request={request} people={people} hideRequester={hideRequester} showMetadata={!canEdit} showSource={!canEdit} />
 
         {!canEdit && request.notes && <p>{request.notes}</p>}
 
         {canEdit && (
           <form onSubmit={save}>
-            <div className="mb-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 [&>[data-slot=field]]:min-w-0">
+            <div
+              className={cn(
+                'mb-3 grid gap-3 [&>[data-slot=field]]:min-w-0',
+                isAdmin ? 'grid-cols-[minmax(0,1fr)_5.5rem]' : 'grid-cols-[5.5rem]',
+              )}
+            >
               {isAdmin && (
                 <Field>
                   <FieldLabel htmlFor="request-name">Name</FieldLabel>
@@ -163,6 +147,8 @@ export function RequestModal({
                   onChange={(e) => setQuantity(e.target.value)}
                 />
               </Field>
+            </div>
+            <div className="mb-3 grid grid-cols-2 gap-3 [&>[data-slot=field]]:min-w-0">
               <Field>
                 <FieldLabel htmlFor="request-technology">Technology</FieldLabel>
                 <Select
@@ -214,7 +200,7 @@ export function RequestModal({
                 </Select>
               </Field>
               {isAdmin && (
-                <Field>
+                <Field className="col-span-2">
                   <FieldLabel htmlFor="request-for">For</FieldLabel>
                   <PeopleCombobox
                     id="request-for"
@@ -369,63 +355,5 @@ export function RequestModal({
         onConfirm={() => (confirmation === 'delete' ? deleteMutation.mutate({ data: { id: request.id } }) : onClose())}
       />
     </>
-  )
-}
-
-function ProductionControls({
-  request,
-  workflow,
-  busy,
-  onMove,
-}: {
-  request: PublicPrintRequest
-  workflow: WorkflowDefinition
-  busy: boolean
-  onMove: (from: string, to: string) => void
-}) {
-  return (
-    <details className="mb-4 rounded-lg border p-3" aria-label="Move copies through production">
-      <summary className="cursor-pointer font-heading text-sm font-semibold">Manage production copies</summary>
-      <p className="mt-1 text-xs text-muted-foreground">Move one copy at a time with keyboard- and touch-accessible controls.</p>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        {workflow.statuses.map((status, index) => {
-          const count = request.counts[status.id] ?? 0
-          const previous = workflow.statuses[index - 1]
-          const next = workflow.statuses[index + 1]
-          return (
-            <div key={status.id} className="flex items-center gap-2 rounded-md bg-muted/30 p-2">
-              <div className="min-w-0 flex-1">
-                <div className="font-medium">{status.label}</div>
-                <div className="font-mono text-xs text-muted-foreground">{count} copies</div>
-              </div>
-              {previous && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon-sm"
-                  disabled={busy || count < 1}
-                  aria-label={`Move one copy from ${status.label} to ${previous.label}`}
-                  onClick={() => onMove(status.id, previous.id)}
-                >
-                  <ChevronLeft />
-                </Button>
-              )}
-              {next && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon-sm"
-                  disabled={busy || count < 1}
-                  aria-label={`Move one copy from ${status.label} to ${next.label}`}
-                  onClick={() => onMove(status.id, next.id)}
-                >
-                  <ChevronRight />
-                </Button>
-              )}
-            </div>
-          )
-        })}
-      </div>
-    </details>
   )
 }

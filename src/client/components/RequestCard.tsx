@@ -2,33 +2,27 @@ import { useEffect, useRef, useState } from 'react'
 import { combine } from '@atlaskit/pragmatic-drag-and-drop/combine'
 import { draggable, dropTargetForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter'
 import { attachClosestEdge, extractClosestEdge, type Edge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { StatusId } from '../../core/workflow'
-import type { Person, PublicPrintRequest } from '../../core/types'
+import type { PublicPrintRequest } from '../../core/types'
 import { LazyThumb } from './LazyThumb'
-import { requesterColor, requesterLabel } from '../requester'
-import { FitAlertIcon, MaterialBadge, TechnologyBadge } from './PrintTechnology'
+import { FitAlertIcon, technologyLabel } from './PrintTechnology'
 
 export function RequestCard({
   request,
-  people,
   status,
   count,
   canDrag,
   settling,
-  hideRequester,
   showPrinter = false,
   onOpen,
 }: {
   request: PublicPrintRequest
-  people: Person[]
   status: StatusId
   count: number
   canDrag: boolean
   settling: boolean
-  hideRequester: boolean
   showPrinter?: boolean
   onOpen: () => void
 }) {
@@ -90,32 +84,15 @@ export function RequestCard({
           <div className="min-w-0 flex-1 truncate font-semibold">{request.name}</div>
           <FitAlertIcon request={request} />
         </div>
-        <div className="mt-1.5 grid grid-cols-2 items-start gap-1.5">
-          <TechnologyBadge technology={request.technology} />
-          <Badge variant="outline" className="justify-self-end font-mono">
+        <div className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-1 text-xs text-muted-foreground">
+          <span>{technologyLabel(request.technology)}</span>
+          <span className="justify-self-end font-mono">
             {count === request.quantity ? `×${count}` : `×${count} of ${request.quantity}`}
-          </Badge>
+          </span>
           {showPrinter && (
-            <Badge variant="outline" className="col-span-2 max-w-full overflow-hidden text-ellipsis font-mono whitespace-nowrap">
+            <span className="col-span-2 truncate font-mono" title={request.printer?.name ?? 'Any compatible printer'}>
               {request.printer?.name ?? 'Any compatible printer'}
-            </Badge>
-          )}
-          <div className="min-w-0">
-            <MaterialBadge request={request} quantity={count} />
-          </div>
-          {!hideRequester && (
-            <Badge
-              variant="outline"
-              className="max-w-full justify-self-end overflow-hidden text-ellipsis font-mono whitespace-nowrap"
-              style={{ color: requesterColor(request, people), borderColor: requesterColor(request, people) }}
-            >
-              {requesterLabel(request)}
-            </Badge>
-          )}
-          {request.notes && (
-            <Badge variant="outline" className="col-span-2 font-mono text-muted-foreground" title={request.notes}>
-              ✎ notes
-            </Badge>
+            </span>
           )}
         </div>
       </div>

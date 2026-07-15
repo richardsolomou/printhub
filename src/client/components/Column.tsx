@@ -4,7 +4,7 @@ import { dropTargetForElements } from '@atlaskit/pragmatic-drag-and-drop/element
 import { autoScrollForElements } from '@atlaskit/pragmatic-drag-and-drop-auto-scroll/element'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { StatusId, WorkflowStatus } from '../../core/workflow'
-import type { Person, PublicPrintRequest } from '../../core/types'
+import type { PublicPrintRequest } from '../../core/types'
 import { cn } from '@/lib/utils'
 import { Card, CardHeader } from '@/components/ui/card'
 import { Empty, EmptyDescription } from '@/components/ui/empty'
@@ -14,11 +14,9 @@ import { formatMaterial, materialEstimate } from './PrintTechnology'
 export function Column({
   status,
   definition,
-  people,
   entries,
   isAdmin,
   dragEnabled,
-  hideRequester,
   showPrinter,
   filtered,
   settlingIds,
@@ -26,11 +24,9 @@ export function Column({
 }: {
   status: StatusId
   definition: WorkflowStatus
-  people: Person[]
   entries: { request: PublicPrintRequest; count: number }[]
   isAdmin: boolean
   dragEnabled: boolean
-  hideRequester: boolean
   showPrinter: boolean
   filtered: boolean
   settlingIds: Set<string>
@@ -134,12 +130,10 @@ export function Column({
               <VirtualRow key={request.id} index={item.index} start={item.start} measureElement={virtualizer.measureElement}>
                 <RequestCard
                   request={request}
-                  people={people}
                   status={status}
                   count={count}
                   canDrag={dragEnabled && (isAdmin || request.mine)}
                   settling={settlingIds.has(request.id)}
-                  hideRequester={hideRequester}
                   showPrinter={showPrinter}
                   onOpen={() => onOpenRequest(request.id)}
                 />
