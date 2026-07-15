@@ -64,7 +64,6 @@ describe('tus upload transport', () => {
             filename: 'probe.stl',
             name: 'Probe',
             quantity: '1',
-            requesterName: 'Owner',
             requestedPrintType: 'resin',
           }),
         },
@@ -83,7 +82,9 @@ describe('tus upload transport', () => {
     )
     expect(completed.status).toBe(204)
     expect(completed.headers.get('x-request-id')).toBeTruthy()
-    expect(instance.repository.listRequests()).toMatchObject([{ name: 'Probe', fileName: 'probe.stl' }])
+    expect(instance.repository.listRequests()).toMatchObject([
+      { name: 'Probe', fileName: 'probe.stl', requesterEmail: 'owner@example.com', requesterName: 'Owner' },
+    ])
     await instance.assetQueue.idle()
 
     const resumed = await handleUpload(new Request(`http://print.test${location}`, { method: 'HEAD', headers }))

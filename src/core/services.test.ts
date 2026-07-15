@@ -397,7 +397,6 @@ describe('PrintHubService crash recovery', () => {
     const id = await request()
     expect(() => service.update(id, { name: 'x'.repeat(121) }, admin)).toThrow(expect.objectContaining({ status: 400 }))
     expect(() => service.update(id, { notes: 'x'.repeat(2001) }, admin)).toThrow(expect.objectContaining({ status: 400 }))
-    expect(() => service.update(id, { requesterName: 'x'.repeat(61) }, admin)).toThrow(expect.objectContaining({ status: 400 }))
     expect(() => service.update(id, { quantity: 1.5 }, admin)).toThrow(expect.objectContaining({ status: 400 }))
     expect(() => service.update(id, { sourceUrl: 'ftp://example.com/model' }, admin)).toThrow(expect.objectContaining({ status: 400 }))
     expect(() => service.update(id, { sourceUrl: 'not a url' }, admin)).toThrow(expect.objectContaining({ status: 400 }))

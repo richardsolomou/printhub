@@ -3,7 +3,7 @@ import path from 'node:path'
 import { FileStore } from '@tus/file-store'
 import { Server } from '@tus/server'
 import { z } from 'zod'
-import { app, resolveBoardConfig } from './app'
+import { app } from './app'
 import { validSourceUrl } from '../core/services'
 import type { Identity, NewPrintRequest } from '../core/types'
 import { UploadRequestLimiter, validSameOrigin } from './uploadGuards'
@@ -30,7 +30,6 @@ const metadataSchema = z.object({
     .refine((value) => /\.stl$/i.test(value), 'only .stl files are accepted'),
   name: z.string().trim().min(1).max(120),
   quantity: z.coerce.number().int().min(1).max(50),
-  requesterName: optionalMetadataString(60),
   notes: optionalMetadataString(2000),
   sourceUrl: optionalMetadataString(500).refine((value) => !value || validSourceUrl(value), 'source URL must be an http(s) link'),
   requestedPrintType: z.enum(['resin', 'filament']),
@@ -71,13 +70,12 @@ async function finalizeUpload(
   const completed = instance.repository.getCompletedUpload(uploadId, identity.id)
   if (completed) return completed
   const parsed = metadataSchema.parse(metadata ?? {})
-  const requesterChoice = !resolveBoardConfig(instance.repository).privateRequests
   const request: Omit<NewPrintRequest, 'filePath' | 'previewPath' | 'thumbnailPath'> = {
     name: parsed.name,
     fileName: parsed.filename,
     quantity: parsed.quantity,
     requesterEmail: identity.email,
-    requesterName: (requesterChoice ? parsed.requesterName : '') || identity.name || undefined,
+    requesterName: identity.name || undefined,
     notes: parsed.notes || undefined,
     sourceUrl: parsed.sourceUrl || undefined,
     requestedPrintType: parsed.requestedPrintType,

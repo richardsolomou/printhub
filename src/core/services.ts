@@ -227,7 +227,6 @@ export class PrintHubService {
     fields: {
       name?: string
       quantity?: number
-      requesterName?: string
       notes?: string
       sourceUrl?: string
       requestedPrintType?: PrintType | null
@@ -239,7 +238,6 @@ export class PrintHubService {
       typeof id !== 'string' ||
       id.length > 100 ||
       (fields.name !== undefined && (typeof fields.name !== 'string' || !fields.name.trim() || fields.name.length > 120)) ||
-      (fields.requesterName !== undefined && (typeof fields.requesterName !== 'string' || fields.requesterName.length > 60)) ||
       (fields.notes !== undefined && (typeof fields.notes !== 'string' || fields.notes.length > 2000)) ||
       (fields.sourceUrl !== undefined &&
         (typeof fields.sourceUrl !== 'string' || (fields.sourceUrl.trim() !== '' && !validSourceUrl(fields.sourceUrl.trim())))) ||
@@ -285,7 +283,6 @@ export class PrintHubService {
     this.repository.updateRequest(id, {
       ...fields,
       name: fields.name?.trim(),
-      requesterName: fields.requesterName?.trim(),
       notes: fields.notes?.trim(),
       sourceUrl: fields.sourceUrl?.trim(),
     })

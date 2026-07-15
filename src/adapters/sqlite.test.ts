@@ -21,6 +21,7 @@ import assetStageJobsMigration from './migrations/014_asset_stage_jobs.sql?raw'
 import resinVolumeMigration from './migrations/015_resin_volume.sql?raw'
 import requestPrinterMigration from './migrations/016_request_printer.sql?raw'
 import requestPrintTypeMigration from './migrations/017_request_print_type.sql?raw'
+import requestOwnershipMigration from './migrations/020_request_ownership.sql?raw'
 import type { PlatePlannerDraft, PrinterProfile } from '../core/platePlanner'
 
 describe('SqliteRepository contract', () => {
@@ -441,6 +442,39 @@ describe('SqliteRepository contract', () => {
     repository.moveCopies({ id, from: 'in_progress', to: 'todo', count: 1, filePath: 'todo/gear.stl', order: 2 })
     repository.moveCopies({ id, from: 'todo', to: 'in_progress', count: 1, filePath: 'in-progress/gear.stl', order: 9 })
     expect(repository.getRequest(id)?.orders).toMatchObject({ todo: undefined, in_progress: 9 })
+  })
+
+  it('transfers legacy requests to the uniquely named account', () => {
+    const db = new Database(':memory:')
+    db.exec(`
+      CREATE TABLE "user" (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE);
+      CREATE TABLE requests (id TEXT PRIMARY KEY, requester_email TEXT NOT NULL, requester_name TEXT);
+    `)
+    const insertUser = db.prepare('INSERT INTO "user" (id,name,email) VALUES (?,?,?)')
+    insertUser.run('uploader', 'Uploader', 'uploader@example.com')
+    insertUser.run('owner', 'Actual Owner', 'owner@example.com')
+    insertUser.run('duplicate-1', 'Duplicate', 'duplicate-1@example.com')
+    insertUser.run('duplicate-2', 'Duplicate', 'duplicate-2@example.com')
+    const insertRequest = db.prepare('INSERT INTO requests (id,requester_email,requester_name) VALUES (?,?,?)')
+    insertRequest.run('matched', 'uploader@example.com', ' actual owner ')
+    insertRequest.run('ambiguous', 'uploader@example.com', 'Duplicate')
+    insertRequest.run('missing', 'uploader@example.com', 'Missing')
+
+    db.exec(requestOwnershipMigration)
+
+    expect(db.prepare('SELECT requester_email,requester_name FROM requests WHERE id=?').get('matched')).toEqual({
+      requester_email: 'owner@example.com',
+      requester_name: 'Actual Owner',
+    })
+    expect(db.prepare('SELECT requester_email,requester_name FROM requests WHERE id=?').get('ambiguous')).toEqual({
+      requester_email: 'uploader@example.com',
+      requester_name: 'Uploader',
+    })
+    expect(db.prepare('SELECT requester_email,requester_name FROM requests WHERE id=?').get('missing')).toEqual({
+      requester_email: 'uploader@example.com',
+      requester_name: 'Uploader',
+    })
+    db.close()
   })
 
   it('migrates legacy users, hashes, and roles into the better-auth tables', () => {

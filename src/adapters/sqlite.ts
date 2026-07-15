@@ -20,6 +20,7 @@ import requestPrinterMigration from './migrations/016_request_printer.sql?raw'
 import requestPrintTypeMigration from './migrations/017_request_print_type.sql?raw'
 import requestPrintTypeCompatibilityMigration from './migrations/018_request_print_type_compatibility.sql?raw'
 import twoFactorMigration from './migrations/019_two_factor.sql?raw'
+import requestOwnershipMigration from './migrations/020_request_ownership.sql?raw'
 import type {
   NewPrintRequest,
   OperationPayload,
@@ -57,6 +58,7 @@ const migrations: Migration[] = [
   { version: 17, sql: requestPrintTypeMigration },
   { version: 18, sql: requestPrintTypeCompatibilityMigration, prepare: prepareRequestPrintTypeCompatibility },
   { version: 19, sql: twoFactorMigration },
+  { version: 20, sql: requestOwnershipMigration },
 ]
 
 function prepareRequestPrintTypeCompatibility(db: Database.Database) {
@@ -404,7 +406,6 @@ export class SqliteRepository implements Repository {
     fields: {
       name?: string
       quantity?: number
-      requesterName?: string
       notes?: string
       sourceUrl?: string
       requestedPrintType?: import('../core/types').PrintType | null
@@ -424,13 +425,10 @@ export class SqliteRepository implements Repository {
           .run(fields.quantity - started, id, initialStatus().id)
       }
       this.db
-        .prepare(
-          `UPDATE requests SET name=?, quantity=?, requester_name=?, notes=?, source_url=?, print_type=?, printer_id=?, updated_at=? WHERE id=?`,
-        )
+        .prepare(`UPDATE requests SET name=?, quantity=?, notes=?, source_url=?, print_type=?, printer_id=?, updated_at=? WHERE id=?`)
         .run(
           fields.name ?? request.name,
           fields.quantity ?? request.quantity,
-          fields.requesterName ?? request.requesterName ?? null,
           fields.notes ?? request.notes ?? null,
           fields.sourceUrl ?? request.sourceUrl ?? null,
           fields.requestedPrintType === undefined ? (request.requestedPrintType ?? null) : fields.requestedPrintType,

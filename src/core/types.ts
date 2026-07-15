@@ -198,7 +198,6 @@ export interface Repository {
     fields: {
       name?: string
       quantity?: number
-      requesterName?: string
       notes?: string
       sourceUrl?: string
       requestedPrintType?: PrintType | null
