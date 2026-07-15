@@ -5,30 +5,9 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { SqliteRepository } from './sqlite'
-import { createDatabase } from './database'
-import initialMigration from './migrations/001_initial.sql?raw'
-import operationsMigration from './migrations/002_operations.sql?raw'
-import uploadsMigration from './migrations/003_uploads_and_reservations.sql?raw'
-import settingsMigration from './migrations/004_settings.sql?raw'
-import betterAuthMigration from './migrations/005_better_auth.sql?raw'
-import assetGenerationMigration from './migrations/006_asset_generation.sql?raw'
-import invitesMigration from './migrations/007_invites.sql?raw'
-import authRateLimitMigration from './migrations/008_auth_rate_limit.sql?raw'
-import adminRoleMigration from './migrations/009_admin_role.sql?raw'
-import platePlannerMigration from './migrations/010_plate_planner.sql?raw'
-import resinOrientationMigration from './migrations/011_resin_orientation.sql?raw'
-import resinOrientationCandidatesMigration from './migrations/012_resin_orientation_candidates.sql?raw'
-import orientationAnalysisJobsMigration from './migrations/013_orientation_analysis_jobs.sql?raw'
-import assetStageJobsMigration from './migrations/014_asset_stage_jobs.sql?raw'
-import resinVolumeMigration from './migrations/015_resin_volume.sql?raw'
-import requestPrinterMigration from './migrations/016_request_printer.sql?raw'
-import requestPrintTypeMigration from './migrations/017_request_print_type.sql?raw'
-import requestPrintTypeCompatibilityMigration from './migrations/018_request_print_type_compatibility.sql?raw'
-import twoFactorMigration from './migrations/019_two_factor.sql?raw'
-import requestOwnershipMigration from './migrations/020_request_ownership.sql?raw'
-import requestOwnerUserMigration from './migrations/021_request_owner_user.sql?raw'
+import { createDatabase } from '../db'
 import type { PlatePlannerDraft, PrinterProfile } from '../core/platePlanner'
-import { requests, requestStatuses, uploadSessions, user } from './schema'
+import { requests, requestStatuses, uploadSessions, user } from '../db/schema'
 
 function insertUser(
   repository: SqliteRepository,
@@ -39,6 +18,54 @@ function insertUser(
     .insert(user)
     .values({ ...values, role: values.role ?? 'requester', emailVerified: true, createdAt: now, updatedAt: now })
     .run()
+}
+
+function createPreDrizzleDatabase(file = ':memory:', version = 19) {
+  const database = new Database(file)
+  const initialized = new SqliteRepository(createDatabase(database))
+  initialized.database.run(drizzleSql`PRAGMA foreign_keys = OFF`)
+  database.exec(`
+    DROP TABLE __drizzle_migrations;
+    DROP TABLE upload_sessions;
+    DROP TABLE requests;
+    CREATE TABLE requests (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      file_name TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      quantity INTEGER NOT NULL,
+      requester_email TEXT NOT NULL,
+      requester_name TEXT,
+      notes TEXT,
+      source_url TEXT,
+      thumbnail_path TEXT,
+      preview_path TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      assets_generated_at INTEGER,
+      printer_id TEXT,
+      print_type TEXT CHECK (print_type IN ('resin', 'filament'))
+    );
+    CREATE INDEX requests_created ON requests(created_at DESC);
+    CREATE INDEX requests_print_type ON requests(print_type);
+    CREATE INDEX requests_printer_id ON requests(printer_id);
+    CREATE TABLE upload_sessions (
+      id TEXT PRIMARY KEY,
+      owner_id TEXT NOT NULL,
+      bytes INTEGER NOT NULL DEFAULT 0,
+      expires_at INTEGER NOT NULL,
+      completed_request_id TEXT
+    );
+    CREATE INDEX upload_sessions_owner ON upload_sessions(owner_id, expires_at);
+    CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL);
+  `)
+  if (version === 18) {
+    database.exec('DROP TABLE twoFactor; ALTER TABLE "user" DROP COLUMN "twoFactorEnabled"')
+  }
+  initialized.database.run(drizzleSql`PRAGMA foreign_keys = ON`)
+  const record = database.prepare('INSERT INTO schema_migrations VALUES (?,?)')
+  for (let applied = 1; applied <= version; applied += 1) record.run(applied, Date.now())
+  return database
 }
 
 describe('SqliteRepository contract', () => {
@@ -375,33 +402,6 @@ describe('SqliteRepository contract', () => {
     expect(repository.listPlateModelAnalyses()).toEqual([])
   })
 
-  it('backfills resin volume from existing orientation candidates', () => {
-    const db = new Database(':memory:')
-    db.exec(`CREATE TABLE requests (id TEXT PRIMARY KEY);
-      CREATE TABLE plate_model_analysis (
-        request_id TEXT PRIMARY KEY REFERENCES requests(id) ON DELETE CASCADE,
-        width_mm REAL NOT NULL,
-        depth_mm REAL NOT NULL,
-        height_mm REAL NOT NULL,
-        analyzed_at INTEGER NOT NULL,
-        orientation_candidates TEXT
-      );`)
-    db.prepare('INSERT INTO requests VALUES (?)').run('request-id')
-    db.prepare('INSERT INTO plate_model_analysis VALUES (?,?,?,?,?,?)').run(
-      'request-id',
-      10,
-      20,
-      30,
-      Date.now(),
-      JSON.stringify([{ estimatedVolumeMm3: 12_345 }]),
-    )
-
-    db.exec(resinVolumeMigration)
-
-    expect(db.prepare('SELECT estimated_volume_mm3 FROM plate_model_analysis').get()).toEqual({ estimated_volume_mm3: 12_345 })
-    db.close()
-  })
-
   it('maintains integrity, exposes database information, and installs the auth limiter table', () => {
     const maintenance = repository.maintain()
     expect(maintenance.integrity).toBe('ok')
@@ -505,128 +505,94 @@ describe('SqliteRepository contract', () => {
     expect(repository.getRequest(id)?.orders).toMatchObject({ todo: undefined, in_progress: 9 })
   })
 
-  it('transfers legacy requests and assigns stable owner IDs', () => {
-    const db = new Database(':memory:')
-    db.exec(`
-      CREATE TABLE "user" (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE);
-      CREATE TABLE requests (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        file_name TEXT NOT NULL,
-        file_path TEXT NOT NULL,
-        quantity INTEGER NOT NULL,
-        requester_email TEXT NOT NULL,
-        requester_name TEXT,
-        notes TEXT,
-        source_url TEXT,
-        thumbnail_path TEXT,
-        preview_path TEXT,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL,
-        assets_generated_at INTEGER,
-        printer_id TEXT,
-        print_type TEXT
-      );
-      CREATE TABLE upload_sessions (
-        id TEXT PRIMARY KEY,
-        owner_id TEXT NOT NULL,
-        bytes INTEGER NOT NULL DEFAULT 0,
-        expires_at INTEGER NOT NULL,
-        completed_request_id TEXT
-      );
-    `)
-    const insertLegacyUser = db.prepare('INSERT INTO "user" (id,name,email) VALUES (?,?,?)')
-    insertLegacyUser.run('uploader', 'Uploader', 'uploader@example.com')
-    insertLegacyUser.run('owner', 'Actual Owner', 'owner@example.com')
-    insertLegacyUser.run('duplicate-1', 'Duplicate', 'duplicate-1@example.com')
-    insertLegacyUser.run('duplicate-2', 'Duplicate', 'duplicate-2@example.com')
-    const insertRequest = db.prepare(
+  it('transfers pre-Drizzle requests and assigns stable owner IDs', () => {
+    const database = createPreDrizzleDatabase()
+    const now = new Date().toISOString()
+    const insertOwner = database.prepare('INSERT INTO "user" (id,name,email,emailVerified,createdAt,updatedAt,role) VALUES (?,?,?,1,?,?,?)')
+    insertOwner.run('uploader', 'Uploader', 'uploader@example.com', now, now, 'requester')
+    insertOwner.run('owner', 'Actual Owner', 'owner@example.com', now, now, 'requester')
+    insertOwner.run('duplicate-1', 'Duplicate', 'duplicate-1@example.com', now, now, 'requester')
+    insertOwner.run('duplicate-2', 'Duplicate', 'duplicate-2@example.com', now, now, 'requester')
+    const insertRequest = database.prepare(
       'INSERT INTO requests (id,name,file_name,file_path,quantity,requester_email,requester_name,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
     )
     insertRequest.run('matched', 'Matched', 'matched.stl', 'todo/matched.stl', 1, 'uploader@example.com', ' actual owner ', 1, 1)
     insertRequest.run('ambiguous', 'Ambiguous', 'ambiguous.stl', 'todo/ambiguous.stl', 1, 'uploader@example.com', 'Duplicate', 1, 1)
     insertRequest.run('missing', 'Missing', 'missing.stl', 'todo/missing.stl', 1, 'uploader@example.com', 'Missing', 1, 1)
 
-    db.exec(requestOwnershipMigration)
-    db.exec(requestOwnerUserMigration)
+    const migrated = new SqliteRepository(createDatabase(database))
 
-    expect(db.prepare('SELECT owner_user_id,requester_email,requester_name FROM requests WHERE id=?').get('matched')).toEqual({
+    expect(database.prepare('SELECT owner_user_id,requester_email,requester_name FROM requests WHERE id=?').get('matched')).toEqual({
       owner_user_id: 'owner',
       requester_email: 'owner@example.com',
       requester_name: 'Actual Owner',
     })
-    expect(db.prepare('SELECT owner_user_id,requester_email,requester_name FROM requests WHERE id=?').get('ambiguous')).toEqual({
+    expect(database.prepare('SELECT owner_user_id,requester_email,requester_name FROM requests WHERE id=?').get('ambiguous')).toEqual({
       owner_user_id: 'uploader',
       requester_email: 'uploader@example.com',
       requester_name: 'Uploader',
     })
-    expect(db.prepare('SELECT owner_user_id,requester_email,requester_name FROM requests WHERE id=?').get('missing')).toEqual({
+    expect(database.prepare('SELECT owner_user_id,requester_email,requester_name FROM requests WHERE id=?').get('missing')).toEqual({
       owner_user_id: 'uploader',
       requester_email: 'uploader@example.com',
       requester_name: 'Uploader',
     })
-    db.close()
-  })
-
-  it('rejects legacy requests whose owner has no matching account', () => {
-    const db = new Database(':memory:')
-    db.exec('CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)')
-    for (const [version, sql] of [
-      [1, initialMigration],
-      [2, operationsMigration],
-      [3, uploadsMigration],
-      [4, settingsMigration],
-      [5, betterAuthMigration],
-      [6, assetGenerationMigration],
-      [7, invitesMigration],
-      [8, authRateLimitMigration],
-      [9, adminRoleMigration],
-      [10, platePlannerMigration],
-      [11, resinOrientationMigration],
-      [12, resinOrientationCandidatesMigration],
-      [13, orientationAnalysisJobsMigration],
-      [14, assetStageJobsMigration],
-      [15, resinVolumeMigration],
-      [16, requestPrinterMigration],
-      [17, requestPrintTypeMigration],
-      [18, requestPrintTypeCompatibilityMigration],
-      [19, twoFactorMigration],
-      [20, requestOwnershipMigration],
-    ] as const) {
-      db.exec(sql)
-      db.prepare('INSERT INTO schema_migrations VALUES (?,?)').run(version, Date.now())
-    }
-    db.prepare(
-      'INSERT INTO requests (id,name,file_name,file_path,quantity,requester_email,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)',
-    ).run('unmatched-request', 'Unmatched', 'unmatched.stl', 'todo/unmatched.stl', 1, 'missing@example.com', 1, 1)
-
-    expect(() => new SqliteRepository(createDatabase(db))).toThrow(
-      'cannot migrate request ownership because these requests have no matching account: unmatched-request (missing@example.com)',
-    )
-    db.close()
-  })
-
-  it('uses only the Drizzle migration journal for fresh databases', () => {
-    const db = new Database(':memory:')
-    const migrated = new SqliteRepository(createDatabase(db))
-
-    expect(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get()).toBeUndefined()
-    expect(db.prepare('SELECT count(*) count FROM __drizzle_migrations').get()).toEqual({ count: 1 })
     migrated.close()
   })
 
-  it('bridges a legacy journal once and creates one pre-migration backup', async () => {
+  it('rejects pre-Drizzle requests whose owner has no matching account', () => {
+    const database = createPreDrizzleDatabase()
+    database
+      .prepare('INSERT INTO requests (id,name,file_name,file_path,quantity,requester_email,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)')
+      .run('unmatched-request', 'Unmatched', 'unmatched.stl', 'todo/unmatched.stl', 1, 'missing@example.com', 1, 1)
+
+    expect(() => new SqliteRepository(createDatabase(database))).toThrow(
+      'cannot migrate request ownership because these requests have no matching account: unmatched-request (missing@example.com)',
+    )
+    database.close()
+  })
+
+  it('rejects unsupported pre-Drizzle schema versions', () => {
+    const database = createPreDrizzleDatabase()
+    database.prepare('DELETE FROM schema_migrations WHERE version>=18').run()
+
+    expect(() => new SqliteRepository(createDatabase(database))).toThrow(
+      'pre-Drizzle database must be on schema version 18 through 21 (found version 17)',
+    )
+    database.close()
+  })
+
+  it('adds the Better Auth two-factor schema when bootstrapping production version 18', () => {
+    const database = createPreDrizzleDatabase(':memory:', 18)
+    expect(database.prepare('PRAGMA table_info("user")').all()).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: 'twoFactorEnabled' })]),
+    )
+
+    const migrated = new SqliteRepository(createDatabase(database))
+
+    expect(database.prepare('PRAGMA table_info("user")').all()).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: 'twoFactorEnabled', notnull: 1 })]),
+    )
+    expect(database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='twoFactor'").get()).toEqual({
+      name: 'twoFactor',
+    })
+    migrated.close()
+  })
+
+  it('uses only the Drizzle migration journal for fresh databases', () => {
+    const database = new Database(':memory:')
+    const migrated = new SqliteRepository(createDatabase(database))
+
+    expect(database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get()).toBeUndefined()
+    expect(database.prepare('SELECT count(*) count FROM __drizzle_migrations').get()).toEqual({ count: 1 })
+    migrated.close()
+  })
+
+  it('bridges the final pre-Drizzle schema once and creates one pre-migration backup', async () => {
     const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-drizzle-bridge-'))
     const file = path.join(directory, 'printhub.sqlite')
     try {
-      SqliteRepository.open(file).close()
-      const legacy = new Database(file)
-      legacy.exec(
-        'DROP TABLE __drizzle_migrations; CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)',
-      )
-      const record = legacy.prepare('INSERT INTO schema_migrations VALUES (?,?)')
-      for (let version = 1; version <= 21; version += 1) record.run(version, Date.now())
-      legacy.close()
+      createPreDrizzleDatabase(file, 18).close()
 
       SqliteRepository.open(file).close()
 
@@ -642,276 +608,6 @@ describe('SqliteRepository contract', () => {
     } finally {
       await fs.promises.rm(directory, { recursive: true, force: true })
     }
-  })
-
-  it('migrates legacy users, hashes, and roles into the better-auth tables', () => {
-    const db = new Database(':memory:')
-    db.exec('CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)')
-    for (const [version, sql] of [
-      [1, initialMigration],
-      [2, operationsMigration],
-      [3, uploadsMigration],
-      [4, settingsMigration],
-    ] as const) {
-      db.exec(sql)
-      db.prepare('INSERT INTO schema_migrations VALUES (?,?)').run(version, Date.now())
-    }
-    db.prepare('INSERT INTO users (id,email,name,password_hash,role,color,created_at) VALUES (?,?,?,?,?,?,?)').run(
-      'legacy-op',
-      'op@example.com',
-      'Op',
-      '$argon2id$fake',
-      'operator',
-      '#0af',
-      1700000000000,
-    )
-    db.prepare('INSERT INTO users (id,email,name,password_hash,role,created_at) VALUES (?,?,?,NULL,?,?)').run(
-      'legacy-req',
-      'req@example.com',
-      'Req',
-      'requester',
-      1700000000000,
-    )
-    const migrated = new SqliteRepository(createDatabase(db))
-    expect(migrated.listUsers()).toEqual([
-      { id: 'legacy-op', email: 'op@example.com', name: 'Op', role: 'admin' },
-      { id: 'legacy-req', email: 'req@example.com', name: 'Req', role: 'requester' },
-    ])
-    const account = db.prepare('SELECT accountId, providerId, password FROM account WHERE userId=?').get('legacy-op')
-    expect(account).toEqual({ accountId: 'legacy-op', providerId: 'credential', password: '$argon2id$fake' })
-    expect(db.prepare('SELECT count(*) count FROM account').get()).toEqual({ count: 1 })
-    const created = db.prepare('SELECT createdAt FROM "user" WHERE id=?').get('legacy-op') as { createdAt: string }
-    expect(new Date(created.createdAt).getTime()).toBe(1700000000000)
-    migrated.close()
-  })
-
-  it('renames existing privileged users and outstanding invites to admin', () => {
-    const db = new Database(':memory:')
-    db.exec('CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)')
-    for (const [version, sql] of [
-      [1, initialMigration],
-      [2, operationsMigration],
-      [3, uploadsMigration],
-      [4, settingsMigration],
-    ] as const) {
-      db.exec(sql)
-      db.prepare('INSERT INTO schema_migrations VALUES (?,?)').run(version, Date.now())
-    }
-    db.prepare('INSERT INTO users (id,email,name,password_hash,role,created_at) VALUES (?,?,?,?,?,?)').run(
-      'legacy-admin',
-      'admin@example.com',
-      'Admin',
-      '$argon2id$fake',
-      'operator',
-      1700000000000,
-    )
-    for (const [version, sql] of [
-      [5, betterAuthMigration],
-      [6, assetGenerationMigration],
-      [7, invitesMigration],
-      [8, authRateLimitMigration],
-    ] as const) {
-      db.exec(sql)
-      db.prepare('INSERT INTO schema_migrations VALUES (?,?)').run(version, Date.now())
-    }
-    db.prepare('INSERT INTO invites (id,token_hash,role,created_at,expires_at) VALUES (?,?,?,?,?)').run(
-      'legacy-invite',
-      'token-hash',
-      'operator',
-      1700000000000,
-      1800000000000,
-    )
-
-    const migrated = new SqliteRepository(createDatabase(db))
-
-    expect(migrated.listUsers()).toContainEqual(expect.objectContaining({ email: 'admin@example.com', role: 'admin' }))
-    expect(migrated.listInvites()).toContainEqual(expect.objectContaining({ id: 'legacy-invite', role: 'admin' }))
-    expect(() =>
-      migrated.database.run(
-        drizzleSql`INSERT INTO invites (id,token_hash,role,created_at,expires_at)
-            VALUES ('invalid-invite','invalid-token','operator',1700000000000,1800000000000)`,
-      ),
-    ).toThrow()
-    migrated.close()
-  })
-
-  it('migrates legacy unassigned requests to the resin print-type pool', () => {
-    const db = new Database(':memory:')
-    db.exec('CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)')
-    for (const [version, sql] of [
-      [1, initialMigration],
-      [2, operationsMigration],
-      [3, uploadsMigration],
-      [4, settingsMigration],
-      [5, betterAuthMigration],
-      [6, assetGenerationMigration],
-      [7, invitesMigration],
-      [8, authRateLimitMigration],
-      [9, adminRoleMigration],
-      [10, platePlannerMigration],
-      [11, resinOrientationMigration],
-      [12, resinOrientationCandidatesMigration],
-      [13, orientationAnalysisJobsMigration],
-      [14, assetStageJobsMigration],
-      [15, resinVolumeMigration],
-      [16, requestPrinterMigration],
-    ] as const) {
-      db.exec(sql)
-      db.prepare('INSERT INTO schema_migrations VALUES (?,?)').run(version, Date.now())
-    }
-    const now = new Date().toISOString()
-    db.prepare('INSERT INTO "user" (id,name,email,emailVerified,createdAt,updatedAt,role) VALUES (?,?,?,1,?,?,?)').run(
-      'owner',
-      'Owner',
-      'owner@example.com',
-      now,
-      now,
-      'requester',
-    )
-    db.prepare(
-      'INSERT INTO requests (id,name,file_name,file_path,quantity,requester_email,printer_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
-    ).run('legacy-request', 'Legacy', 'legacy.stl', 'todo/legacy.stl', 1, 'owner@example.com', 'legacy-printer', 1, 1)
-    db.prepare(
-      'INSERT INTO requests (id,name,file_name,file_path,quantity,requester_email,printer_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
-    ).run('legacy-pool', 'Legacy pool', 'pool.stl', 'todo/pool.stl', 1, 'owner@example.com', null, 1, 1)
-    db.prepare('INSERT INTO request_statuses (request_id,status_id,quantity) VALUES (?,?,?)').run('legacy-request', 'todo', 1)
-    db.prepare('INSERT INTO request_statuses (request_id,status_id,quantity) VALUES (?,?,?)').run('legacy-pool', 'todo', 1)
-    db.prepare('INSERT INTO settings (key,value_json,updated_at) VALUES (?,?,?)').run(
-      'plate-planner-profiles',
-      JSON.stringify([
-        {
-          id: 'legacy-resin',
-          name: 'Legacy resin',
-          technology: 'resin',
-          enabled: true,
-          widthMm: 100,
-          depthMm: 60,
-          heightMm: 150,
-          spacingMm: 2,
-          supportMarginMm: 2,
-          adhesionMarginMm: 1,
-          heightAllowanceMm: 4,
-          maxHeightDifferenceMm: 20,
-        },
-        {
-          id: 'legacy-filament',
-          name: 'Legacy FDM',
-          technology: 'fdm',
-          enabled: false,
-          widthMm: 220,
-          depthMm: 220,
-          heightMm: 250,
-          spacingMm: 3,
-          brimMarginMm: 2,
-          filamentDiameterMm: 1.75,
-          materialDensityGPerCm3: 1.24,
-        },
-      ]),
-      1,
-    )
-
-    db.exec(requestPrintTypeMigration)
-    db.prepare('INSERT INTO schema_migrations VALUES (?,?)').run(17, Date.now())
-
-    const migrated = new SqliteRepository(createDatabase(db))
-
-    expect(migrated.getRequest('legacy-request')).toMatchObject({ requestedPrintType: undefined, printerId: 'legacy-printer' })
-    expect(migrated.getRequest('legacy-pool')).toMatchObject({ requestedPrintType: 'resin', printerId: undefined })
-    expect(migrated.getSetting<PrinterProfile[]>('plate-planner-profiles')).toEqual([
-      expect.objectContaining({ id: 'legacy-resin', printType: 'resin', enabled: true }),
-      expect.objectContaining({ id: 'legacy-filament', printType: 'filament', enabled: false }),
-    ])
-    expect(JSON.stringify(migrated.getSetting('plate-planner-profiles'))).not.toContain('technology')
-    expect(() =>
-      migrated.database.run(
-        drizzleSql`INSERT INTO requests (id,name,file_name,file_path,quantity,owner_user_id,requester_email,print_type,created_at,updated_at)
-            VALUES ('invalid','Invalid','invalid.stl','todo/invalid.stl',1,'owner','owner@example.com','powder',1,1)`,
-      ),
-    ).toThrow()
-    migrated.close()
-  })
-
-  it('upgrades databases that already applied the request technology migration', () => {
-    const db = new Database(':memory:')
-    db.exec('CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)')
-    for (const [version, sql] of [
-      [1, initialMigration],
-      [2, operationsMigration],
-      [3, uploadsMigration],
-      [4, settingsMigration],
-      [5, betterAuthMigration],
-      [6, assetGenerationMigration],
-      [7, invitesMigration],
-      [8, authRateLimitMigration],
-      [9, adminRoleMigration],
-      [10, platePlannerMigration],
-      [11, resinOrientationMigration],
-      [12, resinOrientationCandidatesMigration],
-      [13, orientationAnalysisJobsMigration],
-      [14, assetStageJobsMigration],
-      [15, resinVolumeMigration],
-      [16, requestPrinterMigration],
-    ] as const) {
-      db.exec(sql)
-      db.prepare('INSERT INTO schema_migrations VALUES (?,?)').run(version, Date.now())
-    }
-    const now = new Date().toISOString()
-    db.prepare('INSERT INTO "user" (id,name,email,emailVerified,createdAt,updatedAt,role) VALUES (?,?,?,1,?,?,?)').run(
-      'owner',
-      'Owner',
-      'owner@example.com',
-      now,
-      now,
-      'requester',
-    )
-    db.exec("ALTER TABLE requests ADD COLUMN technology TEXT NOT NULL DEFAULT 'resin' CHECK (technology IN ('resin', 'fdm'))")
-    db.exec('CREATE INDEX requests_technology ON requests(technology)')
-    db.exec('CREATE INDEX requests_printer_id ON requests(printer_id)')
-    db.prepare('INSERT INTO schema_migrations VALUES (?,?)').run(17, Date.now())
-    db.prepare(
-      'INSERT INTO requests (id,name,file_name,file_path,quantity,requester_email,technology,printer_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
-    ).run('legacy-assigned', 'Assigned', 'assigned.stl', 'todo/assigned.stl', 1, 'owner@example.com', 'fdm', 'filament-printer', 1, 1)
-    db.prepare(
-      'INSERT INTO requests (id,name,file_name,file_path,quantity,requester_email,technology,printer_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
-    ).run('legacy-pool', 'Pool', 'pool.stl', 'todo/pool.stl', 1, 'owner@example.com', 'fdm', null, 1, 1)
-    db.prepare('INSERT INTO request_statuses (request_id,status_id,quantity) VALUES (?,?,?)').run('legacy-assigned', 'todo', 1)
-    db.prepare('INSERT INTO request_statuses (request_id,status_id,quantity) VALUES (?,?,?)').run('legacy-pool', 'todo', 1)
-    db.prepare('INSERT INTO settings (key,value_json,updated_at) VALUES (?,?,?)').run(
-      'plate-planner-profiles',
-      JSON.stringify([
-        {
-          id: 'filament-printer',
-          name: 'Legacy FDM',
-          technology: 'fdm',
-          enabled: true,
-          widthMm: 220,
-          depthMm: 220,
-          heightMm: 250,
-          spacingMm: 3,
-          brimMarginMm: 2,
-          filamentDiameterMm: 1.75,
-          materialDensityGPerCm3: 1.24,
-        },
-      ]),
-      1,
-    )
-
-    const migrated = new SqliteRepository(createDatabase(db))
-
-    expect(migrated.getRequest('legacy-assigned')).toMatchObject({ requestedPrintType: undefined, printerId: 'filament-printer' })
-    expect(migrated.getRequest('legacy-pool')).toMatchObject({ requestedPrintType: 'filament', printerId: undefined })
-    expect(migrated.getSetting<PrinterProfile[]>('plate-planner-profiles')).toEqual([
-      expect.objectContaining({ id: 'filament-printer', printType: 'filament', enabled: true }),
-    ])
-    expect(db.prepare('PRAGMA table_info(requests)').all()).toEqual(
-      expect.arrayContaining([expect.objectContaining({ name: 'print_type' })]),
-    )
-    expect(db.prepare('PRAGMA table_info(requests)').all()).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ name: 'technology' })]),
-    )
-    expect(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get()).toBeUndefined()
-    expect(db.prepare('SELECT count(*) count FROM __drizzle_migrations').get()).toEqual({ count: 1 })
-    migrated.close()
   })
 
   it('keeps assignments for planning changes while pruning their drafts', () => {

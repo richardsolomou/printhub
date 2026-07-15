@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
 import fs from 'node:fs'
 import path from 'node:path'
-import { closeDatabase, openDatabase } from '../adapters/database'
+import { closeDatabase, openDatabase } from '../db'
 
 const NETWORK_FILESYSTEMS = new Map([
   [0x6969, 'NFS'],

@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { user } from '../adapters/schema'
+import { user } from '../db/schema'
 
 describe('app initialization', () => {
   let temporary: string | undefined

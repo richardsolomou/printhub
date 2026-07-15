@@ -14,9 +14,8 @@ import type {
 import { initialStatus, workflow } from '../core/workflow'
 import { normalizePrinterProfile, type PlatePlannerDraft, type PrinterProfile } from '../core/platePlanner'
 import { backupDatabase } from './sqliteBackup'
-import { closeDatabase, databaseFile, openDatabase, type PrintHubDatabase } from './database'
-import { migrateDatabase } from './drizzleMigrations'
-import { migrateLegacyDatabase } from './legacyMigrations'
+import { closeDatabase, databaseFile, openDatabase, type PrintHubDatabase } from '../db'
+import { migrateDatabase } from '../db/migrations'
 import {
   assetGenerationJobs,
   invites,
@@ -28,7 +27,7 @@ import {
   settings,
   uploadSessions,
   user,
-} from './schema'
+} from '../db/schema'
 
 type RequestRow = typeof requests.$inferSelect & { ownerName: string | null; estimatedVolumeMm3: number | null }
 
@@ -107,11 +106,7 @@ export class SqliteRepository implements Repository {
     this.database.run(sql`PRAGMA synchronous = FULL`)
     this.database.run(sql`PRAGMA foreign_keys = ON`)
     this.database.run(sql`PRAGMA busy_timeout = 5000`)
-    migrateDatabase(
-      this.database,
-      () => migrateLegacyDatabase(this.database),
-      () => this.backupBeforeMigration(),
-    )
+    migrateDatabase(this.database, () => this.backupBeforeMigration())
     this.maintain()
   }
 

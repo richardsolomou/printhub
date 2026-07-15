@@ -2,7 +2,7 @@ import crypto from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import fs from 'node:fs'
 import path from 'node:path'
-import { closeDatabase, openDatabase, type PrintHubDatabase } from './database'
+import { closeDatabase, openDatabase, type PrintHubDatabase } from '../db'
 
 export async function backupDatabase(database: PrintHubDatabase, destination: string) {
   fs.mkdirSync(path.dirname(destination), { recursive: true })

@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { Command } from 'commander'
-import { closeDatabase, openDatabase } from '../src/adapters/database'
+import { closeDatabase, openDatabase } from '../src/db'
 import { backupDatabase } from '../src/adapters/sqliteBackup'
 
 const options = new Command()
