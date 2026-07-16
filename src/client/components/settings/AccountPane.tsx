@@ -158,8 +158,8 @@ export function AccountPane({ me }: { me: Identity }) {
           className="sign-out"
           onClick={async () => {
             await authClient.signOut()
-            await queryClient.invalidateQueries({ queryKey: ['session'] })
             await navigate({ to: '/' })
+            await queryClient.invalidateQueries({ queryKey: ['session'] })
           }}
         >
           Sign out
