@@ -7,6 +7,7 @@ import {
   getStorageSettings,
   getStorageMigration,
   getSystemDiagnostics,
+  getCloudConnections,
   getTelemetrySettings,
   listInvites,
   listRequests,
@@ -34,6 +35,7 @@ export const invitesQuery = (workspaceSlug: string) =>
   queryOptions({ queryKey: ['invites', workspaceSlug], queryFn: () => listInvites({ data: { workspaceSlug } }) })
 export const storageQuery = (workspaceSlug: string) =>
   queryOptions({ queryKey: ['storage', workspaceSlug], queryFn: () => getStorageSettings({ data: { workspaceSlug } }) })
+export const cloudConnectionsQuery = () => queryOptions({ queryKey: ['cloud-connections'], queryFn: () => getCloudConnections() })
 export const storageMigrationQuery = (workspaceSlug: string) =>
   queryOptions({
     queryKey: ['storage-migration', workspaceSlug],

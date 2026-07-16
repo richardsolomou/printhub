@@ -3,6 +3,9 @@ import path from 'node:path'
 import { SqliteRepository } from '../adapters/sqlite'
 import { LocalAssetStore } from '../adapters/filesystem'
 import { S3AssetStore } from '../adapters/s3'
+import { DropboxAssetStore } from '../adapters/dropbox'
+import { GoogleDriveAssetStore } from '../adapters/googleDrive'
+import { OneDriveAssetStore } from '../adapters/oneDrive'
 import { UploadStaging } from '../adapters/staging'
 import { TusUploadStore } from '../adapters/tus'
 import { LocalEventBus } from '../adapters/events'
@@ -15,7 +18,15 @@ import { createAuth } from './auth'
 import type { BoardConfig, Identity, Repository, StorageConfig, TelemetryConfig, WorkspaceSummary } from '../core/types'
 import { logger } from './logger'
 import { diagnostics } from './operations'
-import { decryptSetting, getStoredIntegrationConfig, type EncryptedSetting } from './integrations'
+import {
+  decryptSetting,
+  getDropboxConnection,
+  getGoogleDriveConnection,
+  getOneDriveConnection,
+  getStoredIntegrationConfig,
+  type EncryptedSetting,
+  updateOneDriveRefreshToken,
+} from './integrations'
 import { userImage } from './avatar'
 import { acquireDataDirectoryLease, networkFilesystem } from './dataSafety'
 import { StorageMigrationCoordinator } from './storageMigration'
@@ -43,19 +54,38 @@ export function resolveBoardConfig(repository: Repository): BoardConfig {
 export function workspaceStorageConfig(config: StorageConfig, workspaceId?: string): StorageConfig {
   if (!workspaceId || workspaceId === 'legacy-workspace') return config
   if (config.adapter === 'local') return { ...config, root: path.join(config.root, workspaceId) }
-  return { ...config, prefix: [config.prefix, workspaceId].filter(Boolean).join('/') }
+  if (config.adapter === 's3') return { ...config, prefix: [config.prefix, workspaceId].filter(Boolean).join('/') }
+  return { ...config, root: [config.root, workspaceId].filter(Boolean).join('/') }
 }
 
-export function buildAssetStore(config: StorageConfig, workspaceId?: string) {
+export function buildAssetStore(config: StorageConfig, repository?: Repository, workspaceId?: string) {
   const workspaceConfig = workspaceStorageConfig(config, workspaceId)
-  return workspaceConfig.adapter === 's3' ? new S3AssetStore(workspaceConfig) : new LocalAssetStore(workspaceConfig.root)
+  if (workspaceConfig.adapter === 's3') return new S3AssetStore(workspaceConfig)
+  const settings = repository instanceof SqliteRepository ? deploymentSettings(repository) : repository
+  if (workspaceConfig.adapter === 'dropbox') {
+    if (!repository) throw new Error('Dropbox storage requires a repository')
+    return new DropboxAssetStore(workspaceConfig.root, getDropboxConnection(settings!) ?? { clientId: '', clientSecret: '' })
+  }
+  if (workspaceConfig.adapter === 'google-drive') {
+    if (!repository) throw new Error('Google Drive storage requires a repository')
+    return new GoogleDriveAssetStore(workspaceConfig.root, getGoogleDriveConnection(settings!) ?? { clientId: '', clientSecret: '' })
+  }
+  if (workspaceConfig.adapter === 'onedrive') {
+    if (!repository) throw new Error('OneDrive storage requires a repository')
+    return new OneDriveAssetStore(
+      workspaceConfig.root,
+      getOneDriveConnection(settings!) ?? { clientId: '', clientSecret: '' },
+      (refreshToken) => updateOneDriveRefreshToken(settings!, refreshToken),
+    )
+  }
+  return new LocalAssetStore(workspaceConfig.root)
 }
 
 export function hashInviteToken(token: string) {
   return crypto.createHash('sha256').update(token).digest('hex')
 }
 
-function deploymentSettings(repository: SqliteRepository) {
+export function deploymentSettings(repository: SqliteRepository) {
   return {
     getSetting: <T>(key: string) => repository.getDeploymentSetting<T>(key),
     setSetting: (key: string, value: unknown) => repository.setDeploymentSetting(key, value),
@@ -275,7 +305,7 @@ async function createWorkspaceRuntime(
 ) {
   const repository = rootRepository.scoped(workspace.id)
   const storage = resolveStorageConfig(repository)
-  const assets = buildAssetStore(storage, workspace.id)
+  const assets = buildAssetStore(storage, repository, workspace.id)
   const events = new LocalEventBus()
   let assertAssetsMutable: () => void = () => undefined
   const service = new PrintHubService(repository, assets, staging, events, telemetry, tusUploads, () => assertAssetsMutable())
@@ -310,7 +340,7 @@ async function createWorkspaceRuntime(
     assets,
     storage,
     assetQueue,
-    (config) => buildAssetStore(config, workspace.id),
+    (config) => buildAssetStore(config, repository, workspace.id),
     async () => {
       events.publish('settings.changed')
       await resetApp()

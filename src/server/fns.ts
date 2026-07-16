@@ -7,7 +7,16 @@ import { eq } from 'drizzle-orm'
 import { resolveAuthAdapterConfig } from '../adapters/auth'
 import { buildEmailDelivery, resolveSmtpConfig } from '../adapters/email'
 import { user } from '../db/schema'
-import { app, buildAssetStore, hashInviteToken, resetApp, resolveBoardConfig, resolveTelemetryConfig } from './app'
+import {
+  app,
+  buildAssetStore,
+  deploymentSettings,
+  hashInviteToken,
+  resetApp,
+  resolveBoardConfig,
+  resolveStorageConfig,
+  resolveTelemetryConfig,
+} from './app'
 import { workflow } from '../core/workflow'
 import { SOCIAL_AUTH_PROVIDERS, type IntegrationConfig } from '../core/auth'
 import type { StorageConfig, StorageMigration } from '../core/types'
@@ -33,9 +42,14 @@ import {
   socialProviderSettingsSchema,
   smtpEmailSettingsSchema,
   storageSettingsSchema,
+  cloudConnectionSchema,
+  cloudProviderSchema,
   telemetrySettingsSchema,
   updateRequestSchema,
 } from './schemas'
+import { beginDropboxAuthorization, disconnectDropbox, publicDropboxConnection } from './dropboxConnection'
+import { beginGoogleDriveAuthorization, disconnectGoogleDrive, publicGoogleDriveConnection } from './googleDriveConnection'
+import { beginOneDriveAuthorization, disconnectOneDrive, publicOneDriveConnection } from './oneDriveConnection'
 import { normalizePrinterProfile, type PlatePlannerDraft, type PrinterProfile } from '../core/platePlanner'
 import { STORAGE_MIGRATION_SETTING } from './storageMigration'
 import { systemDiagnostics } from './operations'
@@ -62,7 +76,7 @@ const admin = async (instance: Awaited<ReturnType<typeof app>>) => {
 }
 
 function integrationConfig(instance: Awaited<ReturnType<typeof app>>): IntegrationConfig {
-  return getStoredIntegrationConfig(deploymentSettings(instance)) ?? { passwordEnabled: true }
+  return getStoredIntegrationConfig(deploymentSettings(instance.repository)) ?? { passwordEnabled: true }
 }
 
 const workspaceSlugSchema = z.string().trim().min(1).max(100)
@@ -75,11 +89,6 @@ const workspaceAdmin = async (instance: Awaited<ReturnType<typeof app>>, workspa
   if (context.identity.role !== 'admin') throw new Response('forbidden', { status: 403 })
   return context
 }
-const deploymentSettings = (instance: Awaited<ReturnType<typeof app>>) => ({
-  getSetting: <T>(key: string) => instance.repository.getDeploymentSetting<T>(key),
-  setSetting: (key: string, value: unknown) => instance.repository.setDeploymentSetting(key, value),
-})
-
 export const createWorkspace = createServerFn({ method: 'POST' })
   .validator(z.object({ name: z.string().trim().min(1).max(80) }))
   .handler(async ({ data }) =>
@@ -134,7 +143,7 @@ export const sessionInfo = createServerFn({ method: 'GET' })
         storageReady: context?.storageReady ?? false,
         printersConfigured: storedPrinters !== undefined,
         printers,
-        telemetryEnabled: resolveTelemetryConfig(deploymentSettings(instance)).enabled,
+        telemetryEnabled: resolveTelemetryConfig(deploymentSettings(instance.repository)).enabled,
         privateRequests: context ? resolveBoardConfig(context.repository).privateRequests : false,
         auth: instance.authCapabilities,
         hosted: process.env.PRINTHUB_HOSTED === 'true',
@@ -241,7 +250,7 @@ export const getIntegrationSettings = createServerFn({ method: 'GET' }).handler(
   rpc(async () => {
     const instance = await app()
     await admin(instance)
-    const stored = getStoredIntegrationConfig(deploymentSettings(instance))
+    const stored = getStoredIntegrationConfig(deploymentSettings(instance.repository))
     const settings = publicIntegrationConfig(stored, resolveAuthAdapterConfig(stored), resolveSmtpConfig(stored))
     const accounts = await instance.auth.api.listUserAccounts({ headers: getRequest().headers })
     for (const provider of SOCIAL_AUTH_PROVIDERS) {
@@ -271,7 +280,7 @@ export const updatePasswordAuth = createServerFn({ method: 'POST' })
           throw new Response('link the current admin account to an enabled social provider before disabling passwords', { status: 409 })
         }
       }
-      setStoredIntegrationConfig(deploymentSettings(instance), { ...config, passwordEnabled: data.enabled })
+      setStoredIntegrationConfig(deploymentSettings(instance.repository), { ...config, passwordEnabled: data.enabled })
       await resetApp()
       return { enabled: data.enabled }
     }),
@@ -296,7 +305,7 @@ export const saveSocialProvider = createServerFn({ method: 'POST' })
       }
       const clientSecret = data.clientSecret || current?.clientSecret
       if (!clientSecret) throw new Response('client secret is required', { status: 400 })
-      setStoredIntegrationConfig(deploymentSettings(instance), {
+      setStoredIntegrationConfig(deploymentSettings(instance.repository), {
         ...config,
         [data.provider]: { enabled: false, clientId: data.clientId, clientSecret },
       })
@@ -328,7 +337,10 @@ export const updateSocialProviderEnabled = createServerFn({ method: 'POST' })
         const remaining = SOCIAL_AUTH_PROVIDERS.some((candidate) => candidate !== data.provider && config[candidate]?.enabled)
         if (!remaining) throw new Response('cannot disable the last active authentication method', { status: 409 })
       }
-      setStoredIntegrationConfig(deploymentSettings(instance), { ...config, [data.provider]: { ...provider, enabled: data.enabled } })
+      setStoredIntegrationConfig(deploymentSettings(instance.repository), {
+        ...config,
+        [data.provider]: { ...provider, enabled: data.enabled },
+      })
       await resetApp()
       return { provider: data.provider, enabled: data.enabled }
     }),
@@ -359,7 +371,7 @@ export const saveSmtpSettings = createServerFn({ method: 'POST' })
       } catch (error) {
         throw new Response(`SMTP verification failed: ${error instanceof Error ? error.message : 'unknown error'}`, { status: 400 })
       }
-      setStoredIntegrationConfig(deploymentSettings(instance), {
+      setStoredIntegrationConfig(deploymentSettings(instance.repository), {
         ...config,
         smtp,
         email: undefined,
@@ -380,7 +392,7 @@ export const removeSmtpSettings = createServerFn({ method: 'POST' }).handler(asy
       throw new Response('SMTP is controlled by the deployment environment', { status: 409 })
     }
     const config = integrationConfig(instance)
-    setStoredIntegrationConfig(deploymentSettings(instance), {
+    setStoredIntegrationConfig(deploymentSettings(instance.repository), {
       ...config,
       smtp: undefined,
       email: undefined,
@@ -625,6 +637,12 @@ function maskStorageMigration(migration: StorageMigration | undefined) {
 
 function resolveStorageInput(data: StorageConfig, current: StorageConfig): StorageConfig {
   if (data.adapter === 'local') return { adapter: 'local', root: path.resolve(process.env.PRINTS_DIR ?? '/prints') }
+  if (data.adapter === 'dropbox' || data.adapter === 'google-drive' || data.adapter === 'onedrive') {
+    const root = data.root.replace(/^\/+|\/+$/g, '')
+    if (root.split('/').some((segment) => segment === '.' || segment === '..'))
+      throw new Response('invalid cloud storage folder', { status: 400 })
+    return { adapter: data.adapter, root }
+  }
   const secretAccessKey = data.secretAccessKey || (current.adapter === 's3' ? current.secretAccessKey : '')
   if (!secretAccessKey) throw new Response('missing secret access key', { status: 400 })
   const prefix = data.prefix?.trim().replace(/^\/+|\/+$/g, '') ?? ''
@@ -643,11 +661,15 @@ function resolveStorageInput(data: StorageConfig, current: StorageConfig): Stora
   }
 }
 
+function cloudProviderName(provider: 'dropbox' | 'google-drive' | 'onedrive') {
+  return provider === 'dropbox' ? 'Dropbox' : provider === 'google-drive' ? 'Google Drive' : 'OneDrive'
+}
+
 export const getTelemetrySettings = createServerFn({ method: 'GET' }).handler(async () =>
   rpc(async () => {
     const instance = await app()
     if ((await me(instance)).role !== 'admin') throw new Response('forbidden', { status: 403 })
-    return resolveTelemetryConfig(deploymentSettings(instance))
+    return resolveTelemetryConfig(deploymentSettings(instance.repository))
   }),
 )
 
@@ -749,6 +771,58 @@ export const getStorageMigration = createServerFn({ method: 'GET' })
     }),
   )
 
+export const getCloudConnections = createServerFn({ method: 'GET' }).handler(async () =>
+  rpc(async () => {
+    const instance = await app()
+    await admin(instance)
+    const origin = new URL(getRequest().url).origin
+    return {
+      dropbox: publicDropboxConnection(deploymentSettings(instance.repository), origin),
+      'google-drive': publicGoogleDriveConnection(deploymentSettings(instance.repository), origin),
+      onedrive: publicOneDriveConnection(deploymentSettings(instance.repository), origin),
+    }
+  }),
+)
+
+export const beginCloudConnection = createServerFn({ method: 'POST' })
+  .validator(cloudConnectionSchema)
+  .handler(async ({ data }) =>
+    rpc(async () => {
+      const instance = await app()
+      requireMutationOrigin()
+      const identity = await admin(instance)
+      const input = { clientId: data.clientId, clientSecret: data.clientSecret }
+      const origin = new URL(getRequest().url).origin
+      const url =
+        data.provider === 'dropbox'
+          ? beginDropboxAuthorization(deploymentSettings(instance.repository), input, identity.id, origin, data.returnTo)
+          : data.provider === 'google-drive'
+            ? beginGoogleDriveAuthorization(deploymentSettings(instance.repository), input, identity.id, origin, data.returnTo)
+            : beginOneDriveAuthorization(deploymentSettings(instance.repository), input, identity.id, origin, data.returnTo)
+      return {
+        url,
+      }
+    }),
+  )
+
+export const removeCloudConnection = createServerFn({ method: 'POST' })
+  .validator(cloudProviderSchema)
+  .handler(async ({ data }) =>
+    rpc(async () => {
+      const instance = await app()
+      requireMutationOrigin()
+      await admin(instance)
+      const repositories = instance.repository.listWorkspaces().map((workspace) => instance.repository.scoped(workspace.id))
+      if (repositories.some((repository) => resolveStorageConfig(repository).adapter === data.provider))
+        throw new Response(`move storage away from ${cloudProviderName(data.provider)} before disconnecting it`, { status: 409 })
+      if (repositories.some((repository) => repository.getSetting<StorageMigration>(STORAGE_MIGRATION_SETTING)?.state === 'running'))
+        throw new Response('wait for the storage migration to finish', { status: 409 })
+      if (data.provider === 'dropbox') disconnectDropbox(deploymentSettings(instance.repository))
+      else if (data.provider === 'google-drive') disconnectGoogleDrive(deploymentSettings(instance.repository))
+      else disconnectOneDrive(deploymentSettings(instance.repository))
+    }),
+  )
+
 export const startStorageMigration = createServerFn({ method: 'POST' })
   .validator(inWorkspace(storageSettingsSchema))
   .handler(async ({ data }) =>
@@ -818,7 +892,7 @@ export const updateStorageSettings = createServerFn({ method: 'POST' })
         throw new Response('storage can only be changed while the board is empty and no uploads are in flight', { status: 409 })
       }
 
-      const candidate = buildAssetStore(config, context.workspace.id)
+      const candidate = buildAssetStore(config, context.repository, context.workspace.id)
       try {
         await candidate.initialize()
         await candidate.writable()

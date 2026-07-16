@@ -15,7 +15,7 @@ const SETTING_KEY = 'integrations'
 const KEY_BYTES = 32
 
 export type EncryptedSetting = { version: 1; iv: string; tag: string; ciphertext: string }
-type SettingStore = {
+export type SettingStore = {
   getSetting<T>(key: string): T | undefined
   setSetting(key: string, value: unknown): void
 }
@@ -83,6 +83,24 @@ export function setStoredIntegrationConfig(
   environment: NodeJS.ProcessEnv = process.env,
 ) {
   repository.setSetting(SETTING_KEY, encryptIntegrationConfig(config, environment))
+}
+
+export function getDropboxConnection(repository: SettingStore, environment: NodeJS.ProcessEnv = process.env) {
+  return getStoredIntegrationConfig(repository, environment)?.dropbox
+}
+
+export function getGoogleDriveConnection(repository: SettingStore, environment: NodeJS.ProcessEnv = process.env) {
+  return getStoredIntegrationConfig(repository, environment)?.googleDrive
+}
+
+export function getOneDriveConnection(repository: SettingStore, environment: NodeJS.ProcessEnv = process.env) {
+  return getStoredIntegrationConfig(repository, environment)?.oneDrive
+}
+
+export function updateOneDriveRefreshToken(repository: SettingStore, refreshToken: string) {
+  const config = getStoredIntegrationConfig(repository)
+  if (!config?.oneDrive) return
+  setStoredIntegrationConfig(repository, { ...config, oneDrive: { ...config.oneDrive, refreshToken } })
 }
 
 function providerSource(provider: SocialAuthProvider, environment: NodeJS.ProcessEnv) {
