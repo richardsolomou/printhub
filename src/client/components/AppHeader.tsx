@@ -1,25 +1,25 @@
 import type { ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
-import { Layers3, LayoutDashboard, Settings } from 'lucide-react'
+import { Layers3, LayoutDashboard, Settings, ShieldCheck } from 'lucide-react'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { Brand } from './Brand'
 import { WorkspaceSwitcher } from './WorkspaceSwitcher'
 
-type AppView = 'board' | 'planner' | 'settings'
+type AppView = 'board' | 'planner' | 'settings' | 'admin'
 
 export function AppHeader({
   active,
   isAdmin,
+  isDeploymentAdmin = false,
   showPlanner = true,
   navigationEnabled = true,
-  children,
 }: {
   active: AppView
   isAdmin: boolean
+  isDeploymentAdmin?: boolean
   showPlanner?: boolean
   navigationEnabled?: boolean
-  children?: ReactNode
 }) {
   return (
     <header
@@ -35,7 +35,6 @@ export function AppHeader({
           <Brand />
         </span>
       )}
-      <WorkspaceSwitcher />
       <nav
         className="flex items-center gap-1 rounded-lg bg-muted/60 p-1 max-sm:order-3 max-sm:w-full max-sm:overflow-x-auto max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden"
         aria-label="Main navigation"
@@ -52,9 +51,19 @@ export function AppHeader({
           label="Settings"
           icon={<Settings />}
         />
+        {isDeploymentAdmin && (
+          <AppHeaderLink
+            active={active === 'admin'}
+            enabled={navigationEnabled}
+            to="/admin/$section"
+            params={{ section: 'integrations' }}
+            label="Admin"
+            icon={<ShieldCheck />}
+          />
+        )}
       </nav>
-      <span className="flex-1 max-sm:hidden" />
-      <div className="flex h-8 min-w-24 items-center justify-end gap-2 max-sm:ml-auto max-sm:min-w-8">{children}</div>
+      <span className="flex-1" />
+      <WorkspaceSwitcher />
     </header>
   )
 }
@@ -69,8 +78,8 @@ function AppHeaderLink({
 }: {
   active: boolean
   enabled: boolean
-  to: '/' | '/planner' | '/settings/$section'
-  params?: { section: 'account' }
+  to: '/' | '/planner' | '/settings/$section' | '/admin/$section'
+  params?: { section: 'account' | 'integrations' }
   label: string
   icon: ReactNode
 }) {
@@ -83,6 +92,14 @@ function AppHeaderLink({
   if (to === '/settings/$section') {
     return (
       <Link to={to} params={{ section: params!.section }} className={className} aria-current={active ? 'page' : undefined}>
+        {icon}
+        {label}
+      </Link>
+    )
+  }
+  if (to === '/admin/$section') {
+    return (
+      <Link to={to} params={{ section: 'integrations' }} className={className} aria-current={active ? 'page' : undefined}>
         {icon}
         {label}
       </Link>

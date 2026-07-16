@@ -86,7 +86,8 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
   await page.getByRole('button', { name: 'Change password' }).click()
   await expect(page.getByRole('heading', { name: 'Change password' })).toBeVisible()
   await page.getByRole('button', { name: 'Close' }).click()
-  await page.getByRole('link', { name: 'Integrations' }).click()
+  await mainNav(page, 'Admin').click()
+  await expect(page).toHaveURL(/\/admin\/integrations$/)
   const googleAuthentication = page.getByRole('region', { name: 'Google authentication' })
   await googleAuthentication.getByRole('button', { name: 'Configure' }).click()
   await expect(page.getByRole('heading', { name: 'Configure Google' })).toBeVisible()
@@ -350,6 +351,12 @@ test('health and protected routes expose security and correlation headers', asyn
   expect((await request.get('/api/events')).status()).toBe(401)
 })
 
+test('admin routes redirect unauthenticated users', async ({ page }) => {
+  await page.goto('/admin/integrations')
+  await expect(page).toHaveURL(/\/$/)
+  await expect(page.getByRole('heading', { name: 'Your private 3D-print production queue' })).toBeVisible()
+})
+
 async function fillPrinter(
   printer: Locator,
   values: { name: string; printType: 'Resin' | 'Filament'; width: string; depth: string; height: string },
@@ -388,7 +395,7 @@ function requestCard(page: Page, name: string) {
   return page.locator('button.card').filter({ hasText: name })
 }
 
-function mainNav(page: Page, name: 'Board' | 'Planner' | 'Settings') {
+function mainNav(page: Page, name: 'Board' | 'Planner' | 'Settings' | 'Admin') {
   return page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name, exact: true })
 }
 
@@ -427,9 +434,8 @@ async function screenshot(page: Page, name: string) {
 }
 
 async function mobileScreenshot(page: Page, name: string) {
-  if (!captureScreenshots) return
   const original = page.viewportSize() ?? { width: 1280, height: 800 }
-  await page.setViewportSize({ width: 390, height: 844 })
+  await page.setViewportSize({ width: 320, height: 844 })
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
   await screenshot(page, name)
   await page.setViewportSize(original)

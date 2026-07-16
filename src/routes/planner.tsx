@@ -306,7 +306,7 @@ function PlannerPage() {
 
   return (
     <div className="min-h-dvh max-w-full overflow-x-hidden bg-muted/20">
-      <AppHeader active="planner" isAdmin />
+      <AppHeader active="planner" isAdmin isDeploymentAdmin={session.identity.deploymentAdmin} />
       <main className="mx-auto w-full max-w-[1500px] min-w-0 p-3 sm:p-4 md:p-6">
         <BoardFilters
           search={search}

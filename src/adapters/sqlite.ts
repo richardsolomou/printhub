@@ -181,7 +181,10 @@ export class SqliteRepository implements Repository {
       .select(requestSelection)
       .from(requests)
       .innerJoin(user, eq(user.id, requests.ownerUserId))
-      .leftJoin(plateModelAnalysis, eq(plateModelAnalysis.requestId, requests.id))
+      .leftJoin(
+        plateModelAnalysis,
+        and(eq(plateModelAnalysis.workspaceId, requests.workspaceId), eq(plateModelAnalysis.requestId, requests.id)),
+      )
       .where(eq(requests.workspaceId, workspaceId))
       .orderBy(desc(requests.createdAt))
       .all()
@@ -194,7 +197,10 @@ export class SqliteRepository implements Repository {
       .select(requestSelection)
       .from(requests)
       .innerJoin(user, eq(user.id, requests.ownerUserId))
-      .leftJoin(plateModelAnalysis, eq(plateModelAnalysis.requestId, requests.id))
+      .leftJoin(
+        plateModelAnalysis,
+        and(eq(plateModelAnalysis.workspaceId, requests.workspaceId), eq(plateModelAnalysis.requestId, requests.id)),
+      )
       .where(this.requestConditions(filters, query))
       .orderBy(...requestOrderBy(filters.sort))
       .all()
@@ -235,7 +241,10 @@ export class SqliteRepository implements Repository {
       .select(requestSelection)
       .from(requests)
       .innerJoin(user, eq(user.id, requests.ownerUserId))
-      .leftJoin(plateModelAnalysis, eq(plateModelAnalysis.requestId, requests.id))
+      .leftJoin(
+        plateModelAnalysis,
+        and(eq(plateModelAnalysis.workspaceId, requests.workspaceId), eq(plateModelAnalysis.requestId, requests.id)),
+      )
       .where(and(eq(requests.workspaceId, workspaceId), eq(requests.id, id)))
       .get()
     return row ? this.hydrate(database, row) : undefined
@@ -416,10 +425,11 @@ export class SqliteRepository implements Repository {
   }
 
   reorderRequest(id: string, status: string, order: number) {
+    const workspaceId = this.workspace()
     this.database
       .update(requestStatuses)
       .set({ sortOrder: order })
-      .where(and(eq(requestStatuses.requestId, id), eq(requestStatuses.statusId, status)))
+      .where(and(eq(requestStatuses.workspaceId, workspaceId), eq(requestStatuses.requestId, id), eq(requestStatuses.statusId, status)))
       .run()
   }
 
@@ -449,7 +459,13 @@ export class SqliteRepository implements Repository {
         if (fields.quantity < Math.max(started, 1)) throw new Error('cannot reduce below started copies')
         tx.update(requestStatuses)
           .set({ quantity: fields.quantity - started })
-          .where(and(eq(requestStatuses.requestId, id), eq(requestStatuses.statusId, initialStatus().id)))
+          .where(
+            and(
+              eq(requestStatuses.workspaceId, this.workspace()),
+              eq(requestStatuses.requestId, id),
+              eq(requestStatuses.statusId, initialStatus().id),
+            ),
+          )
           .run()
       }
       tx.update(requests)
@@ -478,7 +494,10 @@ export class SqliteRepository implements Repository {
     return this.database
       .selectDistinct({ id: requests.id })
       .from(requests)
-      .innerJoin(assetGenerationJobs, eq(assetGenerationJobs.requestId, requests.id))
+      .innerJoin(
+        assetGenerationJobs,
+        and(eq(assetGenerationJobs.workspaceId, requests.workspaceId), eq(assetGenerationJobs.requestId, requests.id)),
+      )
       .where(and(eq(requests.workspaceId, this.workspace()), inArray(assetGenerationJobs.status, ['pending', 'running'])))
       .orderBy(requests.createdAt)
       .all()
@@ -488,11 +507,14 @@ export class SqliteRepository implements Repository {
   queueAssetGeneration(id: string) {
     const request = this.getRequest(id)
     if (!request) return
+    const workspaceId = this.workspace()
     const now = Date.now()
     this.database.transaction((tx) => {
       const jobs: (typeof assetGenerationJobs.$inferInsert)[] = [
-        ...(!request.thumbnailPath ? ([{ requestId: id, stage: 'thumbnail', status: 'pending', queuedAt: now }] as const) : []),
-        ...(!request.previewPath ? ([{ requestId: id, stage: 'preview', status: 'pending', queuedAt: now }] as const) : []),
+        ...(!request.thumbnailPath
+          ? ([{ workspaceId, requestId: id, stage: 'thumbnail', status: 'pending', queuedAt: now }] as const)
+          : []),
+        ...(!request.previewPath ? ([{ workspaceId, requestId: id, stage: 'preview', status: 'pending', queuedAt: now }] as const) : []),
       ]
       if (jobs.length) tx.insert(assetGenerationJobs).values(jobs).onConflictDoNothing().run()
       tx.update(requests)
@@ -503,11 +525,18 @@ export class SqliteRepository implements Repository {
   }
 
   requeueAssetGeneration(id: string, stages: import('../core/types').AssetGenerationStage[]) {
+    const workspaceId = this.workspace()
     this.database.transaction((tx) => {
       const now = Date.now()
       tx.update(assetGenerationJobs)
         .set({ status: 'pending', error: null, queuedAt: now, startedAt: null, finishedAt: null })
-        .where(and(eq(assetGenerationJobs.requestId, id), inArray(assetGenerationJobs.stage, stages)))
+        .where(
+          and(
+            eq(assetGenerationJobs.workspaceId, workspaceId),
+            eq(assetGenerationJobs.requestId, id),
+            inArray(assetGenerationJobs.stage, stages),
+          ),
+        )
         .run()
       tx.update(requests)
         .set({ assetsGeneratedAt: null })
@@ -517,11 +546,17 @@ export class SqliteRepository implements Repository {
   }
 
   startAssetGeneration(id: string, stages: import('../core/types').AssetGenerationStage[]) {
+    const workspaceId = this.workspace()
     this.database
       .update(assetGenerationJobs)
       .set({ status: 'running', startedAt: Date.now(), finishedAt: null, error: null })
       .where(
-        and(eq(assetGenerationJobs.requestId, id), inArray(assetGenerationJobs.stage, stages), eq(assetGenerationJobs.status, 'pending')),
+        and(
+          eq(assetGenerationJobs.workspaceId, workspaceId),
+          eq(assetGenerationJobs.requestId, id),
+          inArray(assetGenerationJobs.stage, stages),
+          eq(assetGenerationJobs.status, 'pending'),
+        ),
       )
       .run()
   }
@@ -531,11 +566,18 @@ export class SqliteRepository implements Repository {
     stage: import('../core/types').AssetGenerationStage,
     outcome: { status: 'ready' | 'skipped' | 'failed'; path?: string; error?: string },
   ) {
+    const workspaceId = this.workspace()
     this.database.transaction((tx) => {
       const now = Date.now()
       tx.update(assetGenerationJobs)
         .set({ status: outcome.status, error: outcome.error?.slice(0, 1_000) ?? null, finishedAt: now })
-        .where(and(eq(assetGenerationJobs.requestId, id), eq(assetGenerationJobs.stage, stage)))
+        .where(
+          and(
+            eq(assetGenerationJobs.workspaceId, workspaceId),
+            eq(assetGenerationJobs.requestId, id),
+            eq(assetGenerationJobs.stage, stage),
+          ),
+        )
         .run()
       if (outcome.path) {
         tx.update(requests)
@@ -546,7 +588,13 @@ export class SqliteRepository implements Repository {
       const unfinished = tx
         .select({ requestId: assetGenerationJobs.requestId })
         .from(assetGenerationJobs)
-        .where(and(eq(assetGenerationJobs.requestId, id), inArray(assetGenerationJobs.status, ['pending', 'running'])))
+        .where(
+          and(
+            eq(assetGenerationJobs.workspaceId, workspaceId),
+            eq(assetGenerationJobs.requestId, id),
+            inArray(assetGenerationJobs.status, ['pending', 'running']),
+          ),
+        )
         .limit(1)
         .get()
       if (!unfinished)
@@ -558,11 +606,12 @@ export class SqliteRepository implements Repository {
   }
 
   listAssetGenerationJobs() {
+    const workspaceId = this.workspace()
     return this.database
       .select({ job: assetGenerationJobs })
       .from(assetGenerationJobs)
-      .innerJoin(requests, eq(requests.id, assetGenerationJobs.requestId))
-      .where(eq(requests.workspaceId, this.workspace()))
+      .innerJoin(requests, and(eq(requests.workspaceId, assetGenerationJobs.workspaceId), eq(requests.id, assetGenerationJobs.requestId)))
+      .where(eq(assetGenerationJobs.workspaceId, workspaceId))
       .orderBy(assetGenerationJobs.queuedAt, assetGenerationJobs.stage)
       .all()
       .map(({ job }) => mapAssetGenerationJob(job))
@@ -570,26 +619,35 @@ export class SqliteRepository implements Repository {
 
   assetGenerationJobs(id: string) {
     if (!this.getRequest(id)) return []
+    const workspaceId = this.workspace()
     return this.database
       .select()
       .from(assetGenerationJobs)
-      .where(eq(assetGenerationJobs.requestId, id))
+      .where(and(eq(assetGenerationJobs.workspaceId, workspaceId), eq(assetGenerationJobs.requestId, id)))
       .orderBy(assetGenerationJobs.stage)
       .all()
       .map(mapAssetGenerationJob)
   }
 
   requeueInterruptedAssetGeneration() {
+    const workspaceId = this.workspace()
     const ids = this.listRequests().map(({ id }) => id)
     if (!ids.length) return
     this.database
       .update(assetGenerationJobs)
       .set({ status: 'pending', queuedAt: Date.now(), startedAt: null, finishedAt: null, error: null })
-      .where(and(inArray(assetGenerationJobs.requestId, ids), eq(assetGenerationJobs.status, 'running')))
+      .where(
+        and(
+          eq(assetGenerationJobs.workspaceId, workspaceId),
+          inArray(assetGenerationJobs.requestId, ids),
+          eq(assetGenerationJobs.status, 'running'),
+        ),
+      )
       .run()
   }
 
   requestsNeedingOrientationAnalysis(analysisVersion: number) {
+    const workspaceId = this.workspace()
     const profiles = this.getSetting<PrinterProfile[]>('plate-planner-profiles') ?? []
     const resinPrinterIds = profiles.filter((profile) => printerPrintType(profile) === 'resin').map((profile) => profile.id)
     const resinTarget = or(
@@ -599,11 +657,17 @@ export class SqliteRepository implements Repository {
     return this.database
       .select({ id: requests.id })
       .from(requests)
-      .leftJoin(orientationAnalysisJobs, eq(orientationAnalysisJobs.requestId, requests.id))
-      .leftJoin(plateModelAnalysis, eq(plateModelAnalysis.requestId, requests.id))
+      .leftJoin(
+        orientationAnalysisJobs,
+        and(eq(orientationAnalysisJobs.workspaceId, requests.workspaceId), eq(orientationAnalysisJobs.requestId, requests.id)),
+      )
+      .leftJoin(
+        plateModelAnalysis,
+        and(eq(plateModelAnalysis.workspaceId, requests.workspaceId), eq(plateModelAnalysis.requestId, requests.id)),
+      )
       .where(
         and(
-          eq(requests.workspaceId, this.workspace()),
+          eq(requests.workspaceId, workspaceId),
           or(
             isNull(orientationAnalysisJobs.requestId),
             ne(orientationAnalysisJobs.analysisVersion, analysisVersion),
@@ -623,12 +687,13 @@ export class SqliteRepository implements Repository {
 
   queueOrientationAnalysis(id: string, analysisVersion: number) {
     if (!this.getRequest(id)) return
+    const workspaceId = this.workspace()
     const now = Date.now()
     this.database
       .insert(orientationAnalysisJobs)
-      .values({ requestId: id, status: 'pending', analysisVersion, queuedAt: now })
+      .values({ workspaceId, requestId: id, status: 'pending', analysisVersion, queuedAt: now })
       .onConflictDoUpdate({
-        target: orientationAnalysisJobs.requestId,
+        target: [orientationAnalysisJobs.workspaceId, orientationAnalysisJobs.requestId],
         set: { status: 'pending', analysisVersion, error: null, queuedAt: now, startedAt: null, finishedAt: null },
         where: or(ne(orientationAnalysisJobs.status, 'ready'), ne(orientationAnalysisJobs.analysisVersion, analysisVersion)),
       })
@@ -637,28 +702,46 @@ export class SqliteRepository implements Repository {
 
   startOrientationAnalysis(id: string, analysisVersion: number) {
     if (!this.getRequest(id)) return
+    const workspaceId = this.workspace()
     this.database
       .update(orientationAnalysisJobs)
       .set({ status: 'running', startedAt: Date.now(), finishedAt: null, error: null })
-      .where(and(eq(orientationAnalysisJobs.requestId, id), eq(orientationAnalysisJobs.analysisVersion, analysisVersion)))
+      .where(
+        and(
+          eq(orientationAnalysisJobs.workspaceId, workspaceId),
+          eq(orientationAnalysisJobs.requestId, id),
+          eq(orientationAnalysisJobs.analysisVersion, analysisVersion),
+        ),
+      )
       .run()
   }
 
   failOrientationAnalysis(id: string, analysisVersion: number, error: string) {
     if (!this.getRequest(id)) return
+    const workspaceId = this.workspace()
     this.database
       .update(orientationAnalysisJobs)
       .set({ status: 'failed', error: error.slice(0, 1_000), finishedAt: Date.now() })
-      .where(and(eq(orientationAnalysisJobs.requestId, id), eq(orientationAnalysisJobs.analysisVersion, analysisVersion)))
+      .where(
+        and(
+          eq(orientationAnalysisJobs.workspaceId, workspaceId),
+          eq(orientationAnalysisJobs.requestId, id),
+          eq(orientationAnalysisJobs.analysisVersion, analysisVersion),
+        ),
+      )
       .run()
   }
 
   listOrientationAnalysisJobs() {
+    const workspaceId = this.workspace()
     return this.database
       .select({ job: orientationAnalysisJobs })
       .from(orientationAnalysisJobs)
-      .innerJoin(requests, eq(requests.id, orientationAnalysisJobs.requestId))
-      .where(eq(requests.workspaceId, this.workspace()))
+      .innerJoin(
+        requests,
+        and(eq(requests.workspaceId, orientationAnalysisJobs.workspaceId), eq(requests.id, orientationAnalysisJobs.requestId)),
+      )
+      .where(eq(orientationAnalysisJobs.workspaceId, workspaceId))
       .orderBy(orientationAnalysisJobs.queuedAt)
       .all()
       .map(({ job }) => ({
@@ -673,6 +756,7 @@ export class SqliteRepository implements Repository {
   }
 
   completeAssetGeneration(id: string, generated: { thumbnailPath?: string; previewPath?: string }) {
+    const workspaceId = this.workspace()
     const now = Date.now()
     this.database.transaction((tx) => {
       tx.update(requests)
@@ -686,42 +770,58 @@ export class SqliteRepository implements Repository {
         .run()
       tx.update(assetGenerationJobs)
         .set({ status: generated.thumbnailPath ? 'ready' : 'failed', finishedAt: now })
-        .where(and(eq(assetGenerationJobs.requestId, id), eq(assetGenerationJobs.stage, 'thumbnail')))
+        .where(
+          and(
+            eq(assetGenerationJobs.workspaceId, workspaceId),
+            eq(assetGenerationJobs.requestId, id),
+            eq(assetGenerationJobs.stage, 'thumbnail'),
+          ),
+        )
         .run()
       tx.update(assetGenerationJobs)
         .set({ status: generated.previewPath ? 'ready' : 'skipped', finishedAt: now })
-        .where(and(eq(assetGenerationJobs.requestId, id), eq(assetGenerationJobs.stage, 'preview')))
+        .where(
+          and(
+            eq(assetGenerationJobs.workspaceId, workspaceId),
+            eq(assetGenerationJobs.requestId, id),
+            eq(assetGenerationJobs.stage, 'preview'),
+          ),
+        )
         .run()
     })
   }
 
   getPlateModelAnalysis(requestId: string) {
+    const workspaceId = this.workspace()
     const row = this.database
       .select({ analysis: plateModelAnalysis })
       .from(plateModelAnalysis)
-      .innerJoin(requests, eq(requests.id, plateModelAnalysis.requestId))
-      .where(and(eq(requests.workspaceId, this.workspace()), eq(plateModelAnalysis.requestId, requestId)))
+      .innerJoin(requests, and(eq(requests.workspaceId, plateModelAnalysis.workspaceId), eq(requests.id, plateModelAnalysis.requestId)))
+      .where(and(eq(plateModelAnalysis.workspaceId, workspaceId), eq(plateModelAnalysis.requestId, requestId)))
       .get()?.analysis
     return row ? mapPlateModelAnalysis(row) : undefined
   }
 
   listPlateModelAnalyses() {
+    const workspaceId = this.workspace()
     return this.database
       .select({ analysis: plateModelAnalysis })
       .from(plateModelAnalysis)
-      .innerJoin(requests, eq(requests.id, plateModelAnalysis.requestId))
-      .where(eq(requests.workspaceId, this.workspace()))
+      .innerJoin(requests, and(eq(requests.workspaceId, plateModelAnalysis.workspaceId), eq(requests.id, plateModelAnalysis.requestId)))
+      .where(eq(plateModelAnalysis.workspaceId, workspaceId))
       .orderBy(plateModelAnalysis.requestId)
       .all()
       .map(({ analysis }) => mapPlateModelAnalysis(analysis))
   }
 
   upsertPlateModelAnalyses(analyses: import('../core/platePlanner').PlateModelAnalysis[]) {
+    const workspaceId = this.workspace()
     this.database.transaction((tx) => {
       const now = Date.now()
       for (const analysis of analyses) {
         if (!this.getRequestFrom(tx, analysis.requestId)) continue
         const values = {
+          workspaceId,
           requestId: analysis.requestId,
           widthMm: analysis.widthMm,
           depthMm: analysis.depthMm,
@@ -735,9 +835,13 @@ export class SqliteRepository implements Repository {
           estimatedVolumeMm3: analysis.estimatedVolumeMm3 ?? analysis.orientationCandidates?.[0]?.estimatedVolumeMm3 ?? null,
           analyzedAt: now,
         }
-        tx.insert(plateModelAnalysis).values(values).onConflictDoUpdate({ target: plateModelAnalysis.requestId, set: values }).run()
+        tx.insert(plateModelAnalysis)
+          .values(values)
+          .onConflictDoUpdate({ target: [plateModelAnalysis.workspaceId, plateModelAnalysis.requestId], set: values })
+          .run()
         tx.insert(orientationAnalysisJobs)
           .values({
+            workspaceId,
             requestId: analysis.requestId,
             status: 'ready',
             analysisVersion: analysis.analysisVersion ?? 1,
@@ -746,7 +850,7 @@ export class SqliteRepository implements Repository {
             finishedAt: now,
           })
           .onConflictDoUpdate({
-            target: orientationAnalysisJobs.requestId,
+            target: [orientationAnalysisJobs.workspaceId, orientationAnalysisJobs.requestId],
             set: { status: 'ready', analysisVersion: analysis.analysisVersion ?? 1, error: null, finishedAt: now },
           })
           .run()
@@ -755,13 +859,14 @@ export class SqliteRepository implements Repository {
   }
 
   findPlateModelAnalysisByContentHash(contentHash: string, analysisVersion: number) {
+    const workspaceId = this.workspace()
     const row = this.database
       .select({ analysis: plateModelAnalysis })
       .from(plateModelAnalysis)
-      .innerJoin(requests, eq(requests.id, plateModelAnalysis.requestId))
+      .innerJoin(requests, and(eq(requests.workspaceId, plateModelAnalysis.workspaceId), eq(requests.id, plateModelAnalysis.requestId)))
       .where(
         and(
-          eq(requests.workspaceId, this.workspace()),
+          eq(plateModelAnalysis.workspaceId, workspaceId),
           eq(plateModelAnalysis.contentHash, contentHash),
           eq(plateModelAnalysis.analysisVersion, analysisVersion),
         ),
@@ -1361,7 +1466,11 @@ export class SqliteRepository implements Repository {
   }
 
   private hydrate(database: DatabaseExecutor, row: RequestRow): PrintRequest {
-    const states = database.select().from(requestStatuses).where(eq(requestStatuses.requestId, row.id)).all()
+    const states = database
+      .select()
+      .from(requestStatuses)
+      .where(and(eq(requestStatuses.workspaceId, row.workspaceId), eq(requestStatuses.requestId, row.id)))
+      .all()
     return {
       id: row.id,
       name: row.name,
@@ -1392,9 +1501,12 @@ export class SqliteRepository implements Repository {
       .select()
       .from(requestStatuses)
       .where(
-        inArray(
-          requestStatuses.requestId,
-          rows.map((row) => row.id),
+        and(
+          eq(requestStatuses.workspaceId, this.workspace()),
+          inArray(
+            requestStatuses.requestId,
+            rows.map((row) => row.id),
+          ),
         ),
       )
       .all()
@@ -1443,7 +1555,7 @@ export class SqliteRepository implements Repository {
         sql`(lower(${requests.id} || ' ' || ${requests.name}${privateMetadata} || ' ' ||
           ${user.name} || ' ' || coalesce(${requests.notes},'') || ' ' || coalesce(${requests.sourceUrl},'')) LIKE ${pattern} ESCAPE char(92)
           OR EXISTS (SELECT 1 FROM ${requestStatuses} search_status
-            WHERE search_status.request_id = ${requests.id} AND search_status.quantity > 0
+            WHERE search_status.workspace_id = ${requests.workspaceId} AND search_status.request_id = ${requests.id} AND search_status.quantity > 0
               AND lower(replace(search_status.status_id, '_', ' ')) LIKE ${pattern} ESCAPE char(92)))`,
       )
     }
@@ -1483,10 +1595,11 @@ export class SqliteRepository implements Repository {
 
   private insertRequest(db: DatabaseExecutor, id: string, request: NewPrintRequest) {
     const now = Date.now()
+    const workspaceId = this.workspace()
     db.insert(requests)
       .values({
         id,
-        workspaceId: this.workspace(),
+        workspaceId,
         name: request.name,
         fileName: request.fileName,
         filePath: request.filePath,
@@ -1505,6 +1618,7 @@ export class SqliteRepository implements Repository {
     db.insert(requestStatuses)
       .values(
         workflow.statuses.map((status) => ({
+          workspaceId,
           requestId: id,
           statusId: status.id,
           quantity: status.id === initialStatus().id ? request.quantity : 0,
@@ -1514,6 +1628,7 @@ export class SqliteRepository implements Repository {
     db.insert(assetGenerationJobs)
       .values([
         {
+          workspaceId,
           requestId: id,
           stage: 'thumbnail',
           status: request.thumbnailPath ? 'ready' : 'pending',
@@ -1521,6 +1636,7 @@ export class SqliteRepository implements Repository {
           finishedAt: request.thumbnailPath ? now : null,
         },
         {
+          workspaceId,
           requestId: id,
           stage: 'preview',
           status: request.previewPath ? 'ready' : 'pending',
@@ -1539,7 +1655,7 @@ export class SqliteRepository implements Repository {
       const existing = tx
         .selectDistinct({ statusId: requestStatuses.statusId })
         .from(requestStatuses)
-        .where(inArray(requestStatuses.requestId, workspaceRequestIds))
+        .where(and(eq(requestStatuses.workspaceId, workspaceId), inArray(requestStatuses.requestId, workspaceRequestIds)))
         .all()
       for (const { statusId } of existing) {
         if (configured.has(statusId)) continue
@@ -1549,6 +1665,7 @@ export class SqliteRepository implements Repository {
           .where(
             and(
               inArray(requestStatuses.requestId, workspaceRequestIds),
+              eq(requestStatuses.workspaceId, workspaceId),
               eq(requestStatuses.statusId, statusId),
               gt(requestStatuses.quantity, 0),
             ),
@@ -1557,12 +1674,18 @@ export class SqliteRepository implements Repository {
           .get()
         if (used) throw new Error(`workflow status ${statusId} still has copies and cannot be removed`)
         tx.delete(requestStatuses)
-          .where(and(inArray(requestStatuses.requestId, workspaceRequestIds), eq(requestStatuses.statusId, statusId)))
+          .where(
+            and(
+              eq(requestStatuses.workspaceId, workspaceId),
+              inArray(requestStatuses.requestId, workspaceRequestIds),
+              eq(requestStatuses.statusId, statusId),
+            ),
+          )
           .run()
       }
       const requestIds = workspaceRequestIds.all()
       const statuses = requestIds.flatMap(({ id }) =>
-        workflow.statuses.map((status) => ({ requestId: id, statusId: status.id, quantity: 0 })),
+        workflow.statuses.map((status) => ({ workspaceId, requestId: id, statusId: status.id, quantity: 0 })),
       )
       if (statuses.length) tx.insert(requestStatuses).values(statuses).onConflictDoNothing().run()
     })
@@ -1599,16 +1722,25 @@ export class SqliteRepository implements Repository {
     db: DatabaseExecutor,
     input: { id: string; from: string; to: string; count: number; filePath: string; order?: number },
   ) {
+    const workspaceId = this.workspace()
     const from = db
       .select({ quantity: requestStatuses.quantity })
       .from(requestStatuses)
-      .where(and(eq(requestStatuses.requestId, input.id), eq(requestStatuses.statusId, input.from)))
+      .where(
+        and(
+          eq(requestStatuses.workspaceId, workspaceId),
+          eq(requestStatuses.requestId, input.id),
+          eq(requestStatuses.statusId, input.from),
+        ),
+      )
       .get()
     if (!from || from.quantity < input.count) throw new Error('invalid move')
     const target = db
       .select({ quantity: requestStatuses.quantity })
       .from(requestStatuses)
-      .where(and(eq(requestStatuses.requestId, input.id), eq(requestStatuses.statusId, input.to)))
+      .where(
+        and(eq(requestStatuses.workspaceId, workspaceId), eq(requestStatuses.requestId, input.id), eq(requestStatuses.statusId, input.to)),
+      )
       .get()
     if (!target) throw new Error('invalid target status')
     db.update(requestStatuses)
@@ -1616,14 +1748,22 @@ export class SqliteRepository implements Repository {
         quantity: sql`${requestStatuses.quantity} - ${input.count}`,
         sortOrder: sql`CASE WHEN ${requestStatuses.quantity} - ${input.count} = 0 THEN NULL ELSE ${requestStatuses.sortOrder} END`,
       })
-      .where(and(eq(requestStatuses.requestId, input.id), eq(requestStatuses.statusId, input.from)))
+      .where(
+        and(
+          eq(requestStatuses.workspaceId, workspaceId),
+          eq(requestStatuses.requestId, input.id),
+          eq(requestStatuses.statusId, input.from),
+        ),
+      )
       .run()
     db.update(requestStatuses)
       .set({
         quantity: sql`${requestStatuses.quantity} + ${input.count}`,
         sortOrder: sql`CASE WHEN ${requestStatuses.quantity} = 0 THEN ${input.order ?? null} ELSE ${requestStatuses.sortOrder} END`,
       })
-      .where(and(eq(requestStatuses.requestId, input.id), eq(requestStatuses.statusId, input.to)))
+      .where(
+        and(eq(requestStatuses.workspaceId, workspaceId), eq(requestStatuses.requestId, input.id), eq(requestStatuses.statusId, input.to)),
+      )
       .run()
     db.update(requests)
       .set({ filePath: input.filePath, updatedAt: Date.now() })

@@ -55,6 +55,7 @@ function SettingsPage() {
       <AppHeader
         active="settings"
         isAdmin={identity!.role === 'admin'}
+        isDeploymentAdmin={identity!.deploymentAdmin}
         showPlanner={session.printers.length > 0}
         navigationEnabled={hydrated}
       />

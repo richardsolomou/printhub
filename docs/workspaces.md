@@ -38,11 +38,11 @@ The Better Auth user remains deployment-global. Workspace authorization must com
 
 Roles:
 
-| Role     | Capabilities                                                                      |
-| -------- | --------------------------------------------------------------------------------- |
-| `owner`  | Full administration, ownership transfer, and workspace deletion                   |
-| `admin`  | Manage the board, planner, printers, storage, integrations, members, and requests |
-| `member` | Use the board and manage requests allowed by board privacy rules                  |
+| Role     | Capabilities                                                        |
+| -------- | ------------------------------------------------------------------- |
+| `owner`  | Full administration, ownership transfer, and workspace deletion     |
+| `admin`  | Manage the board, planner, printers, storage, members, and requests |
+| `member` | Use the board and manage requests allowed by board privacy rules    |
 
 The Better Auth admin plugin grants deployment-global powers and must not represent workspace administration. Self-hosted deployments may retain a separate deployment administrator capability, but hosted users must never receive global user-management access because they own a workspace.
 
@@ -60,7 +60,7 @@ The active workspace is stored in Better Auth's `session.activeOrganizationId`. 
 /api/upload
 ```
 
-Switching workspaces updates the authenticated session and invalidates workspace-scoped client state without navigating, so the current path, search parameters, and hash remain unchanged. A browser storage event refreshes other tabs using the same session.
+Switching workspaces updates the authenticated session and invalidates workspace-scoped client state without navigating, so the current path, search parameters, and hash remain unchanged. A browser storage event refreshes other tabs using the same session. Workspace-scoped server functions also carry the expected slug and resolve it through the caller's memberships, preventing stale tabs from operating on a different active workspace.
 
 Every server request resolves the active organization from the session, verifies membership, and scopes database access to that workspace. If the stored organization is missing or no longer accessible, PrintHub falls back to the user's personal workspace and repairs the session.
 
@@ -114,13 +114,15 @@ Deployment-scoped settings:
 - Product telemetry opt-out.
 - Authentication secret and other environment-controlled configuration.
 
+Deployment settings are exposed only through `/admin/:section`, which requires the deployment administrator capability. They never appear in the workspace `/settings/:section` route.
+
 Hosted deployments must encrypt workspace storage and integration credentials at rest. The existing encrypted integration-setting approach can be generalized instead of storing storage credentials as plain JSON.
 
 ## Storage isolation
 
 Each workspace resolves its own `StorageConfig` and `AssetStore`.
 
-For local storage, new workspaces receive a dedicated directory below the configured deployment storage root. For S3-compatible storage, the workspace configuration can point to its own bucket or prefix. Asset keys remain relative to the workspace's resolved store, so production stages keep their current readable layout.
+For local storage, every non-legacy workspace receives a mandatory directory below the operator-controlled `PRINTS_DIR`. Workspace admins cannot browse the host filesystem or select arbitrary server paths. For S3-compatible storage, PrintHub appends the workspace ID to the configured prefix. Asset keys remain relative to the workspace's resolved store, so identical user-supplied roots, buckets, prefixes, and asset keys still resolve to different physical locations.
 
 The migrated workspace keeps the existing local root or S3 prefix unchanged. This avoids a large, failure-prone file move during the database migration. New workspaces never share that unnamespaced legacy root.
 
@@ -143,7 +145,7 @@ A workspace runtime owns or resolves:
 - Asset store.
 - Asset generation queue.
 - Workspace event channel.
-- Workspace settings and integrations.
+- Workspace settings.
 
 Request handlers obtain a `WorkspaceContext` containing the authenticated user, workspace, membership role, scoped repository, service, and assets. Admin checks use the membership role from this context.
 

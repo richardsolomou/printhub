@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { usePostHog } from '@posthog/react'
+import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AppHeader } from '../client/components/AppHeader'
 import { Board } from '../client/components/Board'
@@ -119,17 +120,7 @@ function AuthenticatedHome() {
   const selectedRequest = requests.find((request) => request.id === openRequestId)
   return (
     <div className="relative flex h-dvh flex-col">
-      <AppHeader active="board" isAdmin={isAdmin} showPlanner={activePrinters.length > 0}>
-        <Button
-          type="button"
-          onClick={() => {
-            posthog.capture('upload_opened', { source: 'button' })
-            setUploadOpen(true)
-          }}
-        >
-          Add a print
-        </Button>
-      </AppHeader>
+      <AppHeader active="board" isAdmin={isAdmin} isDeploymentAdmin={me.deploymentAdmin} showPlanner={activePrinters.length > 0} />
       <BoardFilters
         search={search}
         facets={facets}
@@ -148,6 +139,18 @@ function AuthenticatedHome() {
           posthog.capture('request_viewed', { print_type: requests.find((request) => request.id === id)?.printType })
         }}
       />
+      <Button
+        type="button"
+        size="lg"
+        className="fixed right-4 bottom-4 z-10 shadow-lg max-sm:size-11 max-sm:rounded-full max-sm:p-0"
+        onClick={() => {
+          posthog.capture('upload_opened', { source: 'button' })
+          setUploadOpen(true)
+        }}
+      >
+        <Plus />
+        <span className="max-sm:sr-only">Add a print</span>
+      </Button>
       {!result && <div className="absolute inset-0 grid place-items-center bg-background/70 text-muted-foreground">Loading board…</div>}
       {fileDragActive && !uploadOpen && (
         <div className="pointer-events-none fixed inset-3 z-9 grid place-items-center rounded-lg border-2 border-dashed border-primary bg-background/85 font-heading text-lg tracking-wide uppercase text-primary">

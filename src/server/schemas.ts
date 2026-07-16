@@ -222,7 +222,6 @@ const s3StorageSchema = z.object({
 })
 
 export const storageSettingsSchema = z.discriminatedUnion('adapter', [localStorageSchema, s3StorageSchema])
-export const storageDirectorySchema = z.object({ path: z.string().trim().min(1).max(4_096) })
 
 export const moveCopiesSchema = z.object({
   id,

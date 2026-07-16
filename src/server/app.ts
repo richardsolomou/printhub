@@ -23,13 +23,13 @@ import { organization } from '../db/schema'
 
 const singleton = globalThis as typeof globalThis & { __printhub?: ReturnType<typeof createApp> }
 
-export function resolveStorageConfig(repository: Repository, workspaceId?: string): StorageConfig {
+export function resolveStorageConfig(repository: Repository): StorageConfig {
   const encrypted = repository.getSetting<EncryptedSetting>('storageEncrypted')
   if (encrypted) return decryptSetting<StorageConfig>(encrypted)
   const configured = repository.getSetting<StorageConfig>('storage')
   if (configured) return configured
   const root = process.env.PRINTS_DIR ?? '/prints'
-  return { adapter: 'local', root: workspaceId && workspaceId !== 'legacy-workspace' ? path.join(root, workspaceId) : root }
+  return { adapter: 'local', root }
 }
 
 export function resolveTelemetryConfig(repository: { getSetting<T>(key: string): T | undefined }): TelemetryConfig {
@@ -40,8 +40,15 @@ export function resolveBoardConfig(repository: Repository): BoardConfig {
   return repository.getSetting<BoardConfig>('board') ?? { privateRequests: false }
 }
 
-export function buildAssetStore(config: StorageConfig) {
-  return config.adapter === 's3' ? new S3AssetStore(config) : new LocalAssetStore(config.root)
+export function workspaceStorageConfig(config: StorageConfig, workspaceId?: string): StorageConfig {
+  if (!workspaceId || workspaceId === 'legacy-workspace') return config
+  if (config.adapter === 'local') return { ...config, root: path.join(config.root, workspaceId) }
+  return { ...config, prefix: [config.prefix, workspaceId].filter(Boolean).join('/') }
+}
+
+export function buildAssetStore(config: StorageConfig, workspaceId?: string) {
+  const workspaceConfig = workspaceStorageConfig(config, workspaceId)
+  return workspaceConfig.adapter === 's3' ? new S3AssetStore(workspaceConfig) : new LocalAssetStore(workspaceConfig.root)
 }
 
 export function hashInviteToken(token: string) {
@@ -166,12 +173,17 @@ async function createApp() {
     await staging.sweepUploads(activeUploadIds)
     const { cleanExpiredTusUploads } = await import('./uploads')
     await cleanExpiredTusUploads()
-    const activeWorkspace = async (headers: Headers) => {
+    const workspaceMembership = async (headers: Headers, workspaceSlug?: string) => {
       const session = await auth.api.getSession({ headers })
       if (!session) throw new Response('unauthenticated', { status: 401 })
       const baseIdentity = sessionIdentity(session)
       const personalWorkspace = repository!.ensurePersonalWorkspace(baseIdentity)
       const workspaces = repository!.listWorkspacesForUser(baseIdentity.id)
+      if (workspaceSlug) {
+        const membership = workspaces.find((candidate) => candidate.slug === workspaceSlug)
+        if (!membership) throw new Response('workspace not found', { status: 404 })
+        return { baseIdentity, membership }
+      }
       const membership =
         workspaces.find((candidate) => candidate.id === session.session.activeOrganizationId) ?? personalWorkspace ?? workspaces[0]
       if (!membership) throw new Response('workspace not found', { status: 404 })
@@ -181,8 +193,8 @@ async function createApp() {
       return { baseIdentity, membership }
     }
 
-    const workspace = async (headers: Headers) => {
-      const { baseIdentity, membership } = await activeWorkspace(headers)
+    const workspace = async (headers: Headers, workspaceSlug?: string) => {
+      const { baseIdentity, membership } = await workspaceMembership(headers, workspaceSlug)
       const workspaceRuntime = await runtime(membership)
       const workspaceIdentity: Identity = {
         ...baseIdentity,
@@ -262,8 +274,8 @@ async function createWorkspaceRuntime(
   telemetry: OptionalPostHogTelemetry,
 ) {
   const repository = rootRepository.scoped(workspace.id)
-  const storage = resolveStorageConfig(repository, workspace.id)
-  const assets = buildAssetStore(storage)
+  const storage = resolveStorageConfig(repository)
+  const assets = buildAssetStore(storage, workspace.id)
   const events = new LocalEventBus()
   let assertAssetsMutable: () => void = () => undefined
   const service = new PrintHubService(repository, assets, staging, events, telemetry, tusUploads, () => assertAssetsMutable())
@@ -293,10 +305,17 @@ async function createWorkspaceRuntime(
   await recoverStorage()
   repository.reconcileWorkflow()
   assetQueue = new AssetGenerationQueue(repository, assets, events, telemetry)
-  const storageMigration = new StorageMigrationCoordinator(repository, assets, storage, assetQueue, buildAssetStore, async () => {
-    events.publish('settings.changed')
-    await resetApp()
-  })
+  const storageMigration = new StorageMigrationCoordinator(
+    repository,
+    assets,
+    storage,
+    assetQueue,
+    (config) => buildAssetStore(config, workspace.id),
+    async () => {
+      events.publish('settings.changed')
+      await resetApp()
+    },
+  )
   assertAssetsMutable = () => storageMigration.assertAssetsMutable()
   if (storageReady && !storageMigration.active()) assetQueue.backfill()
   if (storageReady) storageMigration.resume()

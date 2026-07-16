@@ -33,13 +33,11 @@ import {
   socialProviderSettingsSchema,
   smtpEmailSettingsSchema,
   storageSettingsSchema,
-  storageDirectorySchema,
   telemetrySettingsSchema,
   updateRequestSchema,
 } from './schemas'
 import { normalizePrinterProfile, type PlatePlannerDraft, type PrinterProfile } from '../core/platePlanner'
 import { STORAGE_MIGRATION_SETTING } from './storageMigration'
-import { storageDirectories } from './storageDirectories'
 
 const INVITE_TTL = 7 * 24 * 60 * 60 * 1000
 
@@ -69,8 +67,8 @@ function integrationConfig(instance: Awaited<ReturnType<typeof app>>): Integrati
 const workspaceSlugSchema = z.string().trim().min(1).max(100)
 const workspaceInputSchema = z.object({ workspaceSlug: workspaceSlugSchema })
 const inWorkspace = <T extends z.ZodType>(schema: T) => z.intersection(schema, workspaceInputSchema)
-const workspaceContext = async (instance: Awaited<ReturnType<typeof app>>, _workspaceSlug?: string) =>
-  instance.workspace(getRequest().headers)
+const workspaceContext = async (instance: Awaited<ReturnType<typeof app>>, workspaceSlug?: string) =>
+  instance.workspace(getRequest().headers, workspaceSlug)
 const workspaceAdmin = async (instance: Awaited<ReturnType<typeof app>>, workspaceSlug?: string) => {
   const context = await workspaceContext(instance, workspaceSlug)
   if (context.identity.role !== 'admin') throw new Response('forbidden', { status: 403 })
@@ -105,13 +103,13 @@ export const switchWorkspace = createServerFn({ method: 'POST' })
 
 export const sessionInfo = createServerFn({ method: 'GET' })
   .validator(z.object({ workspaceSlug: workspaceSlugSchema.optional() }))
-  .handler(async () =>
+  .handler(async ({ data }) =>
     rpc(async () => {
       const instance = await app()
       const identity = await instance.identity(getRequest().headers)
       const authenticated = identity ? await instance.requireIdentity(getRequest().headers) : undefined
       const workspaces = authenticated ? instance.listWorkspaces(authenticated.id) : []
-      const context = authenticated ? await instance.workspace(getRequest().headers) : undefined
+      const context = authenticated ? await instance.workspace(getRequest().headers, data.workspaceSlug) : undefined
       const storedPrinters = context?.repository.getSetting<PrinterProfile[]>('plate-planner-profiles')
       const printers = (storedPrinters ?? []).map(normalizePrinterProfile).map((profile) =>
         profile.printType === 'filament'
@@ -625,7 +623,7 @@ function maskStorageMigration(migration: StorageMigration | undefined) {
 }
 
 function resolveStorageInput(data: StorageConfig, current: StorageConfig): StorageConfig {
-  if (data.adapter === 'local') return data
+  if (data.adapter === 'local') return { adapter: 'local', root: path.resolve(process.env.PRINTS_DIR ?? '/prints') }
   const secretAccessKey = data.secretAccessKey || (current.adapter === 's3' ? current.secretAccessKey : '')
   if (!secretAccessKey) throw new Response('missing secret access key', { status: 400 })
   const prefix = data.prefix?.trim().replace(/^\/+|\/+$/g, '') ?? ''
@@ -730,26 +728,6 @@ export const getStorageSettings = createServerFn({ method: 'GET' })
     }),
   )
 
-export const listStorageDirectories = createServerFn({ method: 'POST' })
-  .validator(inWorkspace(storageDirectorySchema))
-  .handler(async ({ data }) =>
-    rpc(async () => {
-      const instance = await app()
-      await workspaceAdmin(instance, data.workspaceSlug)
-      if (!path.isAbsolute(data.path)) throw new Response('folder path must be absolute', { status: 400 })
-      const directory = path.resolve(data.path)
-      let directories: Awaited<ReturnType<typeof storageDirectories>>
-      try {
-        directories = await storageDirectories(directory)
-      } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code
-        const message = code === 'EACCES' ? 'folder is not readable' : code === 'ENOTDIR' ? 'path is not a folder' : 'folder does not exist'
-        throw new Response(message, { status: 400 })
-      }
-      return { path: directory, directories }
-    }),
-  )
-
 export const getStorageMigration = createServerFn({ method: 'GET' })
   .validator(workspaceInputSchema)
   .handler(async ({ data }) =>
@@ -829,7 +807,7 @@ export const updateStorageSettings = createServerFn({ method: 'POST' })
         throw new Response('storage can only be changed while the board is empty and no uploads are in flight', { status: 409 })
       }
 
-      const candidate = buildAssetStore(config)
+      const candidate = buildAssetStore(config, context.workspace.id)
       try {
         await candidate.initialize()
         await candidate.writable()

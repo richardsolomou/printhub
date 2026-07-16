@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { check, customType, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { check, customType, foreignKey, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 const isoDate = customType<{ data: Date; driverData: string }>({
   dataType: () => 'text',
@@ -189,6 +189,7 @@ export const requests = sqliteTable(
     check('requests_print_type_check', sql`${table.printType} IN ('resin', 'filament') OR ${table.printType} IS NULL`),
     index('requests_created').on(table.createdAt),
     index('requests_workspace_created').on(table.workspaceId, table.createdAt),
+    uniqueIndex('requests_workspace_id_unique').on(table.workspaceId, table.id),
     index('requests_print_type').on(table.printType),
     index('requests_printer_id').on(table.printerId),
     index('requests_owner_user_id').on(table.ownerUserId),
@@ -198,14 +199,22 @@ export const requests = sqliteTable(
 export const requestStatuses = sqliteTable(
   'request_statuses',
   {
-    requestId: text('request_id')
+    workspaceId: text('workspace_id')
       .notNull()
-      .references(() => requests.id, { onDelete: 'cascade' }),
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    requestId: text('request_id').notNull(),
     statusId: text('status_id').notNull(),
     quantity: integer().notNull(),
     sortOrder: real('sort_order'),
   },
-  (table) => [primaryKey({ columns: [table.requestId, table.statusId] })],
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.requestId, table.statusId] }),
+    foreignKey({
+      columns: [table.workspaceId, table.requestId],
+      foreignColumns: [requests.workspaceId, requests.id],
+      name: 'request_statuses_workspace_request_fk',
+    }).onDelete('cascade'),
+  ],
 )
 
 export const operations = sqliteTable(
@@ -294,9 +303,10 @@ export const invites = sqliteTable(
 export const plateModelAnalysis = sqliteTable(
   'plate_model_analysis',
   {
-    requestId: text('request_id')
-      .primaryKey()
-      .references(() => requests.id, { onDelete: 'cascade' }),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    requestId: text('request_id').notNull(),
     widthMm: real('width_mm').notNull(),
     depthMm: real('depth_mm').notNull(),
     heightMm: real('height_mm').notNull(),
@@ -309,15 +319,24 @@ export const plateModelAnalysis = sqliteTable(
     analysisVersion: integer('analysis_version').notNull().default(1),
     estimatedVolumeMm3: real('estimated_volume_mm3'),
   },
-  (table) => [index('plate_model_analysis_content_hash').on(table.contentHash)],
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.requestId] }),
+    foreignKey({
+      columns: [table.workspaceId, table.requestId],
+      foreignColumns: [requests.workspaceId, requests.id],
+      name: 'plate_model_analysis_workspace_request_fk',
+    }).onDelete('cascade'),
+    index('plate_model_analysis_workspace_content_hash').on(table.workspaceId, table.contentHash),
+  ],
 )
 
 export const orientationAnalysisJobs = sqliteTable(
   'orientation_analysis_jobs',
   {
-    requestId: text('request_id')
-      .primaryKey()
-      .references(() => requests.id, { onDelete: 'cascade' }),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    requestId: text('request_id').notNull(),
     status: text({ enum: ['pending', 'running', 'ready', 'failed'] }).notNull(),
     analysisVersion: integer('analysis_version').notNull(),
     error: text(),
@@ -326,17 +345,24 @@ export const orientationAnalysisJobs = sqliteTable(
     finishedAt: integer('finished_at'),
   },
   (table) => [
+    primaryKey({ columns: [table.workspaceId, table.requestId] }),
+    foreignKey({
+      columns: [table.workspaceId, table.requestId],
+      foreignColumns: [requests.workspaceId, requests.id],
+      name: 'orientation_analysis_jobs_workspace_request_fk',
+    }).onDelete('cascade'),
     check('orientation_analysis_jobs_status_check', sql`${table.status} IN ('pending', 'running', 'ready', 'failed')`),
-    index('orientation_analysis_jobs_status').on(table.status, table.queuedAt),
+    index('orientation_analysis_jobs_workspace_status').on(table.workspaceId, table.status, table.queuedAt),
   ],
 )
 
 export const assetGenerationJobs = sqliteTable(
   'asset_generation_jobs',
   {
-    requestId: text('request_id')
+    workspaceId: text('workspace_id')
       .notNull()
-      .references(() => requests.id, { onDelete: 'cascade' }),
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    requestId: text('request_id').notNull(),
     stage: text({ enum: ['thumbnail', 'preview'] }).notNull(),
     status: text({ enum: ['pending', 'running', 'ready', 'skipped', 'failed'] }).notNull(),
     error: text(),
@@ -345,10 +371,15 @@ export const assetGenerationJobs = sqliteTable(
     finishedAt: integer('finished_at'),
   },
   (table) => [
+    foreignKey({
+      columns: [table.workspaceId, table.requestId],
+      foreignColumns: [requests.workspaceId, requests.id],
+      name: 'asset_generation_jobs_workspace_request_fk',
+    }).onDelete('cascade'),
     check('asset_generation_jobs_stage_check', sql`${table.stage} IN ('thumbnail', 'preview')`),
     check('asset_generation_jobs_status_check', sql`${table.status} IN ('pending', 'running', 'ready', 'skipped', 'failed')`),
-    primaryKey({ columns: [table.requestId, table.stage] }),
-    index('asset_generation_jobs_status').on(table.status, table.queuedAt),
+    primaryKey({ columns: [table.workspaceId, table.requestId, table.stage] }),
+    index('asset_generation_jobs_workspace_status').on(table.workspaceId, table.status, table.queuedAt),
   ],
 )
 

@@ -6,23 +6,11 @@ import { AccountPane } from './settings/AccountPane'
 import { AboutPane } from './settings/AboutPane'
 import { BoardPane } from './settings/BoardPane'
 import { DiagnosticsPane } from './settings/DiagnosticsPane'
-import { IntegrationsPane } from './settings/IntegrationsPane'
 import { PrintersPane } from './settings/PrintersPane'
 import { StoragePane } from './settings/StoragePane'
-import { TelemetryPane } from './settings/TelemetryPane'
 import { UsersPane } from './settings/UsersPane'
 
-export const settingsSections = [
-  'account',
-  'board',
-  'printers',
-  'users',
-  'storage',
-  'integrations',
-  'telemetry',
-  'diagnostics',
-  'about',
-] as const
+export const settingsSections = ['account', 'board', 'printers', 'users', 'storage', 'diagnostics', 'about'] as const
 export type SettingsSection = (typeof settingsSections)[number]
 
 const panes: { id: SettingsSection; label: string }[] = [
@@ -31,8 +19,6 @@ const panes: { id: SettingsSection; label: string }[] = [
   { id: 'printers', label: 'Printers' },
   { id: 'users', label: 'Users' },
   { id: 'storage', label: 'Storage' },
-  { id: 'integrations', label: 'Integrations' },
-  { id: 'telemetry', label: 'Telemetry' },
   { id: 'diagnostics', label: 'Diagnostics' },
   { id: 'about', label: 'About' },
 ]
@@ -42,10 +28,7 @@ export function isSettingsSection(value: string): value is SettingsSection {
 }
 
 export function SettingsPanes({ me, section }: { me: Identity; section: SettingsSection }) {
-  const availablePanes =
-    me.role === 'admin'
-      ? panes.filter((pane) => me.deploymentAdmin || (pane.id !== 'integrations' && pane.id !== 'telemetry'))
-      : panes.filter((pane) => pane.id === 'account')
+  const availablePanes = me.role === 'admin' ? panes : panes.filter((pane) => pane.id === 'account')
   return (
     <div className="grid items-start gap-6 sm:grid-cols-[170px_1fr]">
       <nav
@@ -73,8 +56,6 @@ export function SettingsPanes({ me, section }: { me: Identity; section: Settings
         {me.role === 'admin' && section === 'printers' && <PrintersPane />}
         {me.role === 'admin' && section === 'users' && <UsersPane me={me} />}
         {me.role === 'admin' && section === 'storage' && <StoragePane />}
-        {me.deploymentAdmin && section === 'integrations' && <IntegrationsPane />}
-        {me.deploymentAdmin && section === 'telemetry' && <TelemetryPane />}
         {me.role === 'admin' && section === 'diagnostics' && <DiagnosticsPane />}
         {me.role === 'admin' && section === 'about' && <AboutPane />}
       </div>

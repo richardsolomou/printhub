@@ -73,6 +73,38 @@ describe('app initialization', () => {
     await expect(fs.promises.stat(workspacePrints)).resolves.toMatchObject({ isDirectory: expect.any(Function) })
   })
 
+  it('gives every non-legacy workspace a private storage namespace', async () => {
+    const { workspaceStorageConfig } = await import('./app')
+
+    expect(workspaceStorageConfig({ adapter: 'local', root: '/shared' }, 'workspace-a')).toEqual({
+      adapter: 'local',
+      root: path.join('/shared', 'workspace-a'),
+    })
+    expect(workspaceStorageConfig({ adapter: 'local', root: '/shared' }, 'workspace-b')).toEqual({
+      adapter: 'local',
+      root: path.join('/shared', 'workspace-b'),
+    })
+    expect(
+      workspaceStorageConfig(
+        {
+          adapter: 's3',
+          endpoint: 'https://s3.example.com',
+          region: 'us-east-1',
+          bucket: 'prints',
+          prefix: 'shared',
+          accessKeyId: 'key',
+          secretAccessKey: 'secret',
+          forcePathStyle: false,
+        },
+        'workspace-a',
+      ),
+    ).toMatchObject({ prefix: 'shared/workspace-a' })
+    expect(workspaceStorageConfig({ adapter: 'local', root: '/legacy' }, 'legacy-workspace')).toEqual({
+      adapter: 'local',
+      root: '/legacy',
+    })
+  })
+
   it('preserves stale-looking parts with live durable sessions and removes expired ones', async () => {
     temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-app-uploads-'))
     process.env.DATA_DIR = path.join(temporary, 'data')
@@ -137,6 +169,7 @@ describe('app initialization', () => {
     const secondaryWorkspace = instance.repository.createWorkspace(primary.identity, 'Second farm')
     await instance.setActiveWorkspace(secondaryWorkspace.id, ownerHeaders)
     const [secondary, sameSecondary] = await Promise.all([instance.workspace(ownerHeaders), instance.workspace(ownerHeaders)])
+    const explicitPrimary = await instance.workspace(ownerHeaders, primary.workspace.slug)
     const primaryRequest = primary.repository.createRequest({
       name: 'Primary model',
       fileName: 'primary.stl',
@@ -146,6 +179,8 @@ describe('app initialization', () => {
     })
 
     expect(sameSecondary.service).toBe(secondary.service)
+    expect(explicitPrimary.service).toBe(primary.service)
+    expect(explicitPrimary.workspace.id).toBe(primary.workspace.id)
     expect(secondary.repository.getRequest(primaryRequest)).toBeUndefined()
 
     const outsiderSignup = await instance.auth.api.signUpEmail({
@@ -159,5 +194,6 @@ describe('app initialization', () => {
         .join('; '),
     })
     await expect(instance.setActiveWorkspace(secondaryWorkspace.id, outsiderHeaders)).rejects.toMatchObject({ status: 404 })
+    await expect(instance.workspace(outsiderHeaders, secondaryWorkspace.slug)).rejects.toMatchObject({ status: 404 })
   })
 })

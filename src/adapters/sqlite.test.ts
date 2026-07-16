@@ -34,6 +34,10 @@ function createPreDrizzleDatabase(file = ':memory:', version = 19) {
     DROP TABLE operations;
     DROP TABLE invites;
     DROP TABLE upload_sessions;
+    DROP TABLE asset_generation_jobs;
+    DROP TABLE orientation_analysis_jobs;
+    DROP TABLE plate_model_analysis;
+    DROP TABLE request_statuses;
     DROP TABLE requests;
     DROP TABLE organization;
     ALTER TABLE session DROP COLUMN activeOrganizationId;
@@ -86,6 +90,49 @@ function createPreDrizzleDatabase(file = ':memory:', version = 19) {
     CREATE INDEX requests_created ON requests(created_at DESC);
     CREATE INDEX requests_print_type ON requests(print_type);
     CREATE INDEX requests_printer_id ON requests(printer_id);
+    CREATE TABLE request_statuses (
+      request_id TEXT NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+      status_id TEXT NOT NULL,
+      quantity INTEGER NOT NULL,
+      sort_order REAL,
+      PRIMARY KEY(request_id, status_id)
+    );
+    CREATE TABLE plate_model_analysis (
+      request_id TEXT PRIMARY KEY REFERENCES requests(id) ON DELETE CASCADE,
+      width_mm REAL NOT NULL,
+      depth_mm REAL NOT NULL,
+      height_mm REAL NOT NULL,
+      analyzed_at INTEGER NOT NULL,
+      orientation_quaternion TEXT,
+      orientation_island_count INTEGER,
+      orientation_risk REAL,
+      orientation_candidates TEXT,
+      content_hash TEXT,
+      analysis_version INTEGER NOT NULL DEFAULT 1,
+      estimated_volume_mm3 REAL
+    );
+    CREATE INDEX plate_model_analysis_content_hash ON plate_model_analysis(content_hash);
+    CREATE TABLE orientation_analysis_jobs (
+      request_id TEXT PRIMARY KEY REFERENCES requests(id) ON DELETE CASCADE,
+      status TEXT NOT NULL,
+      analysis_version INTEGER NOT NULL,
+      error TEXT,
+      queued_at INTEGER NOT NULL,
+      started_at INTEGER,
+      finished_at INTEGER
+    );
+    CREATE INDEX orientation_analysis_jobs_status ON orientation_analysis_jobs(status, queued_at);
+    CREATE TABLE asset_generation_jobs (
+      request_id TEXT NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+      stage TEXT NOT NULL,
+      status TEXT NOT NULL,
+      error TEXT,
+      queued_at INTEGER NOT NULL,
+      started_at INTEGER,
+      finished_at INTEGER,
+      PRIMARY KEY(request_id, stage)
+    );
+    CREATE INDEX asset_generation_jobs_status ON asset_generation_jobs(status, queued_at);
     CREATE TABLE upload_sessions (
       id TEXT PRIMARY KEY,
       owner_id TEXT NOT NULL,
@@ -503,7 +550,7 @@ describe('SqliteRepository contract', () => {
     expect(repository.countUsers()).toBe(2)
   })
 
-  it('isolates workspace requests, settings, uploads, and members', () => {
+  it('isolates workspace requests, printers, analyses, invites, uploads, and members', () => {
     const primary = repository.scoped('test-workspace')
     const secondaryWorkspace = repository.createWorkspace({ id: 'owner' }, 'Second farm')
     const secondary = repository.scoped(secondaryWorkspace.id)
@@ -523,6 +570,13 @@ describe('SqliteRepository contract', () => {
     })
     primary.setSetting('board', { privateRequests: true })
     secondary.setSetting('board', { privateRequests: false })
+    primary.setSetting('plate-planner-profiles', [{ id: 'primary-printer', name: 'Primary printer' }])
+    secondary.setSetting('plate-planner-profiles', [{ id: 'secondary-printer', name: 'Secondary printer' }])
+    primary.upsertPlateModelAnalyses([{ requestId: primaryRequest, widthMm: 10, depthMm: 20, heightMm: 30 }])
+    secondary.upsertPlateModelAnalyses([{ requestId: secondaryRequest, widthMm: 40, depthMm: 50, heightMm: 60 }])
+    primary.upsertPlateModelAnalyses([{ requestId: secondaryRequest, widthMm: 1, depthMm: 1, heightMm: 1 }])
+    primary.createInvite({ id: 'primary-invite', tokenHash: 'primary-token', role: 'admin', expiresAt: Date.now() + 60_000 })
+    secondary.createInvite({ id: 'secondary-invite', tokenHash: 'secondary-token', role: 'requester', expiresAt: Date.now() + 60_000 })
     primary.createUploadSession('primary-upload', 'owner', Date.now() + 60_000, 3)
     secondary.createUploadSession('secondary-upload', 'owner', Date.now() + 60_000, 3)
 
@@ -532,6 +586,22 @@ describe('SqliteRepository contract', () => {
     expect(secondary.getRequest(secondaryRequest)).toBeTruthy()
     expect(primary.getSetting('board')).toEqual({ privateRequests: true })
     expect(secondary.getSetting('board')).toEqual({ privateRequests: false })
+    expect(primary.getSetting('plate-planner-profiles')).toEqual([{ id: 'primary-printer', name: 'Primary printer' }])
+    expect(secondary.getSetting('plate-planner-profiles')).toEqual([{ id: 'secondary-printer', name: 'Secondary printer' }])
+    expect(primary.listPlateModelAnalyses()).toEqual([expect.objectContaining({ requestId: primaryRequest, widthMm: 10 })])
+    expect(secondary.listPlateModelAnalyses()).toEqual([expect.objectContaining({ requestId: secondaryRequest, widthMm: 40 })])
+    expect(primary.listAssetGenerationJobs().every((job) => job.requestId === primaryRequest)).toBe(true)
+    expect(secondary.listAssetGenerationJobs().every((job) => job.requestId === secondaryRequest)).toBe(true)
+    expect(primary.listInvites()).toEqual([expect.objectContaining({ id: 'primary-invite' })])
+    expect(secondary.listInvites()).toEqual([expect.objectContaining({ id: 'secondary-invite' })])
+    expect(primary.findInvite('secondary-token')).toBeUndefined()
+    expect(secondary.findInvite('primary-token')).toBeUndefined()
+    expect(() =>
+      repository.database
+        .insert(requestStatuses)
+        .values({ workspaceId: 'test-workspace', requestId: secondaryRequest, statusId: 'forged', quantity: 1 })
+        .run(),
+    ).toThrow(/foreign key constraint failed/i)
     expect(primary.uploadIdsOwnedBy('owner')).toEqual(['primary-upload'])
     expect(secondary.uploadIdsOwnedBy('owner')).toEqual(['secondary-upload'])
     expect(secondary.listUsers()).toEqual([expect.objectContaining({ id: 'owner', workspaceRole: 'owner' })])
@@ -782,7 +852,7 @@ describe('SqliteRepository contract', () => {
     const migrated = new SqliteRepository(createDatabase(database))
 
     expect(database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get()).toBeUndefined()
-    expect(database.prepare('SELECT count(*) count FROM __drizzle_migrations').get()).toEqual({ count: 3 })
+    expect(database.prepare('SELECT count(*) count FROM __drizzle_migrations').get()).toEqual({ count: 4 })
     migrated.close()
   })
 
@@ -796,7 +866,7 @@ describe('SqliteRepository contract', () => {
 
       const bridged = new Database(file)
       expect(bridged.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get()).toBeUndefined()
-      expect(bridged.prepare('SELECT count(*) count FROM __drizzle_migrations').get()).toEqual({ count: 3 })
+      expect(bridged.prepare('SELECT count(*) count FROM __drizzle_migrations').get()).toEqual({ count: 4 })
       bridged.close()
       expect(await fs.promises.readdir(path.join(directory, 'backups'))).toHaveLength(1)
 
@@ -954,11 +1024,16 @@ describe('SqliteRepository contract', () => {
     })
     repository.database
       .delete(requestStatuses)
-      .where(and(eq(requestStatuses.requestId, id), eq(requestStatuses.statusId, 'done')))
+      .where(
+        and(eq(requestStatuses.workspaceId, 'test-workspace'), eq(requestStatuses.requestId, id), eq(requestStatuses.statusId, 'done')),
+      )
       .run()
     repository.reconcileWorkflow()
     expect(repository.getRequest(id)?.counts.done).toBe(0)
-    repository.database.insert(requestStatuses).values({ requestId: id, statusId: 'retired', quantity: 1 }).run()
+    repository.database
+      .insert(requestStatuses)
+      .values({ workspaceId: 'test-workspace', requestId: id, statusId: 'retired', quantity: 1 })
+      .run()
     expect(() => repository.reconcileWorkflow()).toThrow('still has copies')
   })
 
