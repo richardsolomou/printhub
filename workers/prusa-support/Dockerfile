@@ -13,9 +13,9 @@ RUN git init . \
     && sed -i 's|URL https://gmplib.org/download/gmp/gmp-6.2.1.tar.bz2|URL https://ftp.gnu.org/gnu/gmp/gmp-6.2.1.tar.bz2 https://gmplib.org/download/gmp/gmp-6.2.1.tar.bz2|' deps/+GMP/GMP.cmake
 COPY CMakeLists.txt main.cpp /src/src/printhub-support/
 RUN printf '\nadd_subdirectory(printhub-support)\n' >> /src/src/CMakeLists.txt
-RUN --mount=type=cache,id=printhub-prusa-deps,target=/src/deps/build \
+RUN --mount=type=cache,id=printhub-prusa-deps-v2,target=/src/deps/build \
     cmake -S deps -B deps/build -DCMAKE_BUILD_TYPE=Release \
-      -DPrusaSlicer_deps_PACKAGE_EXCLUDES='^(Catch2|NanoSVG|OCCT|OpenCSG|wxWidgets)$' \
+      -DPrusaSlicer_deps_PACKAGE_EXCLUDES='^(Catch2|OCCT|OpenCSG|wxWidgets)$' \
     && cmake --build deps/build --parallel 1 \
     && cmake -S . -B build -DSLIC3R_GUI=OFF -DSLIC3R_STATIC=ON -DSLIC3R_PCH=OFF -DSLIC3R_ENABLE_FORMAT_STEP=OFF -DSLIC3R_BUILD_TESTS=OFF \
       -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/src/deps/build/destdir/usr/local \
