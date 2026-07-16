@@ -72,6 +72,7 @@ export function RequestCard({
       )}
       data-draggable={canDrag}
       data-edge={closestEdge ?? undefined}
+      data-settling={settling || undefined}
       onClick={onOpen}
     >
       {request.hasThumbnail ? (

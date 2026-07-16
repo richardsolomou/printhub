@@ -433,7 +433,9 @@ async function moveCard(page: Page, name: string, from: string, to: string) {
   await page.mouse.down()
   await page.mouse.move(targetBox!.x + targetBox!.width / 2, targetBox!.y + 40, { steps: 12 })
   await page.mouse.up()
-  await expect(page.locator(`[data-status="${to}"] .card`).filter({ hasText: name })).toBeVisible()
+  const movedCard = page.locator(`[data-status="${to}"] .card`).filter({ hasText: name })
+  await expect(movedCard).toBeVisible()
+  await expect(movedCard).not.toHaveAttribute('data-settling', 'true')
 }
 
 async function verify3mfDownload(page: Page, expectedName: string) {
