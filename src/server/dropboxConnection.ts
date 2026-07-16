@@ -1,7 +1,6 @@
 import crypto from 'node:crypto'
 import type { DropboxConnectionConfig, IntegrationConfig, PublicDropboxConnection } from '../core/auth'
-import type { Repository } from '../core/types'
-import { getStoredIntegrationConfig, setStoredIntegrationConfig } from './integrations'
+import { getStoredIntegrationConfig, setStoredIntegrationConfig, type SettingStore } from './integrations'
 
 const AUTHORIZE_URL = 'https://www.dropbox.com/oauth2/authorize'
 const TOKEN_URL = 'https://api.dropboxapi.com/oauth2/token'
@@ -26,7 +25,7 @@ export function dropboxCallbackUrl(origin: string) {
   return `${origin}/api/storage/dropbox/callback`
 }
 
-export function publicDropboxConnection(repository: Repository, origin: string): PublicDropboxConnection {
+export function publicDropboxConnection(repository: SettingStore, origin: string): PublicDropboxConnection {
   const connection = getStoredIntegrationConfig(repository)?.dropbox
   return {
     configured: Boolean(connection?.clientId && connection.clientSecret),
@@ -40,7 +39,7 @@ export function publicDropboxConnection(repository: Repository, origin: string):
 }
 
 export function beginDropboxAuthorization(
-  repository: Repository,
+  repository: SettingStore,
   input: { clientId: string; clientSecret: string },
   adminId: string,
   origin: string,
@@ -77,7 +76,7 @@ export function beginDropboxAuthorization(
   return url.toString()
 }
 
-export async function completeDropboxAuthorization(repository: Repository, request: Request, adminId: string) {
+export async function completeDropboxAuthorization(repository: SettingStore, request: Request, adminId: string) {
   const url = new URL(request.url)
   const code = url.searchParams.get('code')
   const state = url.searchParams.get('state')
@@ -135,12 +134,12 @@ export async function completeDropboxAuthorization(repository: Repository, reque
   return pending.returnTo
 }
 
-export function disconnectDropbox(repository: Repository) {
+export function disconnectDropbox(repository: SettingStore) {
   const config = integrationConfig(repository)
   setStoredIntegrationConfig(repository, { ...config, dropbox: undefined })
 }
 
-function integrationConfig(repository: Repository): IntegrationConfig {
+function integrationConfig(repository: SettingStore): IntegrationConfig {
   return getStoredIntegrationConfig(repository) ?? { passwordEnabled: true }
 }
 

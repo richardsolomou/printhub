@@ -237,9 +237,14 @@ describe('PrintHubService crash recovery', () => {
     repository.database
       .update(requestStatuses)
       .set({ quantity: 0 })
-      .where(and(eq(requestStatuses.requestId, id), eq(requestStatuses.statusId, 'todo')))
+      .where(
+        and(eq(requestStatuses.workspaceId, 'test-workspace'), eq(requestStatuses.requestId, id), eq(requestStatuses.statusId, 'todo')),
+      )
       .run()
-    repository.database.insert(requestStatuses).values({ requestId: id, statusId: 'retired', quantity: 1 }).run()
+    repository.database
+      .insert(requestStatuses)
+      .values({ workspaceId: 'test-workspace', requestId: id, statusId: 'retired', quantity: 1 })
+      .run()
     await assets.ensureMoved('todo/model.stl', 'retired/model.stl')
     repository.database.update(requests).set({ filePath: 'retired/model.stl' }).where(eq(requests.id, id)).run()
     repository.beginOperation(crypto.randomUUID(), {

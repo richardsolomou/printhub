@@ -3,7 +3,7 @@
 
 # PrintHub
 
-**A private, self-hosted 3D-print production queue for resin and filament printers.**
+**A private 3D-print production queue for resin and filament printers, available self-hosted or as a managed service.**
 
 Collect STL requests, plan resin and filament build plates, and track every copy from **Queue → Printing → Finishing → Ready**—whether you print for friends, run a side gig, or manage a production business.
 
@@ -36,9 +36,11 @@ Along the way, PrintHub provides:
 - Reordering and withdrawal controls that preserve everyone else's queue priority.
 - Automatic database migrations, backups, health checks, and optional SMTP notifications.
 
-## Why self-hosted? 🔒
+## Self-hosted or managed 🔒
 
-Customer models, previews, request history, and production data stay in infrastructure you control. PrintHub has no public model gallery, marketplace, mandatory vendor account, or hosted file library.
+PrintHub can run as a single self-hosted appliance or as a multi-tenant hosted service. Every account gets a private workspace with its own board, planner, members, settings, and storage configuration, and users can also join other workspaces by invitation.
+
+Self-hosted installations keep the application, database, files, model analysis, planner state, previews, and production history under the operator's control. Hosted deployments manage the application while each workspace can choose local, S3-compatible, or connected cloud storage. Every local folder, cloud folder, or S3 prefix receives an enforced workspace namespace. PrintHub does not provide a public model gallery, marketplace, printer-vendor account, or mandatory hosted file library.
 
 Anonymous usage telemetry is enabled by default, never includes model or request data, and can be disabled at any time.
 
@@ -66,12 +68,13 @@ Open `http://localhost:3010`. The first account created becomes the admin.
 
 ## Configuration ⚙️
 
-Most settings—including printers, materials, storage, authentication, and email—are managed in the admin UI.
+Workspace Settings manage printers, members, board behavior, workspace deletion, and workspace storage. The separate deployment Admin area manages authentication providers, SMTP delivery, telemetry, and diagnostics.
 
-| Variable     | Default   | Purpose                                                          |
-| ------------ | --------- | ---------------------------------------------------------------- |
-| `DATA_DIR`   | `/data`   | Database, migration backups, upload staging, and encrypted keys. |
-| `PRINTS_DIR` | `/prints` | Default local model storage.                                     |
+| Variable          | Default   | Purpose                                                                                    |
+| ----------------- | --------- | ------------------------------------------------------------------------------------------ |
+| `DATA_DIR`        | `/data`   | Database, migration backups, upload staging, and encrypted keys.                           |
+| `PRINTS_DIR`      | `/prints` | Default local storage folder shown during setup.                                           |
+| `PRINTHUB_HOSTED` | `false`   | Enables hosted signup semantics without assigning the first account deployment-wide admin. |
 
 For a custom domain, set `BETTER_AUTH_URL` to the public origin, add it to `BETTER_AUTH_TRUSTED_ORIGINS`, and configure your reverse proxy to preserve the original host and protocol. See `.env.example` for authentication and SMTP overrides.
 

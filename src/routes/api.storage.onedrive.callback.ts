@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { app } from '../server/app'
+import { app, deploymentSettings } from '../server/app'
 import { completeOneDriveAuthorization, OneDrivePermissionError } from '../server/oneDriveConnection'
 import { withRequestContext } from '../server/requestContext'
 
@@ -14,7 +14,7 @@ export const Route = createFileRoute('/api/storage/onedrive/callback')({
             const instance = await app()
             const identity = await instance.requireIdentity(request.headers)
             if (identity.role !== 'admin') throw new Response('forbidden', { status: 403 })
-            returnTo = await completeOneDriveAuthorization(instance.repository, request, identity.id)
+            returnTo = await completeOneDriveAuthorization(deploymentSettings(instance.repository), request, identity.id)
             outcome = 'connected'
           } catch (error) {
             if (error instanceof OneDrivePermissionError) {

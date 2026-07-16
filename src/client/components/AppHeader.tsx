@@ -3,22 +3,23 @@ import { Link } from '@tanstack/react-router'
 import { Layers3, LayoutDashboard, Settings } from 'lucide-react'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { AccountMenu } from './AccountMenu'
 import { Brand } from './Brand'
 
-type AppView = 'board' | 'planner' | 'settings'
+type AppView = 'board' | 'planner' | 'settings' | 'account' | 'admin'
 
 export function AppHeader({
   active,
   isAdmin,
+  isDeploymentAdmin = false,
   showPlanner = true,
   navigationEnabled = true,
-  children,
 }: {
   active: AppView
   isAdmin: boolean
+  isDeploymentAdmin?: boolean
   showPlanner?: boolean
   navigationEnabled?: boolean
-  children?: ReactNode
 }) {
   return (
     <header
@@ -42,17 +43,18 @@ export function AppHeader({
         {isAdmin && showPlanner && (
           <AppHeaderLink active={active === 'planner'} enabled={navigationEnabled} to="/planner" label="Planner" icon={<Layers3 />} />
         )}
-        <AppHeaderLink
-          active={active === 'settings'}
-          enabled={navigationEnabled}
-          to="/settings/$section"
-          params={{ section: 'account' }}
-          label="Settings"
-          icon={<Settings />}
-        />
+        {isAdmin && (
+          <AppHeaderLink
+            active={active === 'settings'}
+            enabled={navigationEnabled}
+            to="/settings/$section"
+            label="Settings"
+            icon={<Settings />}
+          />
+        )}
       </nav>
-      <span className="flex-1 max-sm:hidden" />
-      <div className="flex h-8 min-w-24 items-center justify-end gap-2 max-sm:ml-auto max-sm:min-w-8">{children}</div>
+      <span className="flex-1" />
+      <AccountMenu isDeploymentAdmin={isDeploymentAdmin} />
     </header>
   )
 }
@@ -61,14 +63,12 @@ function AppHeaderLink({
   active,
   enabled,
   to,
-  params,
   label,
   icon,
 }: {
   active: boolean
   enabled: boolean
   to: '/' | '/planner' | '/settings/$section'
-  params?: { section: 'account' }
   label: string
   icon: ReactNode
 }) {
@@ -78,18 +78,21 @@ function AppHeaderLink({
     active && 'bg-background shadow-sm hover:bg-background',
     !enabled && 'pointer-events-none opacity-50',
   )
-  if (to === '/settings/$section') {
-    return (
-      <Link to={to} params={params!} className={className} aria-current={active ? 'page' : undefined}>
-        {icon}
-        {label}
-      </Link>
-    )
-  }
-  return (
-    <Link to={to} className={className} aria-current={active ? 'page' : undefined}>
+  const content = (
+    <>
       {icon}
       {label}
+    </>
+  )
+  if (to === '/settings/$section')
+    return (
+      <Link to={to} params={{ section: 'board' }} className={className} aria-current={active ? 'page' : undefined}>
+        {content}
+      </Link>
+    )
+  return (
+    <Link to={to} className={className} aria-current={active ? 'page' : undefined}>
+      {content}
     </Link>
   )
 }

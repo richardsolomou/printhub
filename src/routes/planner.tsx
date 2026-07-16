@@ -71,11 +71,12 @@ function PlannerPage() {
   const search = Route.useSearch()
   const navigate = Route.useNavigate()
   const { data: session } = useSuspenseQuery(sessionQuery())
+  const workspaceSlug = session.identity?.workspaceSlug ?? ''
   const filters = filtersFromSearch(search, 'created-asc')
-  const { data, isFetching } = useQuery(requestsQuery(filters))
-  const { data: allData } = useQuery(requestsQuery({ sort: 'created-asc' }))
-  const { data: people = [] } = useQuery(peopleQuery())
-  const { data: storedPlanner } = useQuery(platePlannerQuery())
+  const { data, isFetching } = useQuery({ ...requestsQuery(workspaceSlug, filters), enabled: Boolean(workspaceSlug) })
+  const { data: allData } = useQuery({ ...requestsQuery(workspaceSlug, { sort: 'created-asc' }), enabled: Boolean(workspaceSlug) })
+  const { data: people = [] } = useQuery({ ...peopleQuery(workspaceSlug), enabled: Boolean(workspaceSlug) })
+  const { data: storedPlanner } = useQuery({ ...platePlannerQuery(workspaceSlug), enabled: Boolean(workspaceSlug) })
   const showPrintTypes = true
   const [printers, setPrinters] = useState(DEFAULT_PRINTERS)
   const [printerId, setPrinterId] = useState(DEFAULT_PRINTERS[0].id)
@@ -224,14 +225,14 @@ function PlannerPage() {
           skippedCount: result.skipped.length,
           savedAt: Date.now(),
         }
-        await savePlatePlannerDraft({ data: { draft } })
+        await savePlatePlannerDraft({ data: { workspaceSlug, draft } })
       }
     } catch (cause) {
       if (generation === generationRef.current) setError(cause instanceof Error ? cause.message : 'Could not generate a plate')
     } finally {
       // Generation only packs cached server analyses; background workers own STL analysis.
     }
-  }, [analyses, fingerprint, outstanding, printers])
+  }, [analyses, fingerprint, outstanding, printers, workspaceSlug])
 
   const downloadPlate = useCallback(async () => {
     if (!placements.length || exportingPlate) return
@@ -293,7 +294,7 @@ function PlannerPage() {
       geometries.set(requestId, await loadPlateGeometry(await response.arrayBuffer()))
       setGeometryRevision((current) => current + 1)
     })
-  }, [geometries, placements])
+  }, [geometries, placements, workspaceSlug])
 
   if (!session.identity) {
     return <main className="grid min-h-dvh place-items-center p-6">Sign in from the board to use the planner.</main>
@@ -304,7 +305,7 @@ function PlannerPage() {
 
   return (
     <div className="min-h-dvh max-w-full overflow-x-hidden bg-muted/20">
-      <AppHeader active="planner" isAdmin />
+      <AppHeader active="planner" isAdmin isDeploymentAdmin={session.identity.deploymentAdmin} />
       <main className="mx-auto w-full max-w-[1500px] min-w-0 p-3 sm:p-4 md:p-6">
         <BoardFilters
           search={search}
@@ -315,7 +316,13 @@ function PlannerPage() {
           ariaLabel="Planner filters"
           description="Only matching queued copies are included when PrintHub generates build plates."
           className="mb-4 rounded-xl border bg-card px-3 pb-2.5"
-          onChange={(patch, replace = false) => void navigate({ to: '/planner', search: updateRequestSearch(search, patch), replace })}
+          onChange={(patch, replace = false) =>
+            void navigate({
+              to: '/planner',
+              search: updateRequestSearch(search, patch),
+              replace,
+            })
+          }
         />
         {unfitRequests.length > 0 && (
           <Alert className="mb-4 border-amber-500/40 bg-amber-500/5">

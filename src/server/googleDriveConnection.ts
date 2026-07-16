@@ -1,8 +1,7 @@
 import crypto from 'node:crypto'
 import { GoogleDriveAssetStore } from '../adapters/googleDrive'
 import type { GoogleDriveConnectionConfig, IntegrationConfig, PublicCloudConnection } from '../core/auth'
-import type { Repository } from '../core/types'
-import { getStoredIntegrationConfig, setStoredIntegrationConfig } from './integrations'
+import { getStoredIntegrationConfig, setStoredIntegrationConfig, type SettingStore } from './integrations'
 
 const AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const TOKEN_URL = 'https://oauth2.googleapis.com/token'
@@ -20,7 +19,7 @@ export function googleDriveCallbackUrl(origin: string) {
   return `${origin}/api/storage/google-drive/callback`
 }
 
-export function publicGoogleDriveConnection(repository: Repository, origin: string): PublicCloudConnection {
+export function publicGoogleDriveConnection(repository: SettingStore, origin: string): PublicCloudConnection {
   const connection = getStoredIntegrationConfig(repository)?.googleDrive
   return {
     configured: Boolean(connection?.clientId && connection.clientSecret),
@@ -34,7 +33,7 @@ export function publicGoogleDriveConnection(repository: Repository, origin: stri
 }
 
 export function beginGoogleDriveAuthorization(
-  repository: Repository,
+  repository: SettingStore,
   input: { clientId: string; clientSecret: string },
   adminId: string,
   origin: string,
@@ -73,7 +72,7 @@ export function beginGoogleDriveAuthorization(
   return url.toString()
 }
 
-export async function completeGoogleDriveAuthorization(repository: Repository, request: Request, adminId: string) {
+export async function completeGoogleDriveAuthorization(repository: SettingStore, request: Request, adminId: string) {
   const url = new URL(request.url)
   const code = url.searchParams.get('code')
   const state = url.searchParams.get('state')
@@ -125,12 +124,12 @@ export async function completeGoogleDriveAuthorization(repository: Repository, r
   return pending.returnTo
 }
 
-export function disconnectGoogleDrive(repository: Repository) {
+export function disconnectGoogleDrive(repository: SettingStore) {
   const config = integrationConfig(repository)
   setStoredIntegrationConfig(repository, { ...config, googleDrive: undefined })
 }
 
-function integrationConfig(repository: Repository): IntegrationConfig {
+function integrationConfig(repository: SettingStore): IntegrationConfig {
   return getStoredIntegrationConfig(repository) ?? { passwordEnabled: true }
 }
 

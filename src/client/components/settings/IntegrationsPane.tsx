@@ -154,8 +154,8 @@ function ProviderCard({
                 onClick={() =>
                   void authClient.linkSocial({
                     provider: item.id,
-                    callbackURL: '/settings/integrations',
-                    errorCallbackURL: '/settings/integrations',
+                    callbackURL: '/admin/integrations',
+                    errorCallbackURL: '/admin/integrations',
                   })
                 }
               >

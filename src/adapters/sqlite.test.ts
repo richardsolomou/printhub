@@ -18,6 +18,7 @@ function insertUser(
     .insert(user)
     .values({ ...values, role: values.role ?? 'requester', emailVerified: true, createdAt: now, updatedAt: now })
     .run()
+  repository.addWorkspaceMember(values.id, values.role === 'admin' ? 'admin' : 'member')
 }
 
 function createPreDrizzleDatabase(file = ':memory:', version = 19) {
@@ -26,8 +27,48 @@ function createPreDrizzleDatabase(file = ':memory:', version = 19) {
   initialized.database.run(drizzleSql`PRAGMA foreign_keys = OFF`)
   database.exec(`
     DROP TABLE __drizzle_migrations;
+    DROP TABLE invitation;
+    DROP TABLE member;
+    DROP TABLE deployment_settings;
+    DROP TABLE settings;
+    DROP TABLE operations;
+    DROP TABLE invites;
     DROP TABLE upload_sessions;
+    DROP TABLE asset_generation_jobs;
+    DROP TABLE orientation_analysis_jobs;
+    DROP TABLE plate_model_analysis;
+    DROP TABLE request_statuses;
     DROP TABLE requests;
+    DROP TABLE organization;
+    ALTER TABLE session DROP COLUMN activeOrganizationId;
+    CREATE TABLE settings (
+      key TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE operations (
+      id TEXT PRIMARY KEY,
+      kind TEXT NOT NULL CHECK (kind IN ('move', 'delete', 'upload')),
+      request_id TEXT,
+      upload_id TEXT,
+      payload_json TEXT NOT NULL,
+      state TEXT NOT NULL CHECK (state IN ('prepared', 'assets_moved', 'committed')),
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX operations_state ON operations(state, created_at);
+    CREATE UNIQUE INDEX operations_active_request ON operations(request_id) WHERE request_id IS NOT NULL AND state <> 'committed';
+    CREATE UNIQUE INDEX operations_upload ON operations(upload_id) WHERE upload_id IS NOT NULL;
+    CREATE TABLE invites (
+      id TEXT PRIMARY KEY,
+      token_hash TEXT NOT NULL UNIQUE,
+      role TEXT NOT NULL CHECK (role IN ('admin', 'requester')),
+      label TEXT,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      used_at INTEGER,
+      used_by TEXT
+    );
     CREATE TABLE requests (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -49,6 +90,49 @@ function createPreDrizzleDatabase(file = ':memory:', version = 19) {
     CREATE INDEX requests_created ON requests(created_at DESC);
     CREATE INDEX requests_print_type ON requests(print_type);
     CREATE INDEX requests_printer_id ON requests(printer_id);
+    CREATE TABLE request_statuses (
+      request_id TEXT NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+      status_id TEXT NOT NULL,
+      quantity INTEGER NOT NULL,
+      sort_order REAL,
+      PRIMARY KEY(request_id, status_id)
+    );
+    CREATE TABLE plate_model_analysis (
+      request_id TEXT PRIMARY KEY REFERENCES requests(id) ON DELETE CASCADE,
+      width_mm REAL NOT NULL,
+      depth_mm REAL NOT NULL,
+      height_mm REAL NOT NULL,
+      analyzed_at INTEGER NOT NULL,
+      orientation_quaternion TEXT,
+      orientation_island_count INTEGER,
+      orientation_risk REAL,
+      orientation_candidates TEXT,
+      content_hash TEXT,
+      analysis_version INTEGER NOT NULL DEFAULT 1,
+      estimated_volume_mm3 REAL
+    );
+    CREATE INDEX plate_model_analysis_content_hash ON plate_model_analysis(content_hash);
+    CREATE TABLE orientation_analysis_jobs (
+      request_id TEXT PRIMARY KEY REFERENCES requests(id) ON DELETE CASCADE,
+      status TEXT NOT NULL,
+      analysis_version INTEGER NOT NULL,
+      error TEXT,
+      queued_at INTEGER NOT NULL,
+      started_at INTEGER,
+      finished_at INTEGER
+    );
+    CREATE INDEX orientation_analysis_jobs_status ON orientation_analysis_jobs(status, queued_at);
+    CREATE TABLE asset_generation_jobs (
+      request_id TEXT NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+      stage TEXT NOT NULL,
+      status TEXT NOT NULL,
+      error TEXT,
+      queued_at INTEGER NOT NULL,
+      started_at INTEGER,
+      finished_at INTEGER,
+      PRIMARY KEY(request_id, stage)
+    );
+    CREATE INDEX asset_generation_jobs_status ON asset_generation_jobs(status, queued_at);
     CREATE TABLE upload_sessions (
       id TEXT PRIMARY KEY,
       owner_id TEXT NOT NULL,
@@ -456,14 +540,156 @@ describe('SqliteRepository contract', () => {
     insertUser(repository, { id: 'u1', name: 'Maker', email: 'maker@example.com', color: '#fa0' })
     insertUser(repository, { id: 'u2', name: 'Zed', email: 'zed@example.com', role: 'admin' })
     expect(repository.listUsers()).toEqual([
-      { id: 'u2', email: 'zed@example.com', name: 'Zed', role: 'admin' },
-      { id: 'u1', email: 'maker@example.com', name: 'Maker', role: 'requester' },
+      { id: 'u2', email: 'zed@example.com', name: 'Zed', image: undefined, role: 'admin', workspaceRole: 'admin' },
+      { id: 'u1', email: 'maker@example.com', name: 'Maker', image: undefined, role: 'requester', workspaceRole: 'member' },
     ])
     expect(repository.listPeople()).toEqual([
       { id: 'u1', name: 'Maker', color: '#fa0' },
       { id: 'u2', name: 'Zed', color: undefined },
     ])
     expect(repository.countUsers()).toBe(2)
+  })
+
+  it('isolates workspace requests, printers, analyses, invites, uploads, and members', () => {
+    const primary = repository.scoped('test-workspace')
+    const secondaryWorkspace = repository.createWorkspace({ id: 'owner' }, 'Second farm')
+    const secondary = repository.scoped(secondaryWorkspace.id)
+    const primaryRequest = primary.createRequest({
+      name: 'Primary model',
+      fileName: 'primary.stl',
+      filePath: 'todo/primary.stl',
+      quantity: 1,
+      ownerUserId: 'owner',
+    })
+    const secondaryRequest = secondary.createRequest({
+      name: 'Secondary model',
+      fileName: 'secondary.stl',
+      filePath: 'todo/secondary.stl',
+      quantity: 1,
+      ownerUserId: 'owner',
+    })
+    primary.setSetting('board', { privateRequests: true })
+    secondary.setSetting('board', { privateRequests: false })
+    primary.setSetting('plate-planner-profiles', [{ id: 'primary-printer', name: 'Primary printer' }])
+    secondary.setSetting('plate-planner-profiles', [{ id: 'secondary-printer', name: 'Secondary printer' }])
+    primary.upsertPlateModelAnalyses([{ requestId: primaryRequest, widthMm: 10, depthMm: 20, heightMm: 30 }])
+    secondary.upsertPlateModelAnalyses([{ requestId: secondaryRequest, widthMm: 40, depthMm: 50, heightMm: 60 }])
+    primary.upsertPlateModelAnalyses([{ requestId: secondaryRequest, widthMm: 1, depthMm: 1, heightMm: 1 }])
+    primary.createInvite({ id: 'primary-invite', tokenHash: 'primary-token', role: 'admin', expiresAt: Date.now() + 60_000 })
+    secondary.createInvite({ id: 'secondary-invite', tokenHash: 'secondary-token', role: 'requester', expiresAt: Date.now() + 60_000 })
+    primary.createUploadSession('primary-upload', 'owner', Date.now() + 60_000, 3)
+    secondary.createUploadSession('secondary-upload', 'owner', Date.now() + 60_000, 3)
+
+    expect(primary.getRequest(primaryRequest)).toBeTruthy()
+    expect(primary.getRequest(secondaryRequest)).toBeUndefined()
+    expect(secondary.getRequest(primaryRequest)).toBeUndefined()
+    expect(secondary.getRequest(secondaryRequest)).toBeTruthy()
+    expect(primary.getSetting('board')).toEqual({ privateRequests: true })
+    expect(secondary.getSetting('board')).toEqual({ privateRequests: false })
+    expect(primary.getSetting('plate-planner-profiles')).toEqual([{ id: 'primary-printer', name: 'Primary printer' }])
+    expect(secondary.getSetting('plate-planner-profiles')).toEqual([{ id: 'secondary-printer', name: 'Secondary printer' }])
+    expect(primary.listPlateModelAnalyses()).toEqual([expect.objectContaining({ requestId: primaryRequest, widthMm: 10 })])
+    expect(secondary.listPlateModelAnalyses()).toEqual([expect.objectContaining({ requestId: secondaryRequest, widthMm: 40 })])
+    expect(primary.listAssetGenerationJobs().every((job) => job.requestId === primaryRequest)).toBe(true)
+    expect(secondary.listAssetGenerationJobs().every((job) => job.requestId === secondaryRequest)).toBe(true)
+    expect(primary.listInvites()).toEqual([expect.objectContaining({ id: 'primary-invite' })])
+    expect(secondary.listInvites()).toEqual([expect.objectContaining({ id: 'secondary-invite' })])
+    expect(primary.findInvite('secondary-token')).toBeUndefined()
+    expect(secondary.findInvite('primary-token')).toBeUndefined()
+    expect(() =>
+      repository.database
+        .insert(requestStatuses)
+        .values({ workspaceId: 'test-workspace', requestId: secondaryRequest, statusId: 'forged', quantity: 1 })
+        .run(),
+    ).toThrow(/foreign key constraint failed/i)
+    expect(primary.uploadIdsOwnedBy('owner')).toEqual(['primary-upload'])
+    expect(secondary.uploadIdsOwnedBy('owner')).toEqual(['secondary-upload'])
+    expect(secondary.listUsers()).toEqual([expect.objectContaining({ id: 'owner', workspaceRole: 'owner' })])
+  })
+
+  it('allows matching workspace names for different owners only', () => {
+    const first = repository.createWorkspace({ id: 'owner' }, 'Test farm')
+    const second = repository.createWorkspace({ id: 'other' }, 'test farm')
+
+    expect(first.slug).toBe('test-farm')
+    expect(second.slug).toBe('test-farm-2')
+    expect(() => repository.createWorkspace({ id: 'owner' }, '  TEST FARM  ')).toThrow(expect.objectContaining({ status: 409 }))
+  })
+
+  it('provisions one personal workspace per membershipless user', () => {
+    const now = new Date()
+    repository.database
+      .insert(user)
+      .values({
+        id: 'personal-owner',
+        name: 'Personal Owner',
+        email: 'personal@example.com',
+        emailVerified: true,
+        createdAt: now,
+        updatedAt: now,
+        role: 'requester',
+      })
+      .run()
+    repository.addWorkspaceMember('personal-owner', 'member')
+    const previousNodeEnv = process.env.NODE_ENV
+    process.env.NODE_ENV = 'production'
+    try {
+      const first = repository.ensurePersonalWorkspace({ id: 'personal-owner', name: 'Personal Owner' })
+      const second = repository.ensurePersonalWorkspace({ id: 'personal-owner', name: 'Personal Owner' })
+
+      expect(second).toEqual(first)
+      expect(repository.listWorkspacesForUser('personal-owner')).toEqual([
+        expect.objectContaining({ id: first.id, role: 'owner' }),
+        expect.objectContaining({ id: 'test-workspace', role: 'member' }),
+      ])
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv
+    }
+  })
+
+  it('lets an existing matching account accept an emailed invite exactly once', () => {
+    const now = new Date()
+    repository.database
+      .insert(user)
+      .values({
+        id: 'invitee',
+        name: 'Invitee',
+        email: 'invitee@example.com',
+        emailVerified: true,
+        createdAt: now,
+        updatedAt: now,
+        role: 'requester',
+      })
+      .run()
+    repository.createInvite({
+      id: 'emailed-invite',
+      tokenHash: 'emailed-token',
+      role: 'admin',
+      recipientEmail: 'invitee@example.com',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    expect(repository.acceptInviteForUser('emailed-token', Date.now(), { id: 'invitee', email: 'invitee@example.com' })).toBeTruthy()
+    expect(repository.acceptInviteForUser('emailed-token', Date.now(), { id: 'invitee', email: 'invitee@example.com' })).toBeUndefined()
+    expect(repository.workspaceSlugForInvite('emailed-token', Date.now())).toBe('test-workspace')
+    expect(repository.listWorkspacesForUser('invitee')).toEqual([expect.objectContaining({ id: 'test-workspace', role: 'admin' })])
+  })
+
+  it('keeps an emailed invite usable after the wrong account tries to accept it', () => {
+    const expiresAt = Date.now() + 60_000
+    repository.createInvite({
+      id: 'bound-invite',
+      tokenHash: 'bound-token',
+      role: 'requester',
+      recipientEmail: 'right@example.com',
+      expiresAt,
+    })
+
+    expect(() => repository.acceptInviteForUser('bound-token', Date.now(), { id: 'wrong-user', email: 'wrong@example.com' })).toThrow(
+      expect.objectContaining({ status: 403 }),
+    )
+    expect(repository.findInvite('bound-token')).toMatchObject({ usedAt: undefined })
+    expect(repository.workspaceSlugForInvite('bound-token', Date.now())).toBe('test-workspace')
   })
 
   it('persists operation state transitions with the associated metadata commit', () => {
@@ -579,12 +805,118 @@ describe('SqliteRepository contract', () => {
     migrated.close()
   })
 
+  it('assigns legacy workspace ownership to the oldest user when no admin exists', () => {
+    const database = createPreDrizzleDatabase()
+    const insert = database.prepare(
+      'INSERT INTO user (id,name,email,emailVerified,createdAt,updatedAt,role,banned,twoFactorEnabled) VALUES (?,?,?,?,?,?,?,?,?)',
+    )
+    insert.run('newer', 'Newer', 'newer@example.com', 1, 2, 2, 'requester', 0, 0)
+    insert.run('oldest', 'Oldest', 'oldest@example.com', 1, 1, 1, 'requester', 0, 0)
+
+    const migrated = new SqliteRepository(createDatabase(database))
+
+    expect(database.prepare("SELECT userId FROM member WHERE organizationId='legacy-workspace' AND role='owner'").get()).toEqual({
+      userId: 'oldest',
+    })
+    migrated.close()
+  })
+
+  it('keeps migrated users in the legacy workspace with their existing settings', () => {
+    const database = createPreDrizzleDatabase()
+    database
+      .prepare('INSERT INTO user (id,name,email,emailVerified,createdAt,updatedAt,role,banned,twoFactorEnabled) VALUES (?,?,?,?,?,?,?,?,?)')
+      .run('owner', 'Owner', 'owner@example.com', 1, 1, 1, 'admin', 0, 0)
+    database
+      .prepare('INSERT INTO settings (key,value_json,updated_at) VALUES (?,?,?)')
+      .run('storage', JSON.stringify({ adapter: 'local', root: '/srv/printhub/prints' }), 1)
+    database
+      .prepare('INSERT INTO settings (key,value_json,updated_at) VALUES (?,?,?)')
+      .run('plate-planner-profiles', JSON.stringify([{ id: 'legacy-printer', name: 'Legacy printer' }]), 1)
+
+    const migrated = new SqliteRepository(createDatabase(database))
+    const workspace = migrated.ensurePersonalWorkspace({ id: 'owner', name: 'Owner' })
+
+    expect(workspace.id).toBe('legacy-workspace')
+    expect(migrated.listWorkspacesForUser('owner')).toHaveLength(1)
+    expect(migrated.scoped(workspace.id).getSetting('storage')).toEqual({ adapter: 'local', root: '/srv/printhub/prints' })
+    expect(migrated.scoped(workspace.id).getSetting('plate-planner-profiles')).toEqual([{ id: 'legacy-printer', name: 'Legacy printer' }])
+    migrated.close()
+  })
+
+  it('repairs the empty personal workspace created by the broken upgrade', () => {
+    const database = createPreDrizzleDatabase()
+    database
+      .prepare('INSERT INTO user (id,name,email,emailVerified,createdAt,updatedAt,role,banned,twoFactorEnabled) VALUES (?,?,?,?,?,?,?,?,?)')
+      .run('owner', 'Owner', 'owner@example.com', 1, 1, 1, 'admin', 0, 0)
+    const migrated = new SqliteRepository(createDatabase(database))
+    database.prepare("UPDATE organization SET personal_owner_id=NULL WHERE id='legacy-workspace'").run()
+    database
+      .prepare('INSERT INTO organization (id,name,slug,createdAt,personal_owner_id) VALUES (?,?,?,?,?)')
+      .run('accidental-workspace', "Owner's workspace", 'owner', new Date().toISOString(), 'owner')
+    database
+      .prepare('INSERT INTO member (id,organizationId,userId,role,createdAt) VALUES (?,?,?,?,?)')
+      .run('accidental-member', 'accidental-workspace', 'owner', 'owner', new Date().toISOString())
+
+    expect(migrated.ensurePersonalWorkspace({ id: 'owner', name: 'Owner' }).id).toBe('legacy-workspace')
+    expect(migrated.workspaceById('accidental-workspace')).toBeUndefined()
+    expect(migrated.listWorkspacesForUser('owner')).toHaveLength(1)
+    migrated.close()
+  })
+
+  it('preserves a personal workspace containing user data', () => {
+    const database = createPreDrizzleDatabase()
+    database
+      .prepare('INSERT INTO user (id,name,email,emailVerified,createdAt,updatedAt,role,banned,twoFactorEnabled) VALUES (?,?,?,?,?,?,?,?,?)')
+      .run('owner', 'Owner', 'owner@example.com', 1, 1, 1, 'admin', 0, 0)
+    const migrated = new SqliteRepository(createDatabase(database))
+    database.prepare("UPDATE organization SET personal_owner_id=NULL WHERE id='legacy-workspace'").run()
+    database
+      .prepare('INSERT INTO organization (id,name,slug,createdAt,personal_owner_id) VALUES (?,?,?,?,?)')
+      .run('personal-workspace', "Owner's workspace", 'owner', new Date().toISOString(), 'owner')
+    database
+      .prepare('INSERT INTO member (id,organizationId,userId,role,createdAt) VALUES (?,?,?,?,?)')
+      .run('personal-member', 'personal-workspace', 'owner', 'owner', new Date().toISOString())
+    database
+      .prepare('INSERT INTO settings (workspace_id,key,value_json,updated_at) VALUES (?,?,?,?)')
+      .run('personal-workspace', 'board', JSON.stringify({ privateRequests: true }), 1)
+
+    expect(migrated.ensurePersonalWorkspace({ id: 'owner', name: 'Owner' }).id).toBe('personal-workspace')
+    expect(migrated.workspaceById('personal-workspace')).toBeDefined()
+    migrated.close()
+  })
+
+  it('preserves request child rows while adding workspace scope', () => {
+    const database = createPreDrizzleDatabase()
+    database
+      .prepare('INSERT INTO user (id,name,email,emailVerified,createdAt,updatedAt,role,banned,twoFactorEnabled) VALUES (?,?,?,?,?,?,?,?,?)')
+      .run('owner', 'Owner', 'owner@example.com', 1, 1, 1, 'admin', 0, 0)
+    database
+      .prepare(
+        'INSERT INTO requests (id,name,file_name,file_path,quantity,requester_email,requester_name,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
+      )
+      .run('request-1', 'Model', 'model.stl', 'todo/model.stl', 1, 'owner@example.com', 'Owner', 1, 1)
+    database.prepare('INSERT INTO request_statuses (request_id,status_id,quantity) VALUES (?,?,?)').run('request-1', 'todo', 1)
+    database
+      .prepare('INSERT INTO asset_generation_jobs (request_id,stage,status,queued_at) VALUES (?,?,?,?)')
+      .run('request-1', 'thumbnail', 'pending', 1)
+
+    const migrated = new SqliteRepository(createDatabase(database))
+
+    expect(database.prepare("SELECT quantity FROM request_statuses WHERE request_id='request-1' AND status_id='todo'").get()).toEqual({
+      quantity: 1,
+    })
+    expect(database.prepare("SELECT status FROM asset_generation_jobs WHERE request_id='request-1' AND stage='thumbnail'").get()).toEqual({
+      status: 'pending',
+    })
+    migrated.close()
+  })
+
   it('uses only the Drizzle migration journal for fresh databases', () => {
     const database = new Database(':memory:')
     const migrated = new SqliteRepository(createDatabase(database))
 
     expect(database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get()).toBeUndefined()
-    expect(database.prepare('SELECT count(*) count FROM __drizzle_migrations').get()).toEqual({ count: 2 })
+    expect(database.prepare('SELECT count(*) count FROM __drizzle_migrations').get()).toEqual({ count: 4 })
     migrated.close()
   })
 
@@ -598,7 +930,7 @@ describe('SqliteRepository contract', () => {
 
       const bridged = new Database(file)
       expect(bridged.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get()).toBeUndefined()
-      expect(bridged.prepare('SELECT count(*) count FROM __drizzle_migrations').get()).toEqual({ count: 2 })
+      expect(bridged.prepare('SELECT count(*) count FROM __drizzle_migrations').get()).toEqual({ count: 4 })
       bridged.close()
       expect(await fs.promises.readdir(path.join(directory, 'backups'))).toHaveLength(1)
 
@@ -756,11 +1088,16 @@ describe('SqliteRepository contract', () => {
     })
     repository.database
       .delete(requestStatuses)
-      .where(and(eq(requestStatuses.requestId, id), eq(requestStatuses.statusId, 'done')))
+      .where(
+        and(eq(requestStatuses.workspaceId, 'test-workspace'), eq(requestStatuses.requestId, id), eq(requestStatuses.statusId, 'done')),
+      )
       .run()
     repository.reconcileWorkflow()
     expect(repository.getRequest(id)?.counts.done).toBe(0)
-    repository.database.insert(requestStatuses).values({ requestId: id, statusId: 'retired', quantity: 1 }).run()
+    repository.database
+      .insert(requestStatuses)
+      .values({ workspaceId: 'test-workspace', requestId: id, statusId: 'retired', quantity: 1 })
+      .run()
     expect(() => repository.reconcileWorkflow()).toThrow('still has copies')
   })
 

@@ -1,8 +1,7 @@
 import crypto from 'node:crypto'
 import { OneDriveAssetStore } from '../adapters/oneDrive'
 import type { IntegrationConfig, OneDriveConnectionConfig, PublicCloudConnection } from '../core/auth'
-import type { Repository } from '../core/types'
-import { getStoredIntegrationConfig, setStoredIntegrationConfig } from './integrations'
+import { getStoredIntegrationConfig, setStoredIntegrationConfig, type SettingStore } from './integrations'
 
 const AUTHORIZE_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize'
 const TOKEN_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/token'
@@ -20,7 +19,7 @@ export function oneDriveCallbackUrl(origin: string) {
   return `${origin}/api/storage/onedrive/callback`
 }
 
-export function publicOneDriveConnection(repository: Repository, origin: string): PublicCloudConnection {
+export function publicOneDriveConnection(repository: SettingStore, origin: string): PublicCloudConnection {
   const connection = getStoredIntegrationConfig(repository)?.oneDrive
   return {
     configured: Boolean(connection?.clientId && connection.clientSecret),
@@ -34,7 +33,7 @@ export function publicOneDriveConnection(repository: Repository, origin: string)
 }
 
 export function beginOneDriveAuthorization(
-  repository: Repository,
+  repository: SettingStore,
   input: { clientId: string; clientSecret: string },
   adminId: string,
   origin: string,
@@ -71,7 +70,7 @@ export function beginOneDriveAuthorization(
   return url.toString()
 }
 
-export async function completeOneDriveAuthorization(repository: Repository, request: Request, adminId: string) {
+export async function completeOneDriveAuthorization(repository: SettingStore, request: Request, adminId: string) {
   const url = new URL(request.url)
   const code = url.searchParams.get('code')
   const state = url.searchParams.get('state')
@@ -124,12 +123,12 @@ export async function completeOneDriveAuthorization(repository: Repository, requ
   return pending.returnTo
 }
 
-export function disconnectOneDrive(repository: Repository) {
+export function disconnectOneDrive(repository: SettingStore) {
   const config = integrationConfig(repository)
   setStoredIntegrationConfig(repository, { ...config, oneDrive: undefined })
 }
 
-function integrationConfig(repository: Repository): IntegrationConfig {
+function integrationConfig(repository: SettingStore): IntegrationConfig {
   return getStoredIntegrationConfig(repository) ?? { passwordEnabled: true }
 }
 

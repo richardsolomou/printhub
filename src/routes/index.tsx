@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { usePostHog } from '@posthog/react'
+import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AppHeader } from '../client/components/AppHeader'
 import { Board } from '../client/components/Board'
@@ -16,47 +17,60 @@ import { OnboardingProgress } from '../client/components/OnboardingProgress'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { peopleQuery, requestsQuery, sessionQuery } from '../client/queries'
 import { enabledPrinters } from '../client/fleet'
+import { useWorkspaceSlug } from '../client/workspace'
 export const Route = createFileRoute('/')({ validateSearch: validateRequestSearch, component: Home })
 
 function Home() {
   const queryClient = useQueryClient()
   const { data: session } = useSuspenseQuery(sessionQuery())
-  if (!session.identity) return <AuthScreen setupRequired={session.setupRequired} auth={session.auth} />
+  if (!session.identity) return <AuthScreen setupRequired={session.setupRequired} hosted={session.hosted} auth={session.auth} />
   if (session.identity.role === 'admin' && (!session.storageConfigured || !session.storageReady || !session.printersConfigured)) {
     return (
-      <main className="grid min-h-dvh place-items-center p-6">
-        <Card className="w-full max-w-[680px]">
-          <CardHeader className="gap-4">
-            <Brand />
-            <OnboardingProgress step={!session.storageConfigured || !session.storageReady ? 3 : 4} />
-          </CardHeader>
-          <CardContent>
-            {!session.storageConfigured || !session.storageReady ? (
-              <StoragePane onboarding onSaved={() => void queryClient.invalidateQueries({ queryKey: ['session'] })} />
-            ) : (
-              <PrintersPane onboarding onSaved={() => void queryClient.invalidateQueries({ queryKey: ['session'] })} />
-            )}
-          </CardContent>
-        </Card>
-      </main>
+      <div className="min-h-dvh">
+        <AppHeader
+          active="board"
+          isAdmin
+          isDeploymentAdmin={session.identity.deploymentAdmin}
+          showPlanner={false}
+          navigationEnabled={false}
+        />
+        <main className="grid min-h-[calc(100dvh-60px)] place-items-center p-6">
+          <Card className="w-full max-w-[680px]">
+            <CardHeader className="gap-4">
+              <Brand />
+              <OnboardingProgress
+                step={!session.storageConfigured || !session.storageReady ? 3 : 4}
+                accountLabel={session.hosted ? 'Account' : 'Admin'}
+              />
+            </CardHeader>
+            <CardContent>
+              {!session.storageConfigured || !session.storageReady ? (
+                <StoragePane onboarding onSaved={() => void queryClient.invalidateQueries({ queryKey: ['session'] })} />
+              ) : (
+                <PrintersPane onboarding onSaved={() => void queryClient.invalidateQueries({ queryKey: ['session'] })} />
+              )}
+            </CardContent>
+          </Card>
+        </main>
+      </div>
     )
   }
   return <AuthenticatedHome />
 }
 
 function AuthenticatedHome() {
+  const workspaceSlug = useWorkspaceSlug()
   const search = Route.useSearch()
   const navigate = Route.useNavigate()
   const {
     data: { identity, workflow, privateRequests, printers },
-  } = useSuspenseQuery(sessionQuery())
-  const me = identity!
-  const isAdmin = me.role === 'admin'
+  } = useSuspenseQuery(sessionQuery(workspaceSlug))
+  const isAdmin = identity?.role === 'admin'
   const hideRequester = privateRequests && !isAdmin
   const activePrinters = enabledPrinters(printers)
   const filters = filtersFromSearch(search)
-  const { data: result, isFetching } = useQuery(requestsQuery(filters))
-  const { data: people = [] } = useQuery(peopleQuery())
+  const { data: result, isFetching } = useQuery(requestsQuery(workspaceSlug, filters))
+  const { data: people = [] } = useQuery(peopleQuery(workspaceSlug))
   const requests = result?.requests ?? []
   const showPrintTypes = true
   const facets = result?.facets ?? { requesters: [], total: 0, available: 0 }
@@ -112,19 +126,11 @@ function AuthenticatedHome() {
   }, [posthog])
 
   const selectedRequest = requests.find((request) => request.id === openRequestId)
+  if (!identity) return null
+  const me = identity
   return (
     <div className="relative flex h-dvh flex-col">
-      <AppHeader active="board" isAdmin={isAdmin} showPlanner={activePrinters.length > 0}>
-        <Button
-          type="button"
-          onClick={() => {
-            posthog.capture('upload_opened', { source: 'button' })
-            setUploadOpen(true)
-          }}
-        >
-          Add a print
-        </Button>
-      </AppHeader>
+      <AppHeader active="board" isAdmin={isAdmin} isDeploymentAdmin={me.deploymentAdmin} showPlanner={activePrinters.length > 0} />
       <BoardFilters
         search={search}
         facets={facets}
@@ -143,6 +149,18 @@ function AuthenticatedHome() {
           posthog.capture('request_viewed', { print_type: requests.find((request) => request.id === id)?.printType })
         }}
       />
+      <Button
+        type="button"
+        size="lg"
+        className="fixed right-4 bottom-4 z-10 shadow-lg max-sm:size-11 max-sm:rounded-full max-sm:p-0"
+        onClick={() => {
+          posthog.capture('upload_opened', { source: 'button' })
+          setUploadOpen(true)
+        }}
+      >
+        <Plus />
+        <span className="max-sm:sr-only">Add a print</span>
+      </Button>
       {!result && <div className="absolute inset-0 grid place-items-center bg-background/70 text-muted-foreground">Loading board…</div>}
       {fileDragActive && !uploadOpen && (
         <div className="pointer-events-none fixed inset-3 z-9 grid place-items-center rounded-lg border-2 border-dashed border-primary bg-background/85 font-heading text-lg tracking-wide uppercase text-primary">

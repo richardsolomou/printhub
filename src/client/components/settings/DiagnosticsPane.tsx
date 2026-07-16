@@ -2,20 +2,20 @@ import { useQuery } from '@tanstack/react-query'
 import { CircleAlert } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Progress, ProgressLabel, ProgressValue } from '@/components/ui/progress'
 import { Spinner } from '@/components/ui/spinner'
 import { diagnosticsQuery } from '../../queries'
-import { SettingsActions, SettingsHeader, SettingsPage, SettingsSection } from './SettingsLayout'
+import { useWorkspaceSlug } from '../../workspace'
+import { SettingsHeader, SettingsPage, SettingsSection } from './SettingsLayout'
 
-export function DiagnosticsPane() {
-  const { data, error, isFetching, refetch } = useQuery(diagnosticsQuery())
+export function DiagnosticsPane({ embedded = false }: { embedded?: boolean }) {
+  const workspaceSlug = useWorkspaceSlug()
+  const { data, error } = useQuery(diagnosticsQuery(workspaceSlug))
   const backgroundJobs = data?.backgroundJobs ?? []
   const unfinishedJobs = backgroundJobs.filter((job) => !['ready', 'skipped'].includes(job.status))
-  return (
-    <SettingsPage>
-      <SettingsHeader title="Diagnostics" description="Inspect authentication, storage, database, upload, and asset-processing health." />
-      <SettingsSection>
+  const content = (
+    <>
+      <SettingsSection title={embedded ? 'Storage and processing' : undefined}>
         {!data && !error && (
           <p className="flex items-center gap-2 text-muted-foreground">
             <Spinner /> Checking system health…
@@ -29,18 +29,10 @@ export function DiagnosticsPane() {
         )}
         {data && (
           <dl className="grid grid-cols-[minmax(9rem,auto)_1fr] gap-x-4 gap-y-2.5 max-sm:grid-cols-1 [&_dt]:text-muted-foreground [&_dd]:m-0">
-            <dt>Version</dt>
-            <dd>{data.version}</dd>
             <dt>Storage</dt>
             <dd>
               {data.storage} · {data.storageReady ? 'ready' : 'unavailable'}
             </dd>
-            <dt>Authentication</dt>
-            <dd>
-              {[data.authentication.password && 'password', ...data.authentication.socialProviders].filter(Boolean).join(', ') || 'none'}
-            </dd>
-            <dt>Email</dt>
-            <dd>{data.authentication.smtpConfigured ? 'configured' : 'not configured'}</dd>
             <dt>Asset queue</dt>
             <dd>
               {data.queue.queued} queued · {data.queue.pending} running
@@ -49,12 +41,6 @@ export function DiagnosticsPane() {
             <dd>
               {data.incompleteUploads.count} · {formatBytes(data.incompleteUploads.bytes)}
             </dd>
-            <dt>Database</dt>
-            <dd>
-              {formatBytes(data.database.sizeBytes)} · integrity {data.database.integrity}
-            </dd>
-            <dt>Data disk free</dt>
-            <dd>{data.dataCapacity ? formatBytes(data.dataCapacity.freeBytes) : 'n/a'}</dd>
             <dt>Storage disk free</dt>
             <dd>{data.storageCapacity ? formatBytes(data.storageCapacity.freeBytes) : 'n/a for S3'}</dd>
           </dl>
@@ -108,12 +94,13 @@ export function DiagnosticsPane() {
           )}
         </SettingsSection>
       )}
-      <SettingsActions>
-        <Button type="button" variant="outline" disabled={isFetching} onClick={() => void refetch()}>
-          {isFetching && <Spinner />}
-          {isFetching ? 'Checking…' : 'Refresh diagnostics'}
-        </Button>
-      </SettingsActions>
+    </>
+  )
+  if (embedded) return content
+  return (
+    <SettingsPage>
+      <SettingsHeader title="Diagnostics" description="Inspect storage, uploads, and asset-processing health." />
+      {content}
     </SettingsPage>
   )
 }
@@ -153,7 +140,7 @@ function formatDuration(milliseconds: number) {
   return `${Math.round(minutes / 60)}h`
 }
 
-function formatBytes(bytes: number) {
+export function formatBytes(bytes: number) {
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
   let value = bytes
   let unit = 0
