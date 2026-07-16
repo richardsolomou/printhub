@@ -10,6 +10,7 @@ import { Progress } from '@/components/ui/progress'
 import { Spinner } from '@/components/ui/spinner'
 import { renderRowThumbnail } from '../rowThumb'
 import { isIOS, isPhone } from '../device'
+import { modelUploadRejection } from '../../core/modelFormat'
 import { DialogShell } from './DialogShell'
 import { ConfirmDialog } from './ConfirmDialog'
 import { LazyStlViewer } from './LazyStlViewer'
@@ -48,19 +49,16 @@ export function UploadForm({ initialFiles, onClose }: { initialFiles?: File[]; o
     const rejected: string[] = []
     const accepted: Entry[] = []
     for (const file of files) {
-      if (!/\.stl$/i.test(file.name)) {
-        rejected.push(`${file.name} (not an STL)`)
-        continue
-      }
-      if (file.size === 0 || file.size > MAX_FILE_BYTES) {
-        rejected.push(`${file.name} (over the 1 GB limit)`)
+      const rejection = modelUploadRejection(file)
+      if (rejection) {
+        rejected.push(rejection)
         continue
       }
       const entry: Entry = {
         key: `f${nextKey++}`,
         file,
         name: file.name
-          .replace(/\.stl$/i, '')
+          .replace(/\.(?:stl|3mf)$/i, '')
           .replace(/[_-]+/g, ' ')
           .trim(),
         quantity: '1',
@@ -89,7 +87,14 @@ export function UploadForm({ initialFiles, onClose }: { initialFiles?: File[]; o
     multiple: true,
     maxSize: MAX_FILE_BYTES,
     noClick: false,
-    accept: isIOS() ? undefined : { 'model/stl': ['.stl'], 'application/sla': ['.stl'] },
+    accept: isIOS()
+      ? undefined
+      : {
+          'model/stl': ['.stl'],
+          'application/sla': ['.stl'],
+          'model/3mf': ['.3mf'],
+          'application/vnd.ms-package.3dmanufacturing-3dmodel+xml': ['.3mf'],
+        },
     onDrop: (accepted, rejected) => {
       addFiles(accepted)
       if (rejected.length) setError(`Skipped: ${rejected.map(({ file }) => file.name).join(', ')}`)
@@ -100,7 +105,7 @@ export function UploadForm({ initialFiles, onClose }: { initialFiles?: File[]; o
     event.preventDefault()
     if (busy) return
     if (entries.length === 0) {
-      setError('Pick at least one STL first.')
+      setError('Pick at least one STL or 3MF first.')
       return
     }
     if (entries.some((entry) => !entry.printType)) {
@@ -155,7 +160,7 @@ export function UploadForm({ initialFiles, onClose }: { initialFiles?: File[]; o
             <Input {...dropzone.getInputProps()} className="sr-only" />
             <EmptyDescription>
               {entries.length === 0
-                ? 'Drop STLs here, or click to browse'
+                ? 'Drop STL or 3MF files here, or click to browse'
                 : `${entries.length} file${entries.length > 1 ? 's' : ''} — drop more or click to add`}
             </EmptyDescription>
           </Empty>

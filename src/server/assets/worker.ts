@@ -1,30 +1,37 @@
 import { parentPort, workerData } from 'node:worker_threads'
-import { generateAssets, generateVisualAssets } from './pipeline'
+import { generateAssets, generateVisualAssets, type AssetWants, type GeneratedAssets } from './pipeline'
+import { parseThreeMf, SUPPORTED_THREE_MF_PARSE_OPTIONS } from '../../core/mesh/threeMf'
+import type { ModelFormat } from '../../core/modelFormat'
 
 // worker_threads entry, bundled separately by `pnpm build` into
 // .output/server/assets-worker.mjs. One job per worker: the buffer arrives
 // transferred, results transfer back, and the process isolation means a
 // pathological mesh cannot stall or crash request handling.
-const {
-  file,
-  wants,
-  mode = 'combined',
-} = workerData as {
+const data = workerData as {
   file: Uint8Array
-  wants: { thumbnail: boolean; preview: boolean; orientation?: boolean; meshAnalysis?: boolean }
-  mode?: 'combined' | 'visual'
+  format: ModelFormat
+  wants?: AssetWants
+  mode?: 'combined' | 'visual' | 'validate'
 }
+const { file, format, mode = 'combined' } = data
+const wants = data.wants ?? { thumbnail: false, preview: false }
 
-const work =
-  mode === 'visual'
-    ? generateVisualAssets(file, wants, (thumbnailPng) => {
-        parentPort!.postMessage({ ok: true as const, stage: 'thumbnail' as const, thumbnailPng }, [thumbnailPng.buffer as ArrayBuffer])
+const work: Promise<GeneratedAssets> =
+  mode === 'validate'
+    ? Promise.resolve().then(() => {
+        parseThreeMf(file, SUPPORTED_THREE_MF_PARSE_OPTIONS)
+        return {}
       })
-    : generateAssets(file, wants)
+    : mode === 'visual'
+      ? generateVisualAssets(file, format, wants, (thumbnailPng) => {
+          const transfers = thumbnailPng.buffer instanceof ArrayBuffer ? [thumbnailPng.buffer] : []
+          parentPort!.postMessage({ ok: true as const, stage: 'thumbnail' as const, thumbnailPng }, transfers)
+        })
+      : generateAssets(file, format, wants)
 
 work.then(
   (generated) => {
-    const thumbnailPng = 'thumbnailPng' in generated ? (generated.thumbnailPng as Uint8Array | undefined) : undefined
+    const thumbnailPng = generated.thumbnailPng
     const transfers = [thumbnailPng?.buffer, generated.previewStl?.buffer].filter(
       (buffer): buffer is ArrayBuffer => buffer instanceof ArrayBuffer,
     )

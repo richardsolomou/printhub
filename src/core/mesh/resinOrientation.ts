@@ -17,6 +17,8 @@ export type ResinOrientation = {
   score: number
 }
 
+export type OrientationBounds = Pick<ResinOrientation, 'widthMm' | 'depthMm' | 'heightMm'>
+
 type Vector = { x: number; y: number; z: number }
 type TriangleMetrics = {
   vertices: [number, number, number]
@@ -69,6 +71,18 @@ export function rankResinOrientations(positions: Float32Array, limit = 8): Resin
     if (diverse.length >= limit) break
   }
   return diverse
+}
+
+export function measureOrientationBounds(positions: Float32Array, quaternion: QuaternionTuple): OrientationBounds {
+  const orientation = new THREE.Quaternion(...quaternion)
+  const bounds = new THREE.Box3()
+  const point = new THREE.Vector3()
+  for (let index = 0; index < positions.length; index += 3) {
+    point.set(positions[index], positions[index + 1], positions[index + 2]).applyQuaternion(orientation)
+    bounds.expandByPoint(point)
+  }
+  const size = bounds.getSize(new THREE.Vector3())
+  return { widthMm: size.x, depthMm: size.y, heightMm: size.z }
 }
 
 function isClearlyPreSupported(mesh: Mesh) {

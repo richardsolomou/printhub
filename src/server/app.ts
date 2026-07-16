@@ -21,6 +21,27 @@ import { acquireDataDirectoryLease, networkFilesystem } from './dataSafety'
 import { StorageMigrationCoordinator } from './storageMigration'
 
 const singleton = globalThis as typeof globalThis & { __printhub?: ReturnType<typeof createApp> }
+const EXPIRED_UPLOAD_CLEANUP_INTERVAL_MS = 60 * 60 * 1000
+
+export function startPeriodicExpiredUploadCleanup(cleanup: () => Promise<void>, intervalMs = EXPIRED_UPLOAD_CLEANUP_INTERVAL_MS) {
+  let stopped = false
+  let running: Promise<void> | undefined
+  const timer = setInterval(() => {
+    if (stopped || running) return
+    running = cleanup()
+      .catch((error) => logger.warn({ err: error }, 'expired upload cleanup failed'))
+      .finally(() => {
+        running = undefined
+      })
+  }, intervalMs)
+  timer.unref()
+
+  return async () => {
+    stopped = true
+    clearInterval(timer)
+    await running
+  }
+}
 
 export function resolveStorageConfig(repository: Repository): StorageConfig {
   return repository.getSetting<StorageConfig>('storage') ?? { adapter: 'local', root: process.env.PRINTS_DIR ?? '/prints' }
@@ -78,7 +99,10 @@ async function createApp() {
     const service = new PrintHubService(repository, assets, staging, events, telemetry, tusUploads, () => assertAssetsMutable())
     const auth = createAuth(repository.database, resolveAuthSecret(repository), {
       onUserCreated: () => events.publish('user.created'),
-      onUserDeleting: (userId) => service.removeOwnedRequests(userId),
+      onUserDeleting: async (userId) => {
+        const { withOwnedUploadLocks } = await import('./uploads')
+        await withOwnedUploadLocks(repository!, userId, () => service.removeOwnedRequests(userId))
+      },
       claimInvite: (token) => repository!.claimInvite(hashInviteToken(token), Date.now()),
       completeInvite: (id, userId) => repository!.completeInvite(id, userId),
       auth: { ...authConfig, passwordReset: authConfig.password && email !== undefined },
@@ -132,12 +156,10 @@ async function createApp() {
     }
     await recoverStorage()
     repository.reconcileWorkflow()
-    for (const uploadId of repository.expireUploads(Date.now())) {
-      await staging.remove(staging.uploadPart(uploadId))
-    }
-    await staging.sweepUploads(repository.activeUploadIds(Date.now()))
     const { cleanExpiredTusUploads } = await import('./uploads')
-    await cleanExpiredTusUploads()
+    const cleanExpiredUploads = () => cleanExpiredTusUploads(repository, (uploadId) => staging.remove(staging.uploadPart(uploadId)))
+    await cleanExpiredUploads()
+    await staging.sweepUploads(repository.activeUploadIds(Date.now()))
     assetQueue = new AssetGenerationQueue(repository, assets, events, telemetry)
     const storageMigration = new StorageMigrationCoordinator(repository, assets, storage, assetQueue, buildAssetStore, async () => {
       events.publish('settings.changed')
@@ -149,11 +171,15 @@ async function createApp() {
     if (storageReady) storageMigration.resume()
     const refreshDiagnostics = () => diagnostics(repository!, storage, assets)
     if (storageReady) await refreshDiagnostics()
+    const stopExpiredUploadCleanup = startPeriodicExpiredUploadCleanup(async () => {
+      await cleanExpiredUploads()
+    })
     let closed = false
     const close = async () => {
       if (closed) return
       closed = true
       try {
+        await stopExpiredUploadCleanup()
         events.close()
         await assetQueue.shutdown()
       } finally {

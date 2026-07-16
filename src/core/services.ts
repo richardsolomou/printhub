@@ -25,11 +25,14 @@ import {
   orientationAnalysisReady,
   type PrinterProfile,
 } from './platePlanner'
+import { requireModelFormat } from './modelFormat'
 
 export type NewRequestInput = Omit<NewPrintRequest, 'ownerUserId'>
 export type NewUploadedRequestInput = Omit<NewRequestInput, 'filePath' | 'previewPath' | 'thumbnailPath'>
 
 export class PrintHubService {
+  private uploadFinalizations = new Map<string, Promise<string>>()
+
   constructor(
     private repository: Repository,
     private assets: AssetStore,
@@ -50,11 +53,17 @@ export class PrintHubService {
     const profiles = (this.repository.getSetting<PrinterProfile[]>('plate-planner-profiles') ?? []).map(normalizePrinterProfile)
     const printers = new Map(profiles.map((profile) => [profile.id, printerSummary(profile)] as const))
     const analyses = new Map(this.repository.listPlateModelAnalyses().map((analysis) => [analysis.requestId, analysis] as const))
+    const previewJobs = new Map(
+      this.repository
+        .listAssetGenerationJobs()
+        .filter((job) => job.stage === 'preview')
+        .map((job) => [job.requestId, job] as const),
+    )
     return {
       facets: result.facets,
       requests: result.requests.map(
         ({
-          fileName: _fileName,
+          fileName,
           filePath: _filePath,
           ownerUserId,
           ownerEmail: _ownerEmail,
@@ -77,6 +86,7 @@ export class PrintHubService {
                 )
               : undefined
           const analysis = analyses.get(request.id)
+          const previewJob = previewJobs.get(request.id)
           const analysisReady =
             printType && modelAnalysisReady(analysis) && (printType === 'filament' || orientationAnalysisReady(analysis))
           const compatiblePrinterIds = analysisReady
@@ -107,6 +117,9 @@ export class PrintHubService {
             compatiblePrinterIds,
             fitState,
             hasPreview: !!previewPath,
+            previewStatus: previewJob?.status,
+            previewError: previewJob?.error,
+            modelFormat: requireModelFormat(fileName),
             canEdit: admin || (mine && !started),
             canDelete: admin || (mine && !started),
           }
@@ -141,6 +154,19 @@ export class PrintHubService {
   }
 
   async createUploadedRequest(uploadId: string, partPath: string, input: NewUploadedRequestInput, identity: Identity) {
+    const key = `${identity.id}\0${uploadId}`
+    const existing = this.uploadFinalizations.get(key)
+    if (existing) return existing
+    const finalization = this.createUploadedRequestOnce(uploadId, partPath, input, identity)
+    this.uploadFinalizations.set(key, finalization)
+    try {
+      return await finalization
+    } finally {
+      if (this.uploadFinalizations.get(key) === finalization) this.uploadFinalizations.delete(key)
+    }
+  }
+
+  private async createUploadedRequestOnce(uploadId: string, partPath: string, input: NewUploadedRequestInput, identity: Identity) {
     this.assertAssetsMutable()
     const completed = this.repository.getCompletedUpload(uploadId, identity.id)
     if (completed) return completed

@@ -2,6 +2,8 @@ import zlib from 'node:zlib'
 import { Readable } from 'node:stream'
 import { createFileRoute } from '@tanstack/react-router'
 import { app } from '../../server/app'
+import { attachmentContentDisposition } from '../../server/contentDisposition'
+import { readRequestedFileAsset } from '../../server/fileAsset'
 import { withRequestContext } from '../../server/requestContext'
 
 export const Route = createFileRoute('/api/files/$requestId')({
@@ -16,28 +18,28 @@ export const Route = createFileRoute('/api/files/$requestId')({
 
           const url = new URL(request.url)
           const wantPreview = url.searchParams.get('preview') === '1'
-          const relativePath = wantPreview && printRequest.previewPath ? printRequest.previewPath : printRequest.filePath
-          let asset: { stream: ReadableStream; size: number }
+          let requestedAsset: Awaited<ReturnType<typeof readRequestedFileAsset>>
           try {
-            asset = await instance.assets.read(relativePath)
+            requestedAsset = await readRequestedFileAsset(printRequest, wantPreview, (path) => instance.assets.read(path))
           } catch {
             return new Response('file missing in storage', { status: 404 })
           }
+          if (!requestedAsset) return new Response('preview not available', { status: 404 })
+          const { path: relativePath, fileName, asset, previewFallback } = requestedAsset
 
           const headers = new Headers({
-            'Content-Type': 'model/stl',
-            // A request's file never changes, so let the browser keep it.
-            'Cache-Control': 'private, max-age=31536000, immutable',
+            'Content-Type': relativePath.toLowerCase().endsWith('.3mf') ? 'model/3mf' : 'model/stl',
+            'Cache-Control': wantPreview ? 'private, no-cache' : 'private, max-age=31536000, immutable',
             // Uncompressed size, so the client can show progress across gzip.
             'X-File-Size': String(asset.size),
           })
+          if (previewFallback) headers.set('X-Preview-Fallback', 'original')
           if (url.searchParams.get('inline') !== '1') {
-            const safeName = printRequest.fileName.replace(/["\r\n]/g, '')
-            headers.set('Content-Disposition', `attachment; filename="${safeName}"`)
+            headers.set('Content-Disposition', attachmentContentDisposition(fileName))
           }
 
-          // STL binary gzips ~2-3x; fastest level keeps NAS CPU cheap.
-          if ((request.headers.get('accept-encoding') ?? '').includes('gzip')) {
+          // Binary STL gzips ~2-3x; 3MF is already a ZIP archive.
+          if (!relativePath.toLowerCase().endsWith('.3mf') && (request.headers.get('accept-encoding') ?? '').includes('gzip')) {
             headers.set('Content-Encoding', 'gzip')
             const gzip = zlib.createGzip({ level: zlib.constants.Z_BEST_SPEED })
             return new Response(

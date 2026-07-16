@@ -146,7 +146,7 @@ function AuthenticatedHome() {
       {!result && <div className="absolute inset-0 grid place-items-center bg-background/70 text-muted-foreground">Loading board…</div>}
       {fileDragActive && !uploadOpen && (
         <div className="pointer-events-none fixed inset-3 z-9 grid place-items-center rounded-lg border-2 border-dashed border-primary bg-background/85 font-heading text-lg tracking-wide uppercase text-primary">
-          Drop STLs to add prints
+          Drop STL or 3MF files to add prints
         </div>
       )}
       {uploadOpen && (

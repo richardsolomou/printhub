@@ -1,21 +1,23 @@
 import crypto from 'node:crypto'
 import { initialStatus, statusById } from './workflow'
+import { requireModelFormat } from './modelFormat'
 
 // Keys are storage-agnostic, '/'-separated paths shared by every AssetStore.
 const baseName = (key: string) => key.split('/').pop() ?? key
 
 export function createAssetKey(originalFileName: string) {
+  const extension = requireModelFormat(originalFileName)
   const base =
     baseName(originalFileName)
-      .replace(/\.stl$/i, '')
+      .replace(/\.(?:stl|3mf)$/i, '')
       .replace(/[^\w.\- ]+/g, '_')
       .trim()
       .slice(0, 120) || 'model'
-  return `${initialStatus().folder}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}__${base}.stl`
+  return `${initialStatus().folder}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}__${base}.${extension}`
 }
 
 export function previewKey(originalKey: string) {
-  return `.printhub/previews/${baseName(originalKey)}`
+  return `.printhub/previews/${baseName(originalKey).replace(/\.(?:stl|3mf)$/i, '')}.stl`
 }
 
 const THUMBNAIL_EXTENSIONS: Record<string, string> = { 'image/png': 'png', 'image/webp': 'webp', 'image/jpeg': 'jpg' }
@@ -23,7 +25,7 @@ const THUMBNAIL_EXTENSIONS: Record<string, string> = { 'image/png': 'png', 'imag
 export function thumbnailKey(originalKey: string, mime: string) {
   const extension = THUMBNAIL_EXTENSIONS[mime]
   if (!extension) throw new Response('unsupported thumbnail type', { status: 400 })
-  return `.printhub/thumbnails/${baseName(originalKey).replace(/\.stl$/i, '')}.${extension}`
+  return `.printhub/thumbnails/${baseName(originalKey).replace(/\.(?:stl|3mf)$/i, '')}.${extension}`
 }
 
 export function thumbnailMime(key: string) {

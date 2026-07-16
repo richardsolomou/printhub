@@ -1,8 +1,11 @@
 import fs from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
-import { expect, type Locator, type Page, test } from '@playwright/test'
+import { expect, type Locator, type Page, type Request as PlaywrightRequest, test } from '@playwright/test'
+import Database from 'better-sqlite3'
 import { strFromU8, unzipSync } from 'fflate'
 import { boxStl } from './fixtures/stl'
+import { boxThreeMf } from './fixtures/threeMf'
 
 const email = 'owner@example.com'
 const password = 'correct-horse-battery-staple'
@@ -18,7 +21,7 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Your private 3D-print production queue' })).toBeVisible()
-  await expect(page.getByText('Accept STL requests and take resin and filament prints from upload to collection.')).toBeVisible()
+  await expect(page.getByText('Accept STL and 3MF requests and take resin and filament prints from upload to collection.')).toBeVisible()
   await screenshot(page, 'onboarding-desktop')
   await mobileScreenshot(page, 'onboarding-mobile')
 
@@ -44,16 +47,85 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
   await upload(page, {
     name: 'resin-cube',
     printType: 'Resin',
-    buffer: boxStl('resin-cube', 10, 10, 10),
+    buffer: boxThreeMf(10, 10, 10),
+    format: '3mf',
   })
   const resinCard = requestCard(page, 'resin-cube')
   await expect(resinCard).toContainText('Resin')
   await expect(resinCard).not.toContainText('Fits selected printer')
   await mobileScreenshot(page, 'single-resin-board-mobile')
+  const previewResponsePromise = page.waitForResponse(
+    (response) => response.url().includes('/api/files/') && response.url().includes('preview=1'),
+  )
   await resinCard.click()
+  const previewUrl = new URL((await previewResponsePromise).url())
+  previewUrl.searchParams.delete('inline')
+  const previewDownload = await page.request.get(previewUrl.toString())
+  expect(previewDownload.headers()['content-type']).toContain('model/stl')
+  expect(previewDownload.headers()['content-disposition']).toContain('resin-cube.stl')
   await expect(page.getByRole('combobox', { name: 'Print type', exact: true })).toContainText('Resin')
+  await expect(page.locator('.viewer canvas')).toBeVisible({ timeout: 30_000 })
+  const originalResponsePromise = page.waitForResponse(
+    (response) => response.url().includes('/api/files/') && !response.url().includes('preview=1'),
+  )
+  await page.getByRole('button', { name: 'preview · load full detail' }).click()
+  expect((await originalResponsePromise).headers()['content-type']).toContain('model/3mf')
+  await expect(page.locator('.viewer canvas')).toBeVisible({ timeout: 30_000 })
   await mobileScreenshot(page, 'single-resin-request-mobile')
   await page.getByRole('button', { name: 'Close' }).click()
+
+  const database = new Database(path.join(os.tmpdir(), 'printhub-playwright/data/printhub.sqlite'))
+  const stalePreview = database.prepare('SELECT preview_path FROM requests WHERE name = ?').get('resin-cube') as {
+    preview_path: string
+  }
+  await fs.rm(path.join(os.tmpdir(), 'printhub-playwright/prints', stalePreview.preview_path))
+  await page.reload()
+  let originalRequests = 0
+  const trackOriginalRequest = (request: PlaywrightRequest) => {
+    if (request.url().includes('/api/files/') && !request.url().includes('preview=1')) originalRequests++
+  }
+  page.on('request', trackOriginalRequest)
+  const stalePreviewResponse = page.waitForResponse(
+    (response) => response.url().includes('/api/files/') && response.url().includes('preview=1'),
+  )
+  await requestCard(page, 'resin-cube').click()
+  expect((await stalePreviewResponse).headers()['x-preview-fallback']).toBe('original')
+  await expect(page.getByRole('button', { name: 'load original full detail' })).toBeVisible()
+  await page.waitForTimeout(200)
+  expect(originalRequests).toBe(0)
+  const stalePreviewOriginalResponse = page.waitForResponse(
+    (response) => response.url().includes('/api/files/') && !response.url().includes('preview=1'),
+  )
+  await page.getByRole('button', { name: 'load original full detail' }).click()
+  expect((await stalePreviewOriginalResponse).headers()['content-type']).toContain('model/3mf')
+  await expect(page.locator('.viewer canvas')).toBeVisible({ timeout: 30_000 })
+  page.off('request', trackOriginalRequest)
+  await page.getByRole('button', { name: 'Close' }).click()
+
+  database.prepare('UPDATE requests SET preview_path = NULL WHERE name = ?').run('resin-cube')
+  database
+    .prepare(
+      "UPDATE asset_generation_jobs SET status = 'failed', error = ? WHERE stage = 'preview' AND request_id = (SELECT id FROM requests WHERE name = ?)",
+    )
+    .run('Preview renderer ran out of memory', 'resin-cube')
+  database.close()
+  await page.reload()
+  originalRequests = 0
+  page.on('request', trackOriginalRequest)
+  await requestCard(page, 'resin-cube').click()
+  await expect(page.getByText('Preview failed: Preview renderer ran out of memory')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'load original full detail' })).toBeVisible()
+  await page.waitForTimeout(200)
+  expect(originalRequests).toBe(0)
+  const failedPreviewOriginalResponse = page.waitForResponse(
+    (response) => response.url().includes('/api/files/') && !response.url().includes('preview=1'),
+  )
+  await page.getByRole('button', { name: 'load original full detail' }).click()
+  expect((await failedPreviewOriginalResponse).headers()['content-type']).toContain('model/3mf')
+  await expect(page.locator('.viewer canvas')).toBeVisible({ timeout: 30_000 })
+  page.off('request', trackOriginalRequest)
+  await page.getByRole('button', { name: 'Close' }).click()
+
   await page
     .getByRole('region', { name: 'Board filters' })
     .getByRole('button', { name: /^Filters/ })
@@ -65,7 +137,11 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
   await mainNav(page, 'Planner').click()
   await expect(page.getByText('Layouts use resin orientation analysis')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Export 3MF' })).toBeVisible({ timeout: 30_000 })
-  await expect(page.getByRole('button', { name: 'resin-cube' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^resin-cube Resin/ })).toBeVisible()
+  await expect(page.getByText('resin-cube: Preview failed: Preview renderer ran out of memory')).toBeVisible()
+  await expect(page.getByLabel('Build plate preview')).toHaveAttribute('data-model-count', '0')
+  await page.getByRole('button', { name: 'Load full-detail original for resin-cube' }).click()
+  await expect(page.getByLabel('Build plate preview')).toHaveAttribute('data-model-count', '1', { timeout: 30_000 })
   await verify3mfDownload(page, 'resin-station-plate-1.3mf')
   await screenshot(page, 'resin-planner-desktop')
 
@@ -160,7 +236,16 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
   const filamentCard = requestCard(page, 'filament-block')
   await expect(filamentCard).toContainText('Filament')
   await expect(filamentCard).not.toContainText('Fits selected printer')
+  const filamentModelResponse = page.waitForResponse(
+    (response) => response.url().includes('/api/files/') && !response.url().includes('preview=1'),
+  )
   await filamentCard.click()
+  const missingPreviewUrl = new URL((await filamentModelResponse).url())
+  missingPreviewUrl.searchParams.set('preview', '1')
+  const skippedPreview = await page.request.get(missingPreviewUrl.toString())
+  expect(skippedPreview.status()).toBe(200)
+  expect(skippedPreview.headers()['content-type']).toContain('model/stl')
+  expect(skippedPreview.headers()['x-preview-fallback']).toBeUndefined()
   await expect(page.getByRole('heading', { name: 'filament-block' })).toBeVisible({ timeout: 1_000 })
   await expect(page.getByText(/≈1.24 g each/)).toBeVisible({ timeout: 30_000 })
   await expect(page.getByText(/100%-solid equivalent/i)).toBeVisible({ timeout: 30_000 })
@@ -372,10 +457,16 @@ async function upload(
     name: string
     printType: 'Resin' | 'Filament'
     buffer: Buffer
+    format?: 'stl' | '3mf'
   },
 ) {
   await page.getByRole('button', { name: 'Add a print' }).click()
-  await page.locator('input[type=file]').setInputFiles({ name: `${values.name}.stl`, mimeType: 'model/stl', buffer: values.buffer })
+  const format = values.format ?? 'stl'
+  await page.locator('input[type=file]').setInputFiles({
+    name: `${values.name}.${format}`,
+    mimeType: format === '3mf' ? 'model/3mf' : 'model/stl',
+    buffer: values.buffer,
+  })
   await page.getByLabel('Name').fill(values.name)
   const printType = page.getByLabel(`Print type for ${values.name}`)
   await expect(printType).toBeVisible()

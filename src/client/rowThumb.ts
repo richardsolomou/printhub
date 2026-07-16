@@ -1,6 +1,7 @@
 import { wrap } from 'comlink'
 import { isPhone } from './device'
 import type { RowThumbWorker } from './rowThumb.worker'
+import { requireModelFormat } from '../core/modelFormat'
 
 // Instant feedback while composing an upload, using the same software
 // rasterizer the server runs. Deliberately bounded: desktop only, files small
@@ -18,7 +19,7 @@ function renderer() {
 export async function renderRowThumbnail(file: File): Promise<string | undefined> {
   if (isPhone() || file.size > MAX_BYTES) return undefined
   try {
-    const rgba = await renderer().render(await file.arrayBuffer(), SIZE)
+    const rgba = await renderer().render(await file.arrayBuffer(), SIZE, requireModelFormat(file.name))
     const canvas = document.createElement('canvas')
     canvas.width = canvas.height = SIZE
     const context = canvas.getContext('2d')

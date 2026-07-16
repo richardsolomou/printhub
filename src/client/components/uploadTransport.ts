@@ -6,7 +6,7 @@ const CHUNK_BYTES = 32 * 1024 * 1024
 export async function uploadPrint(entry: UploadEntry, onProgress: (sent: number, total: number) => void) {
   const metadata: Record<string, string> = {
     filename: entry.file.name,
-    name: entry.name.trim() || entry.file.name.replace(/\.stl$/i, ''),
+    name: entry.name.trim() || entry.file.name.replace(/\.(?:stl|3mf)$/i, ''),
     quantity: String(Math.min(50, Math.max(1, Math.round(Number(entry.quantity) || 1)))),
   }
   if (!entry.printType) throw new Error('Choose resin or filament for every model')

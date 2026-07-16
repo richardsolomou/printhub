@@ -67,6 +67,9 @@ export type PublicPrintRequest = Omit<
   canEdit: boolean
   canDelete: boolean
   hasPreview: boolean
+  previewStatus?: AssetGenerationJob['status']
+  previewError?: string
+  modelFormat: import('./modelFormat').ModelFormat
   printType?: PrintType
   requestedPrintType?: PrintType
   printer?: PrinterSummary
@@ -191,8 +194,12 @@ export interface Repository {
     expiresAt: number,
     maxIncomplete: number,
   ): { fresh: boolean; completedRequestId?: string }
-  reserveUpload(uploadId: string, ownerId: string, bytes: number, expiresAt: number, limits: { count: number; bytes: number }): boolean
-  expireUploads(now: number): string[]
+  refreshUploadSession(uploadId: string, ownerId: string): { completedRequestId?: string }
+  reserveUpload(uploadId: string, ownerId: string, bytes: number, limits: { count: number; bytes: number }): boolean
+  deleteUploadSession(uploadId: string, ownerId: string): void
+  expiredUploadIds(now: number): string[]
+  uploadSessionStatus(uploadId: string, now: number): 'active' | 'expired' | 'completed' | 'missing'
+  deleteExpiredUploadSession(uploadId: string, now: number): boolean
   activeUploadIds(now: number): Set<string>
   incompleteUploadStats(now: number): { count: number; bytes: number }
   uploadIdsOwnedBy(ownerId: string): string[]
@@ -220,7 +227,7 @@ export interface Repository {
     id: string,
     stage: AssetGenerationStage,
     outcome: { status: 'ready' | 'skipped' | 'failed'; path?: string; error?: string },
-  ): void
+  ): boolean
   listAssetGenerationJobs(): AssetGenerationJob[]
   assetGenerationJobs(id: string): AssetGenerationJob[]
   requeueInterruptedAssetGeneration(): void

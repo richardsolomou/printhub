@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@/lib/utils'
 import type { UploadEntry } from './uploadTypes'
 import { availablePrintTypes, printTypeLabel } from '../fleet'
+import { modelFormat, modelFormatLabel } from '../../core/modelFormat'
 
 export function UploadRow({
   entry,
@@ -19,6 +20,7 @@ export function UploadRow({
   onRemove: () => void
 }) {
   const printTypes = availablePrintTypes()
+  const formatLabel = modelFormatLabel(modelFormat(entry.file.name) ?? 'stl')
 
   return (
     <Item variant="muted" className={cn('items-start max-sm:flex-col', entry.state === 'error' && 'ring-1 ring-destructive')}>
@@ -26,7 +28,7 @@ export function UploadRow({
         {entry.thumbnail ? (
           <img className="size-full object-contain" src={entry.thumbnail} alt="" />
         ) : (
-          <span className="font-mono text-[10px] text-muted-foreground">stl</span>
+          <span className="font-mono text-[10px] text-muted-foreground">{formatLabel}</span>
         )}
       </ItemMedia>
       <ItemContent className="min-w-0 gap-1.5 max-sm:w-full">

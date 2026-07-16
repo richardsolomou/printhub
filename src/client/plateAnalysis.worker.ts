@@ -1,9 +1,12 @@
 import { expose, transfer } from 'comlink'
+import { parseThreeMf } from '../core/mesh/threeMf'
 import { parseStl } from '../core/mesh/stl'
+import type { ModelFormat } from '../core/modelFormat'
 
 const api = {
-  analyze(buffer: ArrayBuffer) {
-    const positions = parseStl(new Uint8Array(buffer))
+  analyze(buffer: ArrayBuffer, format: ModelFormat) {
+    const bytes = new Uint8Array(buffer)
+    const positions = format === '3mf' ? parseThreeMf(bytes) : parseStl(bytes)
     const normals = new Float32Array(positions.length)
     let minX = Number.POSITIVE_INFINITY
     let minY = Number.POSITIVE_INFINITY

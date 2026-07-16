@@ -16,6 +16,14 @@ import { PlateViewer } from '../client/components/PlateViewer'
 import { RequestCard } from '../client/components/RequestCard'
 import { RequestModal } from '../client/components/RequestModal'
 import { loadPlateGeometry } from '../client/plateAnalysis'
+import {
+  isOriginalPreviewFallback,
+  platePreviewRevision,
+  requestPreviewRevision,
+  responseModelFormat,
+  shouldLoadPlatePreview,
+  threeMfPreviewFailure,
+} from '../client/platePreview'
 import { exportPlate } from '../client/plateExport'
 import { peopleQuery, platePlannerQuery, requestsQuery, sessionQuery } from '../client/queries'
 import { enabledPrinters, printTypeLabel } from '../client/fleet'
@@ -83,6 +91,8 @@ function PlannerPage() {
   const [plans, setPlans] = useState<Record<string, PlatePlacement[][]>>({})
   const [plateIndex, setPlateIndex] = useState(0)
   const [geometryRevision, setGeometryRevision] = useState(0)
+  const [geometryFailures, setGeometryFailures] = useState<Record<string, { revision: string; message: string }>>({})
+  const [loadingFullGeometry, setLoadingFullGeometry] = useState<Set<string>>(() => new Set())
   const [error, setError] = useState<string>()
   const [exportingPlate, setExportingPlate] = useState(false)
   const [restored, setRestored] = useState(false)
@@ -142,6 +152,20 @@ function PlannerPage() {
     [allOutstanding, analyses, printers],
   )
   const fingerprint = useMemo(() => plannerFingerprint(outstanding, printers, analyses), [analyses, outstanding, printers])
+  const placementPreviewRevision = useMemo(
+    () => platePreviewRevision([...new Set(placements.map((placement) => placement.requestId))], allData?.requests ?? []),
+    [allData?.requests, placements],
+  )
+  const placementGeometryFailures = useMemo(
+    () =>
+      [...new Set(placements.map((placement) => placement.requestId))].flatMap((requestId) => {
+        const request = allData?.requests.find((candidate) => candidate.id === requestId)
+        const failure = geometryFailures[requestId]
+        if (!request || !failure || failure.revision !== requestPreviewRevision(request)) return []
+        return [{ request, message: failure.message }]
+      }),
+    [allData?.requests, geometryFailures, placements],
+  )
 
   useEffect(() => {
     preloadStlViewer()
@@ -244,8 +268,8 @@ function PlannerPage() {
       const models = await mapConcurrent(requestIds, 4, async (requestId) => {
         const request = allData?.requests.find((candidate) => candidate.id === requestId)
         const response = await fetch(`/api/files/${requestId}?inline=1`)
-        if (!response.ok) throw new Error(`Could not download the original STL for ${request?.name ?? requestId}`)
-        return { requestId, name: request?.name ?? requestId, buffer: await response.arrayBuffer() }
+        if (!response.ok) throw new Error(`Could not download the model for ${request?.name ?? requestId}`)
+        return { requestId, name: request?.name ?? requestId, format: request?.modelFormat ?? 'stl', buffer: await response.arrayBuffer() }
       })
       const archive = await exportPlate(plate, models)
       downloadFile(archive, `${fileNamePart(activePrinter.name)}-plate-${exportingIndex + 1}.3mf`, 'model/3mf')
@@ -288,12 +312,77 @@ function PlannerPage() {
     const requestIds = [...new Set(placements.map((placement) => placement.requestId))]
     void mapConcurrent(requestIds, 4, async (requestId) => {
       if (geometries.has(requestId)) return
+      const request = allData?.requests.find((candidate) => candidate.id === requestId)
+      if (!request) return
+      const revision = requestPreviewRevision(request)
+      if (!shouldLoadPlatePreview(geometries.has(requestId), geometryFailures[requestId]?.revision, revision)) return
+      const failedPreview = threeMfPreviewFailure(request)
+      if (failedPreview) {
+        setGeometryFailures((current) => ({ ...current, [requestId]: { revision, message: failedPreview } }))
+        return
+      }
       const response = await fetch(`/api/files/${requestId}?inline=1&preview=1`)
-      if (!response.ok) return
-      geometries.set(requestId, await loadPlateGeometry(await response.arrayBuffer()))
-      setGeometryRevision((current) => current + 1)
+      if (!response.ok) {
+        setGeometryFailures((current) => ({
+          ...current,
+          [requestId]: { revision, message: `Preview could not be loaded (${response.status})` },
+        }))
+        return
+      }
+      if (isOriginalPreviewFallback(response)) {
+        await response.body?.cancel()
+        setGeometryFailures((current) => ({ ...current, [requestId]: { revision, message: 'Preview file is missing' } }))
+        return
+      }
+      try {
+        geometries.set(requestId, await loadPlateGeometry(await response.arrayBuffer(), responseModelFormat(response)))
+        setGeometryFailures((current) => {
+          const next = { ...current }
+          delete next[requestId]
+          return next
+        })
+        setGeometryRevision((current) => current + 1)
+      } catch (cause) {
+        setGeometryFailures((current) => ({
+          ...current,
+          [requestId]: { revision, message: cause instanceof Error ? cause.message : 'Preview geometry could not be loaded' },
+        }))
+      }
     })
-  }, [geometries, placements])
+  }, [allData?.requests, geometries, geometryFailures, placementPreviewRevision, placements])
+
+  const loadFullGeometry = useCallback(
+    async (requestId: string) => {
+      setLoadingFullGeometry((current) => new Set(current).add(requestId))
+      try {
+        const response = await fetch(`/api/files/${requestId}?inline=1`)
+        if (!response.ok) throw new Error(`Original model could not be loaded (${response.status})`)
+        geometries.set(requestId, await loadPlateGeometry(await response.arrayBuffer(), responseModelFormat(response)))
+        setGeometryFailures((current) => {
+          const next = { ...current }
+          delete next[requestId]
+          return next
+        })
+        setGeometryRevision((current) => current + 1)
+      } catch (cause) {
+        const request = allData?.requests.find((candidate) => candidate.id === requestId)
+        setGeometryFailures((current) => ({
+          ...current,
+          [requestId]: {
+            revision: request ? requestPreviewRevision(request) : 'missing',
+            message: cause instanceof Error ? cause.message : 'Original model could not be loaded',
+          },
+        }))
+      } finally {
+        setLoadingFullGeometry((current) => {
+          const next = new Set(current)
+          next.delete(requestId)
+          return next
+        })
+      }
+    },
+    [allData?.requests, geometries],
+  )
 
   if (!session.identity) {
     return <main className="grid min-h-dvh place-items-center p-6">Sign in from the board to use the planner.</main>
@@ -479,6 +568,46 @@ function PlannerPage() {
               </div>
             </CardHeader>
             <CardContent>
+              {placementGeometryFailures.length > 0 && (
+                <Alert variant="destructive" className="mb-4">
+                  <TriangleAlert />
+                  <AlertTitle>Plate geometry preview unavailable</AlertTitle>
+                  <AlertDescription className="space-y-3">
+                    {placementGeometryFailures.map(({ request, message }) => (
+                      <div key={request.id} className="flex flex-wrap items-center justify-between gap-2">
+                        <span>
+                          {request.name}: {message}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            setGeometryFailures((current) => {
+                              const next = { ...current }
+                              delete next[request.id]
+                              return next
+                            })
+                          }
+                        >
+                          Retry preview
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={loadingFullGeometry.has(request.id)}
+                          aria-label={`Load full-detail original for ${request.name}`}
+                          onClick={() => void loadFullGeometry(request.id)}
+                        >
+                          {loadingFullGeometry.has(request.id) ? <Spinner /> : <Download />}
+                          {loadingFullGeometry.has(request.id) ? 'Loading full detail…' : 'Load full-detail original'}
+                        </Button>
+                      </div>
+                    ))}
+                  </AlertDescription>
+                </Alert>
+              )}
               {placements.length ? (
                 <PlateViewer
                   printer={activePrinter}

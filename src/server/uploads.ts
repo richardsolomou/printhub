@@ -1,18 +1,26 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { Server } from '@tus/server'
+import { EVENTS, Server } from '@tus/server'
 import { z } from 'zod'
 import { app } from './app'
 import { validSourceUrl } from '../core/services'
 import { TusUploadStore, UPLOAD_TTL } from '../adapters/tus'
 import type { NewUploadedRequestInput } from '../core/services'
-import type { Identity } from '../core/types'
+import type { Identity, Repository } from '../core/types'
 import { UploadRequestLimiter, validSameOrigin } from './uploadGuards'
 import { assertUploadCapacity } from './operations'
+import { THREE_MF_UPLOAD_LIMITS } from '../core/mesh/threeMf'
+import { requireModelFormat } from '../core/modelFormat'
+import { InvalidThreeMfError, validateThreeMfFile } from './assets/modelValidation'
 
 const MAX_TOTAL_BYTES = 1024 * 1024 * 1024
 const uploadRequests = new UploadRequestLimiter()
 const requestIdentities = new WeakMap<object, Identity>()
+const requestUploadLocks = new WeakMap<object, string>()
+const requestUploadCreations = new WeakMap<object, { uploadId: string; ownerId: string; created: boolean }>()
+const uploadLocks = new Map<string, Promise<void>>()
+type OwnerUploadState = { active: number; deleting: boolean; drained?: () => void }
+const ownerUploadStates = new Map<string, OwnerUploadState>()
 const tusUploads = new TusUploadStore()
 const store = tusUploads.datastore
 
@@ -24,13 +32,24 @@ const metadataSchema = z.object({
     .string()
     .max(255)
     .transform((value) => path.basename(value))
-    .refine((value) => /\.stl$/i.test(value), 'only .stl files are accepted'),
+    .refine((value) => /\.(?:stl|3mf)$/i.test(value), 'only .stl and .3mf files are accepted'),
   name: z.string().trim().min(1).max(120),
   quantity: z.coerce.number().int().min(1).max(50),
   notes: optionalMetadataString(2000),
   sourceUrl: optionalMetadataString(500).refine((value) => !value || validSourceUrl(value), 'source URL must be an http(s) link'),
   requestedPrintType: z.enum(['resin', 'filament']),
 })
+
+class UploadValidationError extends Error {
+  status_code: number
+  body: string
+
+  constructor(message: string, status = 400) {
+    super(message)
+    this.status_code = status
+    this.body = message
+  }
+}
 
 function tusError(error: unknown): Error & { status_code: number; body: string } {
   if (error instanceof Response) {
@@ -57,6 +76,16 @@ function identityFor(request: object) {
   return identity
 }
 
+function uploadExpired(creationDate: string | undefined) {
+  return Date.now() > uploadExpiresAt(creationDate)
+}
+
+function uploadExpiresAt(creationDate: string | undefined) {
+  const createdAt = creationDate ? new Date(creationDate).getTime() : Number.NaN
+  if (!Number.isFinite(createdAt)) throw new Response('upload creation date is invalid', { status: 410 })
+  return createdAt + UPLOAD_TTL
+}
+
 async function finalizeUpload(
   uploadId: string,
   metadata: Record<string, string | null> | undefined,
@@ -67,6 +96,7 @@ async function finalizeUpload(
   const completed = instance.repository.getCompletedUpload(uploadId, identity.id)
   if (completed) return completed
   const parsed = metadataSchema.parse(metadata ?? {})
+  await validateUploadedModel(sourcePath, parsed.filename)
   const request: NewUploadedRequestInput = {
     name: parsed.name,
     fileName: parsed.filename,
@@ -82,6 +112,94 @@ async function finalizeUpload(
   return requestId
 }
 
+async function finalizeUploadForRequest(
+  request: object,
+  uploadId: string,
+  metadata: Record<string, string | null> | undefined,
+  sourcePath: string,
+  identity: Identity,
+) {
+  const finalize = () => finalizeUpload(uploadId, metadata, sourcePath, identity)
+  return requestUploadLocks.get(request) === uploadId ? finalize() : withUploadLock(uploadId, finalize)
+}
+
+async function withUploadLock<T>(uploadId: string, work: () => Promise<T>) {
+  const previous = uploadLocks.get(uploadId) ?? Promise.resolve()
+  let release!: () => void
+  const current = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const tail = previous.then(() => current)
+  uploadLocks.set(uploadId, tail)
+  await previous
+  try {
+    return await work()
+  } finally {
+    release()
+    if (uploadLocks.get(uploadId) === tail) uploadLocks.delete(uploadId)
+  }
+}
+
+export async function withOwnedUploadLocks<T>(repository: Repository, ownerId: string, work: () => Promise<T>) {
+  const state = ownerUploadState(ownerId)
+  state.deleting = true
+  if (state.active) await new Promise<void>((resolve) => (state.drained = resolve))
+  try {
+    const uploadIds = repository.uploadIdsOwnedBy(ownerId).sort()
+    const run = (index: number): Promise<T> =>
+      index === uploadIds.length ? work() : withUploadLock(uploadIds[index], () => run(index + 1))
+    return await run(0)
+  } catch (error) {
+    state.deleting = false
+    ownerUploadStates.delete(ownerId)
+    throw error
+  }
+}
+
+function ownerUploadState(ownerId: string) {
+  const existing = ownerUploadStates.get(ownerId)
+  if (existing) return existing
+  const state: OwnerUploadState = { active: 0, deleting: false }
+  ownerUploadStates.set(ownerId, state)
+  return state
+}
+
+function enterOwnerUpload(ownerId: string) {
+  const state = ownerUploadState(ownerId)
+  if (state.deleting) throw new Response('account deletion is in progress', { status: 410, statusText: 'account deletion is in progress' })
+  state.active++
+  return () => {
+    state.active--
+    if (state.active === 0) {
+      state.drained?.()
+      state.drained = undefined
+      if (!state.deleting) ownerUploadStates.delete(ownerId)
+    }
+  }
+}
+
+async function validateUploadedModel(sourcePath: string, fileName: string) {
+  if (requireModelFormat(fileName) !== '3mf') return
+  try {
+    await validateThreeMfFile(sourcePath)
+  } catch (error) {
+    if (error instanceof InvalidThreeMfError) throw new UploadValidationError(error.message)
+    throw error
+  }
+}
+
+async function discardRejectedUpload(uploadId: string, identity: Identity) {
+  const instance = await app()
+  const cleanup = await Promise.allSettled([instance.staging.remove(instance.staging.uploadPart(uploadId)), tusUploads.remove(uploadId)])
+  const failures = cleanup.filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+  if (failures.length)
+    throw new AggregateError(
+      failures.map(({ reason }) => reason),
+      'rejected upload cleanup failed; cleanup will retry after expiry',
+    )
+  instance.repository.deleteUploadSession(uploadId, identity.id)
+}
+
 const server = new Server({
   path: '/api/upload',
   datastore: store,
@@ -89,17 +207,28 @@ const server = new Server({
   relativeLocation: true,
   namingFunction: () => crypto.randomUUID(),
   onIncomingRequest: async (request, uploadId) => {
+    const identity = identityFor(request)
     try {
-      const identity = identityFor(request)
       const instance = await app()
       if (request.method !== 'POST') {
-        instance.repository.createUploadSession(uploadId, identity.id, Date.now() + UPLOAD_TTL, 3)
         const upload = await store.getUpload(uploadId).catch(() => undefined)
+        if (!upload) return
+        if (request.method === 'DELETE') {
+          instance.repository.refreshUploadSession(uploadId, identity.id)
+          return
+        }
+        if (uploadExpired(upload.creation_date)) {
+          await Promise.all([tusUploads.remove(uploadId), instance.staging.remove(instance.staging.uploadPart(uploadId))])
+          instance.repository.deleteUploadSession(uploadId, identity.id)
+          throw new Response('upload expired', { status: 410, statusText: 'upload expired' })
+        }
+        instance.repository.refreshUploadSession(uploadId, identity.id)
         if (upload?.size !== undefined && upload.offset === upload.size && upload.storage?.path) {
-          await finalizeUpload(upload.id, upload.metadata, upload.storage.path, identity)
+          await finalizeUploadForRequest(request, upload.id, upload.metadata, upload.storage.path, identity)
         }
       }
     } catch (error) {
+      if (error instanceof UploadValidationError) await discardRejectedUpload(uploadId, identity)
       throw tusError(error)
     }
   },
@@ -107,11 +236,16 @@ const server = new Server({
     try {
       const identity = identityFor(request)
       const instance = await app()
-      metadataSchema.parse(upload.metadata ?? {})
+      const parsed = metadataSchema.parse(upload.metadata ?? {})
+      if (upload.size === undefined) throw new UploadValidationError('Deferred upload lengths are not supported')
+      if (requireModelFormat(parsed.filename) === '3mf' && (upload.size ?? 0) > THREE_MF_UPLOAD_LIMITS.archiveBytes) {
+        throw new UploadValidationError(`3MF archive exceeds the ${THREE_MF_UPLOAD_LIMITS.archiveBytes / 1024 / 1024} MiB limit`, 413)
+      }
       await assertUploadCapacity(instance.staging.root, upload.size ?? 0)
-      instance.repository.createUploadSession(upload.id, identity.id, Date.now() + UPLOAD_TTL, 3)
+      const session = instance.repository.createUploadSession(upload.id, identity.id, uploadExpiresAt(upload.creation_date), 3)
+      if (session.fresh) requestUploadCreations.set(request, { uploadId: upload.id, ownerId: identity.id, created: false })
       if (
-        !instance.repository.reserveUpload(upload.id, identity.id, upload.size ?? 0, Date.now() + UPLOAD_TTL, {
+        !instance.repository.reserveUpload(upload.id, identity.id, upload.size ?? 0, {
           count: 3,
           bytes: MAX_TOTAL_BYTES,
         })
@@ -124,16 +258,30 @@ const server = new Server({
     }
   },
   onUploadFinish: async (request, upload) => {
+    const identity = identityFor(request)
     try {
-      const identity = identityFor(request)
       if (!upload.storage?.path) throw new Error('completed upload has no staged file')
-      const requestId = await finalizeUpload(upload.id, upload.metadata, upload.storage.path, identity)
+      const requestId = await finalizeUploadForRequest(request, upload.id, upload.metadata, upload.storage.path, identity)
       return { headers: { 'X-Request-Id': requestId } }
     } catch (error) {
+      if (error instanceof UploadValidationError) await discardRejectedUpload(upload.id, identity)
       throw tusError(error)
     }
   },
 })
+
+server.on(EVENTS.POST_CREATE, (request) => {
+  const creation = requestUploadCreations.get(request)
+  if (creation) creation.created = true
+})
+
+async function rollbackFailedUploadCreation(request: object, repository: Repository) {
+  const creation = requestUploadCreations.get(request)
+  requestUploadCreations.delete(request)
+  if (!creation || creation.created) return
+  repository.deleteUploadSession(creation.uploadId, creation.ownerId)
+  await tusUploads.remove(creation.uploadId)
+}
 
 export async function handleUpload(request: Request) {
   if (!validSameOrigin(request)) return Response.json({ error: 'cross-origin upload rejected' }, { status: 403 })
@@ -145,25 +293,74 @@ export async function handleUpload(request: Request) {
   const identity = await instance.requireIdentity(request.headers)
   const release = uploadRequests.enter(identity.id)
   if (!release) return Response.json({ error: 'too many concurrent upload requests' }, { status: 429 })
-  requestIdentities.set(request, identity)
+  let releaseOwner: (() => void) | undefined
   try {
-    return await server.handleWeb(request)
+    releaseOwner = enterOwnerUpload(identity.id)
+  } catch (error) {
+    release()
+    return error instanceof Response ? error : Response.json({ error: 'upload rejected' }, { status: 500 })
+  }
+  requestIdentities.set(request, identity)
+  const uploadId = request.method === 'POST' ? undefined : uploadIdFromRequest(request)
+  try {
+    const handle = async () => {
+      if (uploadId) requestUploadLocks.set(request, uploadId)
+      try {
+        const response = await server.handleWeb(request)
+        if (uploadId && request.method === 'DELETE' && response.status === 204) {
+          instance.repository.deleteUploadSession(uploadId, identity.id)
+        }
+        return response
+      } finally {
+        requestUploadLocks.delete(request)
+        await rollbackFailedUploadCreation(request, instance.repository)
+      }
+    }
+    return uploadId ? await withUploadLock(uploadId, handle) : await handle()
   } finally {
     requestIdentities.delete(request)
+    releaseOwner()
     release()
   }
 }
 
-export async function cleanExpiredTusUploads() {
+function uploadIdFromRequest(request: Request) {
+  const uploadId = new URL(request.url).pathname.split('/').at(-1)
+  return uploadId && /^[a-z0-9-]{10,64}$/i.test(uploadId) ? uploadId : undefined
+}
+
+export async function cleanExpiredTusUploads(
+  repository?: Repository,
+  removeStagedUpload: (uploadId: string) => Promise<void> = async () => undefined,
+) {
   await fs.promises.mkdir(store.directory, { recursive: true })
-  const removedIncomplete = await server.cleanUpExpiredUploads()
   const now = Date.now()
-  let removedCompleted = 0
-  for (const uploadId of (await store.configstore.list?.()) ?? []) {
-    const upload = await store.configstore.get(uploadId)
-    if (!upload?.creation_date || now - new Date(upload.creation_date).getTime() <= UPLOAD_TTL) continue
-    await store.remove(uploadId).catch(() => undefined)
-    removedCompleted++
-  }
-  return removedIncomplete + removedCompleted
+  const entries = await fs.promises.readdir(store.directory)
+  const uploadIds = new Set([
+    ...(repository?.expiredUploadIds(now) ?? []),
+    ...entries.map((entry) => entry.replace(/\.json$/, '')).filter((entry) => /^[a-z0-9-]{10,64}$/i.test(entry)),
+  ])
+  const removed = await Promise.all(
+    [...uploadIds].map((uploadId) =>
+      withUploadLock(uploadId, async () => {
+        if (repository) {
+          const status = repository.uploadSessionStatus(uploadId, now)
+          if (status === 'active') return 0
+          if (status === 'expired') {
+            await Promise.all([tusUploads.remove(uploadId), removeStagedUpload(uploadId)])
+            return repository.deleteExpiredUploadSession(uploadId, now) ? 1 : 0
+          }
+        }
+        const upload = await store.configstore.get(uploadId)
+        const dataPath = path.join(store.directory, uploadId)
+        const createdAt = upload?.creation_date
+          ? new Date(upload.creation_date).getTime()
+          : (await fs.promises.stat(dataPath).catch(() => undefined))?.mtimeMs
+        if (!createdAt || now - createdAt <= UPLOAD_TTL) return 0
+        await tusUploads.remove(uploadId)
+        return 1
+      }),
+    ),
+  )
+  return removed.reduce<number>((total, count) => total + count, 0)
 }

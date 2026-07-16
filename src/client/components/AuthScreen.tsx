@@ -60,7 +60,7 @@ export function AuthScreen({ setupRequired, auth }: { setupRequired: boolean; au
           <Card className="shadow-xl shadow-black/10">
             <CardHeader>
               <CardTitle>Your private 3D-print production queue</CardTitle>
-              <CardDescription>Accept STL requests and take resin and filament prints from upload to collection.</CardDescription>
+              <CardDescription>Accept STL and 3MF requests and take resin and filament prints from upload to collection.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <div className="grid gap-3 sm:grid-cols-3">

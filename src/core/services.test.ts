@@ -11,7 +11,7 @@ import { createDatabase } from '../db'
 import { requests, requestStatuses, user } from '../db/schema'
 import type { Identity, Telemetry } from './types'
 import { PrintHubService } from './services'
-import type { PrinterProfile } from './platePlanner'
+import { ORIENTATION_ANALYSIS_VERSION, type PrinterProfile } from './platePlanner'
 
 const telemetry: Telemetry = { capture: async () => undefined, exception: async () => undefined }
 const admin: Identity = { id: 'admin', email: 'op@example.com', name: 'Admin', role: 'admin' }
@@ -403,14 +403,28 @@ describe('PrintHubService crash recovery', () => {
 
     expect(service.listRequests(admin).requests[0]).toMatchObject({ fitState: 'pending' })
     repository.upsertPlateModelAnalyses([
-      { requestId: id, analysisVersion: 7, widthMm: 100, depthMm: 80, heightMm: 50, estimatedVolumeMm3: 10_000 },
+      {
+        requestId: id,
+        analysisVersion: ORIENTATION_ANALYSIS_VERSION,
+        widthMm: 100,
+        depthMm: 80,
+        heightMm: 50,
+        estimatedVolumeMm3: 10_000,
+      },
     ])
     expect(service.listRequests(admin).requests[0]).toMatchObject({
       compatiblePrinterIds: [filamentPrinter.id],
       fitState: 'selected_printer',
     })
     repository.upsertPlateModelAnalyses([
-      { requestId: id, analysisVersion: 7, widthMm: 300, depthMm: 280, heightMm: 250, estimatedVolumeMm3: 10_000 },
+      {
+        requestId: id,
+        analysisVersion: ORIENTATION_ANALYSIS_VERSION,
+        widthMm: 300,
+        depthMm: 280,
+        heightMm: 250,
+        estimatedVolumeMm3: 10_000,
+      },
     ])
     expect(service.listRequests(admin).requests[0]).toMatchObject({ compatiblePrinterIds: [], fitState: 'none' })
   })
@@ -428,7 +442,14 @@ describe('PrintHubService crash recovery', () => {
       admin,
     )
     repository.upsertPlateModelAnalyses([
-      { requestId: id, analysisVersion: 7, widthMm: 100, depthMm: 80, heightMm: 50, estimatedVolumeMm3: 10_000 },
+      {
+        requestId: id,
+        analysisVersion: ORIENTATION_ANALYSIS_VERSION,
+        widthMm: 100,
+        depthMm: 80,
+        heightMm: 50,
+        estimatedVolumeMm3: 10_000,
+      },
     ])
 
     expect(service.listRequests(admin).requests[0]).toMatchObject({
@@ -442,6 +463,17 @@ describe('PrintHubService crash recovery', () => {
     await service.moveCopies({ id, from: 'todo', to: 'in_progress', count: 1 }, admin)
     await expect(service.remove(id, requester)).rejects.toMatchObject({ status: 403 })
     expect(service.listRequests(requester, true).requests[0]).toMatchObject({ canDelete: false })
+  })
+
+  it('exposes failed preview generation without leaking storage paths', async () => {
+    const id = await request()
+    repository.finishAssetGeneration(id, 'preview', { status: 'failed', error: 'model XML is too deep' })
+
+    expect(service.listRequests(requester).requests[0]).toMatchObject({
+      hasPreview: false,
+      previewStatus: 'failed',
+      previewError: 'model XML is too deep',
+    })
   })
 
   it('lets requesters rename their own queued requests', async () => {
@@ -658,6 +690,40 @@ describe('PrintHubService crash recovery', () => {
     const second = await service.createUploadedRequest(uploadId, part, input, admin)
     expect(second).toBe(first)
     expect(repository.listRequests()).toHaveLength(1)
+  })
+
+  it('serializes simultaneous final-upload retries', async () => {
+    const uploadId = 'simultaneous-upload-id'
+    const part = staging.uploadPart(uploadId)
+    await fs.promises.writeFile(part, 'stl')
+    repository.createUploadSession(uploadId, admin.id, Date.now() + 60_000, 3)
+    const originalFinalize = assets.finalizeUpload.bind(assets)
+    let releaseFinalize!: () => void
+    const finalizeBlocked = new Promise<void>((resolve) => {
+      releaseFinalize = resolve
+    })
+    let finalizeStarted!: () => void
+    const finalizeEntered = new Promise<void>((resolve) => {
+      finalizeStarted = resolve
+    })
+    const finalize = vi.spyOn(assets, 'finalizeUpload').mockImplementationOnce(async (...args) => {
+      finalizeStarted()
+      await finalizeBlocked
+      return originalFinalize(...args)
+    })
+    const input = { name: 'Model', fileName: 'model.stl', quantity: 1 }
+
+    const first = service.createUploadedRequest(uploadId, part, input, admin)
+    await finalizeEntered
+    const second = service.createUploadedRequest(uploadId, part, input, admin)
+    await Promise.resolve()
+    expect(finalize).toHaveBeenCalledTimes(1)
+    releaseFinalize()
+
+    const [firstId, secondId] = await Promise.all([first, second])
+    expect(secondId).toBe(firstId)
+    expect(repository.listRequests()).toHaveLength(1)
+    await expect(fs.promises.readFile(assets.absolute(repository.listRequests()[0].filePath), 'utf8')).resolves.toBe('stl')
   })
 
   it('cleans an upload journal whose staged files disappeared before startup replay', async () => {

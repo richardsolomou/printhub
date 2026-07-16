@@ -5,9 +5,9 @@
 
 **A private, self-hosted 3D-print production queue for resin and filament printers.**
 
-Collect STL requests, plan resin and filament build plates, and track every copy from **Queue → Printing → Finishing → Ready**—whether you print for friends, run a side gig, or manage a production business.
+Collect STL and 3MF requests, plan resin and filament build plates, and track every copy from **Queue → Printing → Finishing → Ready**—whether you print for friends, run a side gig, or manage a production business.
 
-<img src="docs/media/printhub-demo.gif" alt="PrintHub tour showing the request board, interactive STL viewer, and plate planner" width="1200" />
+<img src="docs/media/printhub-demo.gif" alt="PrintHub tour showing the request board, interactive model viewer, and plate planner" width="1200" />
 </div>
 
 ## Who is it for? 👋
@@ -30,7 +30,7 @@ It replaces spreadsheets, messages, and handwritten queues with one clear view o
 Along the way, PrintHub provides:
 
 - A private request queue with accounts, invites, and optional social login and two-factor authentication.
-- Interactive STL previews, thumbnails, model-fit checks, and backlog filtering.
+- Interactive model previews, thumbnails, model-fit checks, and backlog filtering.
 - Mixed resin and filament printer fleets in one installation.
 - Local-folder or S3-compatible model storage, with guided storage migration.
 - Reordering and withdrawal controls that preserve everyone else's queue priority.
@@ -68,10 +68,11 @@ Open `http://localhost:3010`. The first account created becomes the admin.
 
 Most settings—including printers, materials, storage, authentication, and email—are managed in the admin UI.
 
-| Variable     | Default   | Purpose                                                          |
-| ------------ | --------- | ---------------------------------------------------------------- |
-| `DATA_DIR`   | `/data`   | Database, migration backups, upload staging, and encrypted keys. |
-| `PRINTS_DIR` | `/prints` | Default local model storage.                                     |
+| Variable                   | Default      | Purpose                                                                                      |
+| -------------------------- | ------------ | -------------------------------------------------------------------------------------------- |
+| `DATA_DIR`                 | `/data`      | Database, migration backups, upload staging, and encrypted keys.                             |
+| `PRINTS_DIR`               | `/prints`    | Default local model storage.                                                                 |
+| `MODEL_WORKER_CONCURRENCY` | Memory-aware | Maximum concurrent model validation, preview generation, and analysis workers; defaults 1–4. |
 
 For a custom domain, set `BETTER_AUTH_URL` to the public origin, add it to `BETTER_AUTH_TRUSTED_ORIGINS`, and configure your reverse proxy to preserve the original host and protocol. See `.env.example` for authentication and SMTP overrides.
 
@@ -79,7 +80,11 @@ For a custom domain, set `BETTER_AUTH_URL` to the public origin, add it to `BETT
 
 PrintHub supports ordinary local folders and S3-compatible services including Amazon S3, Backblaze B2, Cloudflare R2, DigitalOcean Spaces, Google Cloud Storage, and MinIO.
 
-Back up `/data` and your model storage together before upgrading. Automatic migrations create a SQLite snapshot under `/data/backups`, but that snapshot does not replace a backup of your stored models.
+Uploads use resumable 32 MiB chunks. STL files can be up to 1 GiB. 3MF archives can be up to 128 MiB compressed, 256 MiB expanded, 256 archive entries, 64 MiB per model part, and 1,000,000 expanded triangles. The first 3MF version supports build graphs made from component containers and `model` mesh leaves without core material assignments. Component-container `type` values are ignored as required by the Core specification; non-model mesh leaves, material assignments on reachable meshes, required extensions, and Production Extension cross-model references are rejected at upload so preview generation and plate export preserve the same geometry.
+
+Finished STL and 3MF originals remain ordinary files in model storage. PrintHub stores generated thumbnails and normalized STL viewer assets under the storage adapter's `.printhub` prefix; moving or deleting a request manages those derived assets with the original.
+
+Back up `/data`, original models, and `.printhub` assets together before upgrading. Automatic migrations create a SQLite snapshot under `/data/backups`, but that snapshot does not replace a backup of your stored models.
 
 Material estimates are planning aids: resin is reported as solid model volume, while filament is reported as a 100%-solid equivalent based on material density. Your slicer remains the source of truth for supports, infill, adhesion, waste, and final material use.
 

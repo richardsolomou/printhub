@@ -47,6 +47,7 @@ export function RequestModal({
   const [error, setError] = useState('')
   const [confirmation, setConfirmation] = useState<'discard' | 'delete' | null>(null)
   const printTypes = availablePrintTypes()
+  const modelLabel = request.modelFormat.toUpperCase()
 
   const updateMutation = useMutation({
     mutationFn: callUpdate,
@@ -110,7 +111,13 @@ export function RequestModal({
   return (
     <>
       <DialogShell onClose={requestClose} title={request.name} contentClassName="space-y-0" preventClose={busy}>
-        <LazyStlViewer requestId={request.id} hasPreview={request.hasPreview} />
+        <LazyStlViewer
+          requestId={request.id}
+          hasPreview={request.hasPreview}
+          modelFormat={request.modelFormat}
+          previewStatus={request.previewStatus}
+          previewError={request.previewError}
+        />
 
         <RequestDetails
           request={request}
@@ -266,9 +273,9 @@ export function RequestModal({
                 className={cn(buttonVariants({ variant: 'outline' }))}
                 href={`/api/files/${request.id}`}
                 download
-                onClick={() => posthog.capture('stl_downloaded', { print_type: request.printType })}
+                onClick={() => posthog.capture('stl_downloaded', { print_type: request.printType, model_format: request.modelFormat })}
               >
-                Download STL
+                Download {modelLabel}
               </a>
               <Button type="submit" disabled={busy}>
                 {busy && <Spinner />}
@@ -284,9 +291,9 @@ export function RequestModal({
               className={cn(buttonVariants({ variant: 'outline' }))}
               href={`/api/files/${request.id}`}
               download
-              onClick={() => posthog.capture('stl_downloaded', { print_type: request.printType })}
+              onClick={() => posthog.capture('stl_downloaded', { print_type: request.printType, model_format: request.modelFormat })}
             >
-              Download STL
+              Download {modelLabel}
             </a>
             <Button type="button" variant="outline" onClick={onClose}>
               Close
@@ -297,7 +304,7 @@ export function RequestModal({
       <ConfirmDialog
         open={confirmation !== null}
         title={confirmation === 'delete' ? `Delete “${request.name}”?` : 'Discard changes?'}
-        description={confirmation === 'delete' ? 'This also deletes the STL from storage.' : 'Your unsaved edits will be lost.'}
+        description={confirmation === 'delete' ? `This also deletes the ${modelLabel} from storage.` : 'Your unsaved edits will be lost.'}
         confirmLabel={confirmation === 'delete' ? 'Delete request' : 'Discard'}
         destructive
         onCancel={() => setConfirmation(null)}

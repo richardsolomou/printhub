@@ -1,39 +1,89 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useReducer, useRef, useState } from 'react'
 import { usePostHog } from '@posthog/react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three-stdlib'
 import { Button } from '@/components/ui/button'
-import { buildScene, frameCamera, parseStl } from '../stl'
+import { buildScene, frameCamera, geometryFromPreparedModel, parseStl } from '../stl'
+import { createModelGeometryWorker } from '../modelGeometryClient'
+import { persistedModelGeometryState } from '../modelGeometry'
+import { isOriginalPreviewFallback } from '../platePreview'
+import { modelFormat as formatOf, type ModelFormat } from '../../core/modelFormat'
+import { initialViewerLoadState, reduceViewerLoadState } from '../viewerLoadState'
 
-export default function StlViewer({ requestId, file, hasPreview = false }: { requestId?: string; file?: File; hasPreview?: boolean }) {
+export default function StlViewer({
+  requestId,
+  file,
+  hasPreview = false,
+  modelFormat,
+  previewStatus,
+  previewError,
+}: {
+  requestId?: string
+  file?: File
+  hasPreview?: boolean
+  modelFormat?: ModelFormat
+  previewStatus?: 'pending' | 'running' | 'ready' | 'skipped' | 'failed'
+  previewError?: string
+}) {
   const posthog = usePostHog()
   const mountRef = useRef<HTMLDivElement>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [statusText, setStatusText] = useState('loading model…')
-  const [fullRequested, setFullRequested] = useState(false)
+  const [loadState, dispatchLoad] = useReducer(reduceViewerLoadState, initialViewerLoadState)
+  const { fullRequested, retryAttempt, stalePreviewFallback } = loadState
 
-  const showingPreview = hasPreview && !fullRequested
+  useEffect(() => dispatchLoad('reset'), [requestId, file])
+
+  const format = modelFormat ?? (file ? formatOf(file.name) : undefined) ?? 'stl'
+  const persisted = persistedModelGeometryState(format, hasPreview, fullRequested, previewStatus)
+  const waitingForPreview = !!requestId && persisted.waitingForPreview
+  const requiresFullDetailConfirmation =
+    !!requestId && (persisted.requiresFullDetailConfirmation || (stalePreviewFallback && !fullRequested))
+  const source = file ? { preview: false, format } : persisted.source
+  const showingPreview = source.preview
 
   useEffect(() => {
     const mount = mountRef.current
     if (!mount || (!requestId && !file)) return
+    if (waitingForPreview) {
+      setStatus('loading')
+      setStatusText('generating preview…')
+      return
+    }
+    if (requiresFullDetailConfirmation) {
+      setStatus('error')
+      setStatusText(previewError ? `Preview failed: ${previewError}` : 'Preview generation failed.')
+      return
+    }
 
     let disposed = false
     let renderer: THREE.WebGLRenderer | undefined
     let controls: OrbitControls | undefined
     let frame = 0
     let observer: ResizeObserver | undefined
+    let geometryWorker: ReturnType<typeof createModelGeometryWorker> | undefined
 
     setStatus('loading')
     setStatusText('loading model…')
     void (async () => {
       try {
         let buffer: ArrayBuffer
+        let responseFormat = source.format
         if (file) {
           buffer = await file.arrayBuffer()
         } else {
           const res = await fetch(`/api/files/${requestId}?inline=1${showingPreview ? '&preview=1' : ''}`)
           if (!res.ok) throw new Error(`fetch failed: ${res.status}`)
+          if (showingPreview && isOriginalPreviewFallback(res)) {
+            await res.body?.cancel()
+            if (!disposed) {
+              dispatchLoad('preview-fallback')
+              setStatusText('Preview is unavailable. Load the original full-detail model?')
+              setStatus('error')
+            }
+            return
+          }
+          if (res.headers.get('Content-Type') === 'model/3mf') responseFormat = '3mf'
           // Content-Length is the compressed size when gzipped; the real size travels separately.
           const total = Number(res.headers.get('X-File-Size') ?? res.headers.get('Content-Length')) || 0
           if (res.body && total) {
@@ -55,7 +105,9 @@ export default function StlViewer({ requestId, file, hasPreview = false }: { req
         setStatusText('preparing model…')
         await new Promise((resolve) => setTimeout(resolve)) // Allow the status to paint before synchronous parsing.
 
-        const geometry = parseStl(buffer)
+        if (responseFormat === '3mf') geometryWorker = createModelGeometryWorker()
+        const geometry =
+          responseFormat === '3mf' ? geometryFromPreparedModel(await geometryWorker!.prepareThreeMf(buffer)) : parseStl(buffer)
         if (disposed) {
           geometry.dispose()
           return
@@ -96,6 +148,7 @@ export default function StlViewer({ requestId, file, hasPreview = false }: { req
             area: 'stl_viewer',
             showing_preview: showingPreview,
           })
+          setStatusText("couldn't load this model")
           setStatus('error')
         }
       }
@@ -103,6 +156,7 @@ export default function StlViewer({ requestId, file, hasPreview = false }: { req
 
     return () => {
       disposed = true
+      geometryWorker?.terminate()
       cancelAnimationFrame(frame)
       observer?.disconnect()
       controls?.dispose()
@@ -111,7 +165,17 @@ export default function StlViewer({ requestId, file, hasPreview = false }: { req
         renderer.domElement.remove()
       }
     }
-  }, [requestId, file, showingPreview, posthog])
+  }, [
+    requestId,
+    file,
+    source.format,
+    showingPreview,
+    waitingForPreview,
+    requiresFullDetailConfirmation,
+    previewError,
+    posthog,
+    retryAttempt,
+  ])
 
   return (
     <div
@@ -122,7 +186,22 @@ export default function StlViewer({ requestId, file, hasPreview = false }: { req
         <div className="absolute inset-0 grid place-items-center font-mono text-xs text-muted-foreground">{statusText}</div>
       )}
       {status === 'error' && (
-        <div className="absolute inset-0 grid place-items-center font-mono text-xs text-muted-foreground">couldn't load this model</div>
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center font-mono text-xs text-muted-foreground">
+          <span>{statusText}</span>
+          {(requiresFullDetailConfirmation || fullRequested) && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="xs"
+              onClick={() => {
+                posthog.capture('stl_full_detail_requested', { preview_failed: true })
+                dispatchLoad(requiresFullDetailConfirmation ? 'request-full' : 'retry')
+              }}
+            >
+              {requiresFullDetailConfirmation ? 'load original full detail' : 'retry original full detail'}
+            </Button>
+          )}
+        </div>
       )}
       {status === 'ready' && showingPreview && (
         <Button
@@ -132,7 +211,7 @@ export default function StlViewer({ requestId, file, hasPreview = false }: { req
           className="absolute right-2 bottom-2 font-mono opacity-90"
           onClick={() => {
             posthog.capture('stl_full_detail_requested')
-            setFullRequested(true)
+            dispatchLoad('request-full')
           }}
         >
           preview · load full detail

@@ -1,47 +1,31 @@
-import fs from 'node:fs'
 import crypto from 'node:crypto'
 import { setImmediate } from 'node:timers/promises'
 import { Worker } from 'node:worker_threads'
-import { fileURLToPath } from 'node:url'
 import PQueue from 'p-queue'
 import type { AssetStore, EventBus, PrintRequest, PrintType, Repository, Telemetry } from '../../core/types'
 import { thumbnailKey } from '../../core/assetKeys'
+import { requireModelFormat, type ModelFormat } from '../../core/modelFormat'
 import {
   normalizePrinterProfile,
   ORIENTATION_ANALYSIS_VERSION,
   type PlateModelAnalysis,
   type PrinterProfile,
 } from '../../core/platePlanner'
-import { generateAssets, generateVisualAssets, type GeneratedAssets } from './pipeline'
+import { generateAssets, generateVisualAssets, type AssetWants, type GeneratedAssets } from './pipeline'
 import { logger } from '../logger'
-
-type WorkerConfig = { path: string; execArgv?: string[] }
-
-// Heavy mesh work always runs outside the request event loop. Production uses
-// the bundled worker; development executes the TypeScript source via tsx.
-// Tests stay inline so failures and assertions remain deterministic.
-function resolveWorkerConfig(): WorkerConfig | undefined {
-  if (process.env.VITEST) return undefined
-  if (import.meta.env?.DEV) {
-    return { path: fileURLToPath(new URL('./worker.ts', import.meta.url)), execArgv: ['--import', 'tsx'] }
-  }
-  if (!import.meta.env?.PROD) return undefined
-  for (const candidate of ['../assets-worker.mjs', './assets-worker.mjs', '../../assets-worker.mjs']) {
-    try {
-      const resolved = fileURLToPath(new URL(candidate, import.meta.url))
-      if (fs.existsSync(resolved)) return { path: resolved }
-    } catch {}
-  }
-  logger.warn('assets worker not found next to server bundle; generating assets in-process')
-  return undefined
-}
+import { MODEL_ASSET_WORKER_TIMEOUT_MS, MODEL_WORKER_RESOURCE_LIMITS, resolveWorkerConfig } from './workerConfig'
+import { modelWorkerScheduler, ModelWorkerShutdownError, type ModelWorkerScheduler } from './modelWorkerScheduler'
 
 export class AssetGenerationQueue {
   private visualQueue: PQueue
   private orientationQueue: PQueue
   private visualQueued = new Set<string>()
+  private visualRerun = new Set<string>()
   private orientationQueued = new Set<string>()
   private orientationRerun = new Set<string>()
+  private accepting = true
+  private shutdownController = new AbortController()
+  private jobChains = new Set<Promise<void>>()
   private workerConfig = resolveWorkerConfig()
   private updateTimer: ReturnType<typeof setTimeout> | undefined
   private updateDone: Promise<void> | undefined
@@ -54,6 +38,9 @@ export class AssetGenerationQueue {
     private telemetry: Telemetry,
     concurrency = 8,
     workerConfig = resolveWorkerConfig(),
+    private workerScheduler: ModelWorkerScheduler = modelWorkerScheduler,
+    private workerTimeoutMs = MODEL_ASSET_WORKER_TIMEOUT_MS,
+    private thumbnailWriteTimeoutMs = Math.min(workerTimeoutMs, 5_000),
   ) {
     this.visualQueue = new PQueue({ concurrency })
     this.orientationQueue = new PQueue({ concurrency })
@@ -62,6 +49,7 @@ export class AssetGenerationQueue {
   }
 
   enqueue(requestId: string) {
+    if (!this.accepting) return
     this.repository.queueAssetGeneration(requestId)
     this.repository.queueOrientationAnalysis(requestId, ORIENTATION_ANALYSIS_VERSION)
     this.enqueueVisual(requestId)
@@ -69,12 +57,14 @@ export class AssetGenerationQueue {
   }
 
   enqueueAnalysis(requestId: string) {
+    if (!this.accepting) return
     this.repository.queueOrientationAnalysis(requestId, ORIENTATION_ANALYSIS_VERSION)
     this.enqueueOrientation(requestId, true)
   }
 
   /** Queue requests without completed asset or orientation stamps. */
   backfill() {
+    if (!this.accepting) return
     const requestIds = new Set([
       ...this.repository.requestsNeedingAssets(),
       ...this.repository.requestsNeedingOrientationAnalysis(ORIENTATION_ANALYSIS_VERSION),
@@ -84,15 +74,20 @@ export class AssetGenerationQueue {
 
   /** Resolve when all currently queued work finishes. */
   async idle() {
-    await Promise.all([this.visualQueue.onIdle(), this.orientationQueue.onIdle()])
+    do {
+      await Promise.all([this.visualQueue.onIdle(), this.orientationQueue.onIdle()])
+      await Promise.all(this.jobChains)
+    } while (this.jobChains.size)
     await this.updateDone
   }
 
   async shutdown() {
+    this.accepting = false
     this.visualQueue.pause()
     this.orientationQueue.pause()
-    await Promise.all([this.visualQueue.onPendingZero(), this.orientationQueue.onPendingZero()])
-    await this.updateDone
+    this.shutdownController.abort(new ModelWorkerShutdownError())
+    await this.workerScheduler.shutdown()
+    await this.idle()
   }
 
   stats() {
@@ -100,7 +95,8 @@ export class AssetGenerationQueue {
       queued: this.visualQueue.size + this.orientationQueue.size,
       pending: this.visualQueue.pending + this.orientationQueue.pending,
       concurrency: this.visualQueue.concurrency,
-      worker: !!this.workerConfig,
+      worker: !('inline' in this.workerConfig),
+      workers: this.workerScheduler.stats(),
       visual: { queued: this.visualQueue.size, running: this.visualQueue.pending, concurrency: this.visualQueue.concurrency },
       orientation: {
         queued: this.orientationQueue.size,
@@ -113,12 +109,16 @@ export class AssetGenerationQueue {
   private enqueueVisual(requestId: string) {
     if (this.visualQueued.has(requestId)) return
     this.visualQueued.add(requestId)
-    void this.visualQueue
-      .add(() => this.processVisual(requestId), { priority: 10 })
-      .catch((error) => logger.error({ err: error, requestId }, 'visual asset queue job failed'))
-      .finally(() => {
-        this.visualQueued.delete(requestId)
-      })
+    this.trackJobChain(
+      this.visualQueue
+        .add(() => this.processVisual(requestId), { priority: 10, signal: this.shutdownController.signal })
+        .catch((error) => logger.error({ err: error, requestId }, 'visual asset queue job failed'))
+        .finally(() => {
+          const rerun = this.visualRerun.delete(requestId)
+          this.visualQueued.delete(requestId)
+          if (rerun && this.accepting) this.enqueueVisual(requestId)
+        }),
+    )
   }
 
   private enqueueOrientation(requestId: string, rerunIfQueued = false) {
@@ -127,17 +127,27 @@ export class AssetGenerationQueue {
       return
     }
     this.orientationQueued.add(requestId)
-    void this.orientationQueue
-      .add(() => this.processOrientationUntilCurrent(requestId))
-      .catch((error) => logger.error({ err: error, requestId }, 'orientation queue job failed'))
-      .finally(() => {
-        const rerun = this.orientationRerun.delete(requestId)
-        this.orientationQueued.delete(requestId)
-        if (rerun) {
-          this.repository.queueOrientationAnalysis(requestId, ORIENTATION_ANALYSIS_VERSION)
-          this.enqueueOrientation(requestId)
-        }
-      })
+    this.trackJobChain(
+      this.orientationQueue
+        .add(() => this.processOrientationUntilCurrent(requestId), { signal: this.shutdownController.signal })
+        .catch((error) => logger.error({ err: error, requestId }, 'orientation queue job failed'))
+        .finally(() => {
+          const rerun = this.orientationRerun.delete(requestId)
+          this.orientationQueued.delete(requestId)
+          if (rerun && this.accepting) {
+            this.repository.queueOrientationAnalysis(requestId, ORIENTATION_ANALYSIS_VERSION)
+            this.enqueueOrientation(requestId)
+          }
+        }),
+    )
+  }
+
+  private trackJobChain(job: Promise<void>) {
+    this.jobChains.add(job)
+    void job.then(
+      () => this.jobChains.delete(job),
+      () => this.jobChains.delete(job),
+    )
   }
 
   private async processOrientationUntilCurrent(requestId: string) {
@@ -161,53 +171,39 @@ export class AssetGenerationQueue {
       preview: jobs.some((job) => job.stage === 'preview' && job.status === 'pending'),
     }
     if (!wants.thumbnail && !wants.preview) return
-    this.repository.startAssetGeneration(
-      requestId,
-      [wants.thumbnail ? 'thumbnail' : undefined, wants.preview ? 'preview' : undefined].filter(Boolean) as ('thumbnail' | 'preview')[],
-    )
-    this.publishUpdate()
-
-    let file: Uint8Array
     try {
-      file = await readAll(await this.assets.read(request.filePath))
-    } catch (error) {
-      // Storage trouble is transient: leave the request unstamped so the next
-      // boot's backfill retries it.
-      void this.telemetry.exception(error, { action: 'assets_read', print_type: printType }).catch(() => undefined)
-      log.warn({ err: error }, 'asset source read failed')
-      this.repository.requeueAssetGeneration(
-        requestId,
-        (['thumbnail', 'preview'] as const).filter((stage) => wants[stage]),
-      )
-      this.publishUpdate()
-      return
-    }
-
-    await setImmediate()
-    try {
-      const generated = await this.runVisualPipeline(file, wants, async (thumbnailPng) => {
-        const thumbnailPath = thumbnailKey(request.filePath, 'image/png')
-        try {
-          await this.assets.write(thumbnailPath, thumbnailPng)
-        } catch (error) {
-          throw new AssetWriteError(error)
-        }
-        this.repository.finishAssetGeneration(requestId, 'thumbnail', { status: 'ready', path: thumbnailPath })
+      await this.workerScheduler.run(async (signal) => {
+        signal.throwIfAborted()
+        const currentRequest = this.repository.getRequest(requestId)
+        if (!currentRequest) return
+        this.repository.startAssetGeneration(
+          requestId,
+          [wants.thumbnail ? 'thumbnail' : undefined, wants.preview ? 'preview' : undefined].filter(Boolean) as ('thumbnail' | 'preview')[],
+        )
         this.publishUpdate()
-      })
-      if (wants.preview) {
-        if (generated.previewStl) {
-          const previewPath = this.assets.previewPath(request.filePath)
-          try {
-            await this.assets.write(previewPath, generated.previewStl)
-          } catch (error) {
-            throw new AssetWriteError(error)
+        const sourcePath = currentRequest.filePath
+        const file = await this.readAsset(sourcePath)
+        signal.throwIfAborted()
+        await setImmediate()
+        const generated = await this.runVisualPipeline(
+          file,
+          requireModelFormat(currentRequest.fileName),
+          wants,
+          async (thumbnailPng) => {
+            const thumbnailPath = thumbnailKey(sourcePath, 'image/png')
+            if (await this.finishGeneratedAsset(requestId, 'thumbnail', thumbnailPath, thumbnailPng)) this.publishUpdate()
+          },
+          signal,
+        )
+        if (wants.preview) {
+          if (generated.previewStl) {
+            const previewPath = this.assets.previewPath(sourcePath)
+            await this.finishGeneratedAsset(requestId, 'preview', previewPath, generated.previewStl)
+          } else {
+            if (this.repository.getRequest(requestId)) this.repository.finishAssetGeneration(requestId, 'preview', { status: 'skipped' })
           }
-          this.repository.finishAssetGeneration(requestId, 'preview', { status: 'ready', path: previewPath })
-        } else {
-          this.repository.finishAssetGeneration(requestId, 'preview', { status: 'skipped' })
         }
-      }
+      })
       this.publishUpdate()
       log.info({ durationMs: Math.round(performance.now() - startedAt), ...wants }, 'visual asset generation completed')
     } catch (error) {
@@ -215,7 +211,14 @@ export class AssetGenerationQueue {
       const running = (['thumbnail', 'preview'] as const).filter((stage) =>
         current.some((job) => job.stage === stage && job.status === 'running'),
       )
-      if (error instanceof AssetWriteError) {
+      if (error instanceof ModelWorkerShutdownError) {
+        this.repository.requeueAssetGeneration(requestId, running)
+      } else if (error instanceof AssetReadError) {
+        void this.telemetry.exception(error.cause, { action: 'assets_read', print_type: printType }).catch(() => undefined)
+        log.warn({ err: error.cause }, 'asset source read failed')
+        this.repository.requeueAssetGeneration(requestId, running)
+        if (this.repository.getRequest(requestId)?.filePath !== error.path) this.visualRerun.add(requestId)
+      } else if (error instanceof AssetWriteError) {
         void this.telemetry.exception(error.cause, { action: 'assets_write', print_type: printType }).catch(() => undefined)
         log.warn({ err: error.cause }, 'generated asset write failed')
         this.repository.requeueAssetGeneration(requestId, running)
@@ -230,7 +233,6 @@ export class AssetGenerationQueue {
   }
 
   private async processOrientation(requestId: string) {
-    await this.visualQueue.onIdle()
     const request = this.repository.getRequest(requestId)
     if (!request) return
     const printType = requestPrintType(this.repository, request)
@@ -240,33 +242,44 @@ export class AssetGenerationQueue {
       (printType !== 'resin' || existingAnalysis.orientationCandidates?.length)
     )
       return
-    this.repository.startOrientationAnalysis(requestId, ORIENTATION_ANALYSIS_VERSION)
-    this.publishUpdate()
     try {
-      const sourceFile = await readAll(await this.assets.read(request.filePath))
-      const contentHash = crypto.createHash('sha256').update(sourceFile).digest('hex')
-      const sharedAnalysis = this.repository.findPlateModelAnalysisByContentHash(contentHash, ORIENTATION_ANALYSIS_VERSION)
-      const analysisFile = request.previewPath ? await readAll(await this.assets.read(request.previewPath)) : sourceFile
-      const sourceGenerated = await this.runPipeline(sourceFile, {
-        thumbnail: false,
-        preview: false,
-        meshAnalysis: true,
-        orientation: printType === 'resin' && !request.previewPath && !sharedAnalysis?.orientationCandidates?.length,
+      const { contentHash, sourceGenerated, sharedAnalysis } = await this.workerScheduler.run(async (signal) => {
+        signal.throwIfAborted()
+        const currentRequest = this.repository.getRequest(requestId)
+        if (!currentRequest) throw new Error('request was removed before analysis')
+        this.repository.startOrientationAnalysis(requestId, ORIENTATION_ANALYSIS_VERSION)
+        this.publishUpdate()
+        const sourceFile = await this.readAsset(currentRequest.filePath)
+        signal.throwIfAborted()
+        const sourceContentHash = crypto.createHash('sha256').update(sourceFile).digest('hex')
+        const matchingAnalysis = this.repository.findPlateModelAnalysisByContentHash(sourceContentHash, ORIENTATION_ANALYSIS_VERSION)
+        const sharedCandidates = matchingAnalysis?.orientationCandidates
+        const generated = await this.runPipeline(
+          sourceFile,
+          {
+            thumbnail: false,
+            preview: false,
+            meshAnalysis: true,
+            orientation: printType === 'resin' && !sharedCandidates?.length,
+            orientationQuaternions: sharedCandidates?.map((candidate) => candidate.quaternion),
+          },
+          requireModelFormat(currentRequest.fileName),
+          signal,
+        )
+        return { contentHash: sourceContentHash, sourceGenerated: generated, sharedAnalysis: matchingAnalysis }
       })
       const mesh = sourceGenerated.meshAnalysis
       if (!mesh) throw new Error('mesh analysis returned no result')
-      const generated =
-        printType === 'resin' && request.previewPath && !sharedAnalysis?.orientationCandidates?.length
-          ? await this.runPipeline(analysisFile, { thumbnail: false, preview: false, orientation: true })
-          : sourceGenerated
       const orientationCandidates =
         printType === 'resin'
-          ? (sharedAnalysis?.orientationCandidates ?? generated?.orientationCandidates)?.map((candidate) => ({
+          ? (sharedAnalysis?.orientationCandidates ?? sourceGenerated.orientationCandidates)?.map((candidate, index) => ({
               ...candidate,
+              ...sourceGenerated.orientationBounds?.[index],
               estimatedVolumeMm3: mesh.estimatedVolumeMm3 ?? 0,
             }))
           : undefined
       if (printType !== 'resin' || orientationCandidates?.length) {
+        if (!this.repository.getRequest(requestId)) return
         const selected = orientationCandidates?.[0]
         const analysis: PlateModelAnalysis = {
           requestId,
@@ -287,24 +300,73 @@ export class AssetGenerationQueue {
       }
       this.publishUpdate()
     } catch (error) {
-      this.repository.failOrientationAnalysis(requestId, ORIENTATION_ANALYSIS_VERSION, errorMessage(error))
+      if (error instanceof ModelWorkerShutdownError) {
+        this.repository.queueOrientationAnalysis(requestId, ORIENTATION_ANALYSIS_VERSION)
+      } else if (error instanceof AssetReadError) {
+        void this.telemetry.exception(error.cause, { action: 'orientation_read', print_type: printType }).catch(() => undefined)
+        this.repository.queueOrientationAnalysis(requestId, ORIENTATION_ANALYSIS_VERSION)
+        if (this.repository.getRequest(requestId)?.filePath !== error.path) this.orientationRerun.add(requestId)
+      } else {
+        this.repository.failOrientationAnalysis(requestId, ORIENTATION_ANALYSIS_VERSION, errorMessage(error))
+      }
       this.publishUpdate()
     }
   }
 
+  private async finishGeneratedAsset(requestId: string, stage: 'thumbnail' | 'preview', path: string, contents: Uint8Array) {
+    try {
+      await this.assets.write(path, contents)
+    } catch (error) {
+      throw new AssetWriteError(error)
+    }
+    if (this.repository.finishAssetGeneration(requestId, stage, { status: 'ready', path })) return true
+    await this.assets.remove(path)
+    return false
+  }
+
   private runVisualPipeline(
     file: Uint8Array,
+    format: ModelFormat,
     wants: { thumbnail: boolean; preview: boolean },
     thumbnailReady: (thumbnail: Uint8Array) => void | Promise<void>,
+    signal: AbortSignal,
   ): Promise<{ previewStl?: Uint8Array }> {
-    if (!this.workerConfig) return generateVisualAssets(file, wants, thumbnailReady)
+    signal.throwIfAborted()
+    if ('inline' in this.workerConfig) return generateVisualAssets(file, format, wants, thumbnailReady)
+    const workerConfig = this.workerConfig
     return new Promise((resolve, reject) => {
-      const worker = new Worker(this.workerConfig!.path, {
-        workerData: { file, wants, mode: 'visual' },
+      const worker = new Worker(workerConfig.path, {
+        workerData: { file, format, wants, mode: 'visual' },
         transferList: [file.buffer as ArrayBuffer],
-        execArgv: this.workerConfig!.execArgv,
+        execArgv: workerConfig.execArgv ?? [],
+        resourceLimits: MODEL_WORKER_RESOURCE_LIMITS,
       })
+      let settled = false
+      let completed = false
       let thumbnailWrite = Promise.resolve()
+      const timer = setTimeout(
+        () => void settle(() => reject(new Error('visual asset worker exceeded its execution deadline'))),
+        this.workerTimeoutMs,
+      )
+      const settle = async (action: () => void) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        try {
+          await worker.terminate()
+        } catch (error) {
+          reject(error)
+          return
+        }
+        action()
+      }
+      const settleAfterThumbnail = (action: () => void) => {
+        void withTimeout(thumbnailWrite, this.thumbnailWriteTimeoutMs, 'thumbnail storage exceeded its execution deadline').then(
+          () => void settle(action),
+          (error) => void settle(() => reject(error)),
+        )
+      }
+      signal.addEventListener('abort', () => void settle(() => reject(signal.reason)), { once: true })
       worker.on(
         'message',
         (
@@ -313,42 +375,73 @@ export class AssetGenerationQueue {
             | ({ ok: true; stage: 'complete' } & GeneratedAssets)
             | { ok: false; message: string },
         ) => {
-          if (!reply.ok) return reject(new Error(reply.message))
-          if (reply.stage === 'thumbnail') thumbnailWrite = thumbnailWrite.then(() => thumbnailReady(reply.thumbnailPng))
-          else void thumbnailWrite.then(() => resolve({ previewStl: reply.previewStl }), reject)
+          if (!reply.ok) return settleAfterThumbnail(() => reject(new Error(reply.message)))
+          if (reply.stage === 'thumbnail') {
+            thumbnailWrite = thumbnailWrite.then(() => thumbnailReady(reply.thumbnailPng))
+            void thumbnailWrite.catch(() => undefined)
+          } else {
+            completed = true
+            void thumbnailWrite.then(
+              () => void settle(() => resolve({ previewStl: reply.previewStl })),
+              (error) => void settle(() => reject(error)),
+            )
+          }
         },
       )
-      worker.once('error', reject)
+      worker.once('error', (error) => settleAfterThumbnail(() => reject(error)))
       worker.once('exit', (code) => {
-        if (code !== 0) reject(new Error(`asset worker exited with code ${code}`))
+        if (code !== 0 || !completed) settleAfterThumbnail(() => reject(new Error(`asset worker exited with code ${code}`)))
       })
     })
   }
 
-  private runPipeline(
-    file: Uint8Array,
-    wants: { thumbnail: boolean; preview: boolean; orientation?: boolean; meshAnalysis?: boolean },
-  ): Promise<GeneratedAssets> {
-    if (!this.workerConfig) return generateAssets(file, wants)
+  private runPipeline(file: Uint8Array, wants: AssetWants, format: ModelFormat, signal: AbortSignal): Promise<GeneratedAssets> {
+    signal.throwIfAborted()
+    if ('inline' in this.workerConfig) return generateAssets(file, format, wants)
+    const workerConfig = this.workerConfig
     return new Promise((resolve, reject) => {
-      const worker = new Worker(this.workerConfig!.path, {
-        workerData: { file, wants },
+      const worker = new Worker(workerConfig.path, {
+        workerData: { file, format, wants },
         transferList: [file.buffer as ArrayBuffer],
-        execArgv: this.workerConfig!.execArgv,
+        execArgv: workerConfig.execArgv ?? [],
+        resourceLimits: MODEL_WORKER_RESOURCE_LIMITS,
       })
       let settled = false
-      const settle = (action: () => void) => {
+      let receivedResult = false
+      const timer = setTimeout(
+        () => void settle(() => reject(new Error('orientation asset worker exceeded its execution deadline'))),
+        this.workerTimeoutMs,
+      )
+      const settle = async (action: () => void) => {
         if (settled) return
         settled = true
+        clearTimeout(timer)
+        try {
+          await worker.terminate()
+        } catch (error) {
+          reject(error)
+          return
+        }
         action()
-        void worker.terminate()
       }
+      signal.addEventListener('abort', () => void settle(() => reject(signal.reason)), { once: true })
       worker.once('message', (reply: ({ ok: true } & GeneratedAssets) | { ok: false; message: string }) => {
-        settle(() => (reply.ok ? resolve(reply) : reject(new Error(reply.message))))
+        receivedResult = true
+        void settle(() => (reply.ok ? resolve(reply) : reject(new Error(reply.message))))
       })
-      worker.once('error', (error) => settle(() => reject(error)))
-      worker.once('exit', (code) => settle(() => reject(new Error(`asset worker exited with code ${code}`))))
+      worker.once('error', (error) => void settle(() => reject(error)))
+      worker.once('exit', (code) => {
+        if (!receivedResult) void settle(() => reject(new Error(`asset worker exited with code ${code}`)))
+      })
     })
+  }
+
+  private async readAsset(path: string) {
+    try {
+      return await readAll(await this.assets.read(path))
+    } catch (error) {
+      throw new AssetReadError(path, error)
+    }
   }
 
   private publishUpdate() {
@@ -370,6 +463,22 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
+function withTimeout<Result>(promise: Promise<Result>, timeoutMs: number, message: string) {
+  return new Promise<Result>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), timeoutMs)
+    promise.then(
+      (result) => {
+        clearTimeout(timer)
+        resolve(result)
+      },
+      (error) => {
+        clearTimeout(timer)
+        reject(error)
+      },
+    )
+  })
+}
+
 function requestPrintType(repository: Repository, request: PrintRequest): PrintType | undefined {
   if (!request.printerId) return request.requestedPrintType
   const profiles = repository.getSetting<PrinterProfile[]>('plate-planner-profiles') ?? []
@@ -379,6 +488,15 @@ function requestPrintType(repository: Repository, request: PrintRequest): PrintT
 
 class AssetWriteError extends Error {
   constructor(readonly cause: unknown) {
+    super(errorMessage(cause))
+  }
+}
+
+class AssetReadError extends Error {
+  constructor(
+    readonly path: string,
+    readonly cause: unknown,
+  ) {
     super(errorMessage(cause))
   }
 }

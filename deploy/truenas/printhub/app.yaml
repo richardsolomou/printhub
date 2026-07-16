@@ -8,7 +8,7 @@ changelog_url: https://github.com/richardsolomou/printhub/releases
 date_added: '2026-07-12'
 description: >-
   PrintHub is a private, self-hosted 3D-print production queue for resin and
-  filament printers. Accept STL requests, manage mixed printer fleets, plan build plates, and
+  filament printers. Accept STL and 3MF requests, manage mixed printer fleets, plan build plates, and
   track each copy while files stay on storage you control.
 home: https://github.com/richardsolomou/printhub
 host_mounts: []
@@ -18,6 +18,7 @@ keywords:
   - resin
   - filament
   - stl
+  - 3mf
   - kanban
   - queue
 lib_version: 2.3.4

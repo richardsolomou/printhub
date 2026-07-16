@@ -104,7 +104,7 @@ export function DiagnosticsPane() {
               </div>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">All uploaded STL background jobs are complete.</p>
+            <p className="text-sm text-muted-foreground">All uploaded model background jobs are complete.</p>
           )}
         </SettingsSection>
       )}

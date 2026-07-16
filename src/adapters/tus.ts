@@ -18,6 +18,14 @@ export class TusUploadStore implements UploadStore {
   async remove(uploadId: string) {
     if (!/^[a-z0-9-]{10,64}$/i.test(uploadId)) throw new Error('invalid upload id')
     const filePath = path.join(this.datastore.directory, uploadId)
-    await Promise.all([fs.promises.rm(filePath, { force: true }), this.datastore.configstore.delete(uploadId)])
+    await Promise.all([fs.promises.rm(filePath, { force: true }), ignoreMissing(() => this.datastore.configstore.delete(uploadId))])
+  }
+}
+
+async function ignoreMissing(work: () => Promise<void>) {
+  try {
+    await work()
+  } catch (error) {
+    if (!error || typeof error !== 'object' || !('code' in error) || error.code !== 'ENOENT') throw error
   }
 }

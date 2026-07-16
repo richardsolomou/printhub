@@ -207,7 +207,7 @@ export function Board({
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
             {filtered
               ? 'Clear or adjust the filters to see resin and filament requests in the queue.'
-              : 'Add a private STL request to start tracking copies from Queue through Printing, Finishing, and Ready.'}
+              : 'Add a private STL or 3MF request to start tracking copies from Queue through Printing, Finishing, and Ready.'}
           </p>
         </div>
       </main>

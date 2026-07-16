@@ -8,6 +8,7 @@ import type { StatusId } from '../../core/workflow'
 import type { PublicPrintRequest } from '../../core/types'
 import { LazyThumb } from './LazyThumb'
 import { FitAlertIcon, printTypeLabel } from './PrintType'
+import { modelFormatLabel } from '../../core/modelFormat'
 
 export function RequestCard({
   request,
@@ -75,10 +76,10 @@ export function RequestCard({
       onClick={onOpen}
     >
       {request.hasThumbnail ? (
-        <LazyThumb requestId={request.id} />
+        <LazyThumb requestId={request.id} modelFormat={request.modelFormat} />
       ) : (
         <div className="thumb grid size-16 shrink-0 place-items-center overflow-hidden rounded-md border bg-background [background-image:var(--grid)] [background-size:12px_12px]">
-          <span className="font-mono text-[10px] text-muted-foreground">stl</span>
+          <span className="font-mono text-[10px] text-muted-foreground">{modelFormatLabel(request.modelFormat)}</span>
         </div>
       )}
       <div className="min-w-0 flex-1">
