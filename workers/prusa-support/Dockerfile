@@ -17,7 +17,7 @@ RUN --mount=type=cache,id=printhub-prusa-deps,target=/src/deps/build \
     cmake -S deps -B deps/build -DCMAKE_BUILD_TYPE=Release \
       -DPrusaSlicer_deps_PACKAGE_EXCLUDES='^(Catch2|NanoSVG|OCCT|OpenCSG|wxWidgets)$' \
     && cmake --build deps/build --parallel 1 \
-    && cmake -S . -B build -DSLIC3R_GUI=OFF -DSLIC3R_STATIC=ON -DSLIC3R_PCH=OFF -DSLIC3R_ENABLE_FORMAT_STEP=OFF \
+    && cmake -S . -B build -DSLIC3R_GUI=OFF -DSLIC3R_STATIC=ON -DSLIC3R_PCH=OFF -DSLIC3R_ENABLE_FORMAT_STEP=OFF -DSLIC3R_BUILD_TESTS=OFF \
       -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/src/deps/build/destdir/usr/local \
     && cmake --build build --target printhub-support --parallel 2 \
     && cp build/src/printhub-support/printhub-support /printhub-support
