@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.21.1
+
+### Patch Changes
+
+- 84e8144: Show account creation errors returned by the authentication API and reduce the minimum password length to eight characters.
+
 ## 0.21.0
 
 ### Minor Changes
