@@ -53,6 +53,20 @@ jobs:
         run: pnpm exec playwright install chromium
       - run: pnpm test:e2e
 
+  support-worker:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: workers/prusa-support
+          platforms: linux/amd64
+          push: false
+          cache-from: type=gha,scope=printhub-prusa-support-amd64
+          cache-to: type=gha,mode=max,scope=printhub-prusa-support-amd64
+
   dependency-review:
     if: github.event_name == 'pull_request' && github.event.repository.private == false
     runs-on: ubuntu-latest
@@ -92,7 +106,7 @@ jobs:
 
   release:
     if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push')
-    needs: [check, e2e]
+    needs: [check, e2e, support-worker]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -165,7 +179,7 @@ jobs:
   build-image:
     if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push')
     needs: [check, e2e, release]
-    name: Build image (${{ matrix.platform }})
+    name: Build ${{ matrix.component }} image (${{ matrix.platform }})
     strategy:
       fail-fast: false
       matrix:
@@ -173,9 +187,27 @@ jobs:
           - platform: linux/amd64
             arch: amd64
             runner: ubuntu-24.04
+            component: app
+            context: .
+            image: printhub
           - platform: linux/arm64
             arch: arm64
             runner: ubuntu-24.04-arm
+            component: app
+            context: .
+            image: printhub
+          - platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-24.04
+            component: support
+            context: workers/prusa-support
+            image: printhub-prusa-support
+          - platform: linux/arm64
+            arch: arm64
+            runner: ubuntu-24.04-arm
+            component: support
+            context: workers/prusa-support
+            image: printhub-prusa-support
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -193,30 +225,38 @@ jobs:
       - uses: docker/build-push-action@v7
         id: build
         with:
-          context: .
+          context: ${{ matrix.context }}
           platforms: ${{ matrix.platform }}
           push: true
           sbom: true
           provenance: mode=max
-          outputs: type=image,name=ghcr.io/${{ github.repository_owner }}/printhub,push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=gha,scope=printhub-${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=printhub-${{ matrix.arch }}
+          outputs: type=image,name=ghcr.io/${{ github.repository_owner }}/${{ matrix.image }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
       - name: Export digest
         run: |
-          mkdir -p "$RUNNER_TEMP/digests"
-          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+          mkdir -p "$RUNNER_TEMP/digests-${COMPONENT}"
+          touch "$RUNNER_TEMP/digests-${COMPONENT}/${DIGEST#sha256:}"
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
+          COMPONENT: ${{ matrix.component }}
       - uses: actions/upload-artifact@v7
         with:
-          name: digests-${{ matrix.arch }}
-          path: ${{ runner.temp }}/digests/*
+          name: digests-${{ matrix.component }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests-${{ matrix.component }}/*
           if-no-files-found: error
           retention-days: 1
 
   publish-image:
     if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push')
     needs: [check, e2e, release, build-image]
+    strategy:
+      matrix:
+        include:
+          - component: app
+            image: printhub
+          - component: support
+            image: printhub-prusa-support
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -225,8 +265,8 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
-          pattern: digests-*
-          path: ${{ runner.temp }}/digests
+          pattern: digests-${{ matrix.component }}-*
+          path: ${{ runner.temp }}/digests-${{ matrix.component }}
           merge-multiple: true
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
@@ -235,7 +275,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Create multi-platform image
-        working-directory: ${{ runner.temp }}/digests
+        working-directory: ${{ runner.temp }}/digests-${{ matrix.component }}
         run: |
           images=()
           for digest in *; do
@@ -254,13 +294,13 @@ jobs:
             "${tags[@]}" \
             "${images[@]}"
         env:
-          IMAGE: ghcr.io/${{ github.repository_owner }}/printhub
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
           IMAGE_SHA: ${{ needs.release.outputs.sha }}
           RELEASE_CREATED: ${{ needs.release.outputs.created }}
           RELEASE_TAG: ${{ needs.release.outputs.tag }}
       - uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: ghcr.io/${{ github.repository_owner }}/printhub:sha-${{ needs.release.outputs.sha }}
+          image-ref: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:sha-${{ needs.release.outputs.sha }}
           format: table
           exit-code: '1'
           severity: CRITICAL,HIGH

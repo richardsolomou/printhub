@@ -24,7 +24,7 @@ It replaces spreadsheets, messages, and handwritten queues with one clear view o
 1. **You or your requesters upload models** with quantities, notes, and a preferred print type.
 2. **PrintHub checks compatibility** against your configured printers and estimates material use.
 3. **You plan build plates** across the outstanding resin and filament workload.
-4. **3MF layouts open in your slicer** for final orientation, supports, and print settings.
+4. **3MF layouts open in your slicer** for final print settings, with optional PrusaSlicer-generated resin supports already rendered and embedded.
 5. **Each copy is tracked** through printing, finishing, and collection.
 
 Along the way, PrintHub provides:
@@ -32,6 +32,7 @@ Along the way, PrintHub provides:
 - A private request queue with accounts, invites, and optional social login and two-factor authentication.
 - Interactive STL previews, thumbnails, model-fit checks, and backlog filtering.
 - Mixed resin and filament printer fleets in one installation.
+- Prepared resin 3MF projects containing the same generated support and pad geometry shown in the planner.
 - Local-folder or S3-compatible model storage, with guided storage migration.
 - Reordering and withdrawal controls that preserve everyone else's queue priority.
 - Automatic database migrations, backups, health checks, and optional SMTP notifications.
@@ -56,6 +57,8 @@ docker run -d --name printhub \
 
 Open `http://localhost:3010`. The first account created becomes the admin.
 
+The single-container command supports planning and standard 3MF export. Use Docker Compose to enable automatic resin support generation with the bundled PrusaSlicer worker.
+
 > Keep `/data` on a local filesystem. SQLite WAL databases should not be placed on NFS, SMB, or CIFS.
 
 ### Other installs
@@ -68,12 +71,19 @@ Open `http://localhost:3010`. The first account created becomes the admin.
 
 Most settings—including printers, materials, storage, authentication, and email—are managed in the admin UI.
 
-| Variable     | Default   | Purpose                                                          |
-| ------------ | --------- | ---------------------------------------------------------------- |
-| `DATA_DIR`   | `/data`   | Database, migration backups, upload staging, and encrypted keys. |
-| `PRINTS_DIR` | `/prints` | Default local model storage.                                     |
+| Variable                   | Default   | Purpose                                                          |
+| -------------------------- | --------- | ---------------------------------------------------------------- |
+| `DATA_DIR`                 | `/data`   | Database, migration backups, upload staging, and encrypted keys. |
+| `PRINTS_DIR`               | `/prints` | Default local model storage.                                     |
+| `RESIN_SUPPORT_WORKER_URL` | unset     | PrusaSlicer support worker URL; Compose configures this.         |
 
 For a custom domain, set `BETTER_AUTH_URL` to the public origin, add it to `BETTER_AUTH_TRUSTED_ORIGINS`, and configure your reverse proxy to preserve the original host and protocol. See `.env.example` for authentication and SMTP overrides.
+
+## Resin support generation
+
+The planner can send a prepared resin plate to an isolated worker built from PrusaSlicer 2.9.6, render the returned support and pad mesh, and embed that exact geometry in the downloadable prepared 3MF. The result is intended as a fast starting point for PrusaSlicer, UVtools, or another downstream resin workflow rather than a complete browser slicer.
+
+Docker Compose starts the worker with a read-only filesystem, dropped capabilities, resource limits, and a private application connection. For a custom deployment, run `ghcr.io/richardsolomou/printhub-prusa-support:latest` separately and set `RESIN_SUPPORT_WORKER_URL` in the PrintHub container.
 
 ## Storage and backups 💾
 
@@ -105,4 +115,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development and release guidance, [SE
 
 ## License
 
-[MIT](LICENSE)
+The PrintHub application is [MIT licensed](LICENSE). The separately built Prusa support worker is AGPL-3.0-or-later because it links to PrusaSlicer; its corresponding source and pinned upstream revision are documented in `workers/prusa-support`.

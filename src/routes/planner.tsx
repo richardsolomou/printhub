@@ -1,6 +1,6 @@
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { Link, createFileRoute, redirect } from '@tanstack/react-router'
-import { Box, ChevronLeft, ChevronRight, Download, Settings, TriangleAlert } from 'lucide-react'
+import { Box, ChevronLeft, ChevronRight, Download, Settings, TriangleAlert, WandSparkles } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -21,6 +21,8 @@ import { peopleQuery, platePlannerQuery, requestsQuery, sessionQuery } from '../
 import { enabledPrinters, printTypeLabel } from '../client/fleet'
 import { savePlatePlannerDraft } from '../server/fns'
 import type { ResinOrientation } from '../core/mesh/resinOrientation'
+import { parseStl } from '../core/mesh/stl'
+import type { ResinSupportPreset } from '../core/mesh/threeMf'
 import {
   normalizePrinterProfile,
   ORIENTATION_ANALYSIS_VERSION,
@@ -49,6 +51,11 @@ export const Route = createFileRoute('/planner')({
 const PLATE_LAYOUT_VERSION = 5
 const EMPTY_PLACEMENTS: PlatePlacement[] = []
 const EMPTY_PLATES: PlatePlacement[][] = []
+const SUPPORT_PRESETS: { value: ResinSupportPreset; label: string }[] = [
+  { value: 'light', label: 'Light supports' },
+  { value: 'medium', label: 'Medium supports' },
+  { value: 'heavy', label: 'Heavy supports' },
+]
 
 const DEFAULT_PRINTERS: PrinterProfile[] = [
   {
@@ -84,10 +91,19 @@ function PlannerPage() {
   const [plateIndex, setPlateIndex] = useState(0)
   const [geometryRevision, setGeometryRevision] = useState(0)
   const [error, setError] = useState<string>()
-  const [exportingPlate, setExportingPlate] = useState(false)
+  const [exportingPlate, setExportingPlate] = useState<'layout' | 'prepared'>()
+  const [generatingSupports, setGeneratingSupports] = useState(false)
+  const [supportPreset, setSupportPreset] = useState<ResinSupportPreset>('medium')
+  const [generatedSupports, setGeneratedSupports] = useState<{
+    key: string
+    buffer: ArrayBuffer
+    geometry: THREE.BufferGeometry
+    elevationMm: number
+  }>()
   const [restored, setRestored] = useState(false)
   const [openRequestId, setOpenRequestId] = useState<string>()
   const generationRef = useRef(0)
+  const supportGenerationRef = useRef(0)
   const generatedFingerprintRef = useRef<string | undefined>(undefined)
 
   const activePrinter = printers.find((printer) => printer.id === printerId) ?? printers[0]
@@ -142,10 +158,29 @@ function PlannerPage() {
     [allOutstanding, analyses, printers],
   )
   const fingerprint = useMemo(() => plannerFingerprint(outstanding, printers, analyses), [analyses, outstanding, printers])
+  const supportKey = useMemo(
+    () =>
+      JSON.stringify({
+        printer: activePrinter,
+        preset: supportPreset,
+        placements: placements.map(({ copyId, requestId, xMm, yMm, rotationZDegrees, orientationQuaternion }) => ({
+          copyId,
+          requestId,
+          xMm,
+          yMm,
+          rotationZDegrees,
+          orientationQuaternion,
+        })),
+      }),
+    [activePrinter, placements, supportPreset],
+  )
+  const visibleSupports = generatedSupports?.key === supportKey ? generatedSupports : undefined
 
   useEffect(() => {
     preloadStlViewer()
   }, [])
+
+  useEffect(() => () => generatedSupports?.geometry.dispose(), [generatedSupports])
 
   useEffect(() => {
     if (!storedPlanner || restored) return
@@ -233,28 +268,86 @@ function PlannerPage() {
     }
   }, [analyses, fingerprint, outstanding, printers])
 
-  const downloadPlate = useCallback(async () => {
-    if (!placements.length || exportingPlate) return
-    const plate = placements
-    const exportingIndex = plateIndex
-    setError(undefined)
-    setExportingPlate(true)
-    try {
+  const loadExportModels = useCallback(
+    async (plate: PlatePlacement[]) => {
       const requestIds = [...new Set(plate.map((placement) => placement.requestId))]
-      const models = await mapConcurrent(requestIds, 4, async (requestId) => {
+      return mapConcurrent(requestIds, 4, async (requestId) => {
         const request = allData?.requests.find((candidate) => candidate.id === requestId)
         const response = await fetch(`/api/files/${requestId}?inline=1`)
         if (!response.ok) throw new Error(`Could not download the original STL for ${request?.name ?? requestId}`)
         return { requestId, name: request?.name ?? requestId, buffer: await response.arrayBuffer() }
       })
-      const archive = await exportPlate(plate, models)
-      downloadFile(archive, `${fileNamePart(activePrinter.name)}-plate-${exportingIndex + 1}.3mf`, 'model/3mf')
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not export this plate')
-    } finally {
-      setExportingPlate(false)
-    }
-  }, [activePrinter.name, allData?.requests, exportingPlate, placements, plateIndex])
+    },
+    [allData?.requests],
+  )
+
+  const generateSupports = useCallback(
+    async (force = false) => {
+      if (!placements.length || activePrinter.printType !== 'resin') throw new Error('A resin plate is required')
+      if (!force && visibleSupports) return visibleSupports
+      const generation = ++supportGenerationRef.current
+      setError(undefined)
+      setGeneratingSupports(true)
+      try {
+        const models = await loadExportModels(placements)
+        const project = await exportPlate(placements, models, {
+          resinPreparation: { printer: activePrinter, supportPreset },
+        })
+        const projectBody = new Uint8Array(project.byteLength)
+        projectBody.set(project)
+        const response = await fetch('/api/resin-supports', {
+          method: 'POST',
+          headers: { 'Content-Type': 'model/3mf' },
+          body: projectBody.buffer,
+        })
+        if (!response.ok) throw new Error((await response.text()) || 'Could not generate supports')
+        const elevationHeader = response.headers.get('x-model-elevation')
+        const elevationMm = elevationHeader === null ? Number.NaN : Number(elevationHeader)
+        if (!Number.isFinite(elevationMm) || elevationMm < 0) throw new Error('Support worker returned invalid elevation metadata')
+        const buffer = await response.arrayBuffer()
+        const geometry = new THREE.BufferGeometry()
+        geometry.setAttribute('position', new THREE.BufferAttribute(parseStl(new Uint8Array(buffer), { center: false }), 3))
+        geometry.computeVertexNormals()
+        const result = { key: supportKey, buffer, geometry, elevationMm }
+        if (generation !== supportGenerationRef.current) {
+          geometry.dispose()
+          throw new Error('The plate changed while supports were being generated')
+        }
+        setGeneratedSupports(result)
+        return result
+      } finally {
+        if (generation === supportGenerationRef.current) setGeneratingSupports(false)
+      }
+    },
+    [activePrinter, loadExportModels, placements, supportKey, supportPreset, visibleSupports],
+  )
+
+  const downloadPlate = useCallback(
+    async (kind: 'layout' | 'prepared') => {
+      if (!placements.length || exportingPlate || generatingSupports) return
+      if (kind === 'prepared' && activePrinter.printType !== 'resin') return
+      const plate = placements
+      const exportingIndex = plateIndex
+      setError(undefined)
+      setExportingPlate(kind)
+      try {
+        const supports = kind === 'prepared' ? await generateSupports() : undefined
+        const models = await loadExportModels(plate)
+        const exportOptions =
+          kind === 'prepared' && activePrinter.printType === 'resin'
+            ? { resinPreparation: { printer: activePrinter, supportPreset }, modelElevationMm: supports?.elevationMm }
+            : undefined
+        const archive = await exportPlate(plate, models, exportOptions, supports?.buffer.slice(0))
+        const preparedSuffix = kind === 'prepared' ? '-prepared' : ''
+        downloadFile(archive, `${fileNamePart(activePrinter.name)}-plate-${exportingIndex + 1}${preparedSuffix}.3mf`, 'model/3mf')
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : 'Could not export this plate')
+      } finally {
+        setExportingPlate(undefined)
+      }
+    },
+    [activePrinter, exportingPlate, generateSupports, generatingSupports, loadExportModels, placements, plateIndex, supportPreset],
+  )
 
   useEffect(() => {
     if (!restored || !storedPlanner || generatedFingerprintRef.current === fingerprint) return
@@ -383,7 +476,9 @@ function PlannerPage() {
                   {activePrinter.printType === 'resin'
                     ? 'Layouts use resin orientation analysis, configured support and adhesion margins, and supported-height grouping.'
                     : 'Layouts preserve the uploaded orientation, may rotate models 90° on the bed, and use the configured spacing and brim margin.'}{' '}
-                  Exported 3MF files contain geometry and placement only; finish support, adhesion, and material settings in your slicer.
+                  {activePrinter.printType === 'resin'
+                    ? 'Generate supports runs the PrusaSlicer worker and renders the exact support and pad geometry included in the prepared 3MF.'
+                    : 'Exported 3MF files contain geometry and placement only; finish adhesion, material, and printer settings in your slicer.'}
                 </p>
               </CardContent>
             </Card>
@@ -446,12 +541,64 @@ function PlannerPage() {
             <CardHeader>
               <div className="flex items-center justify-between gap-3">
                 <CardTitle>{plannedPlates.length ? `Build plate ${plateIndex + 1} of ${plannedPlates.length}` : 'Build plate'}</CardTitle>
-                <div className="flex items-center gap-1">
+                <div className="flex flex-wrap items-center justify-end gap-1">
                   {placements.length > 0 && (
-                    <Button type="button" variant="outline" size="sm" disabled={exportingPlate} onClick={() => void downloadPlate()}>
-                      {exportingPlate ? <Spinner /> : <Download />}
-                      {exportingPlate ? 'Exporting…' : 'Export 3MF'}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={!!exportingPlate || generatingSupports}
+                      onClick={() => void downloadPlate('layout')}
+                    >
+                      {exportingPlate === 'layout' ? <Spinner /> : <Download />}
+                      {exportingPlate === 'layout' ? 'Exporting…' : 'Export 3MF'}
                     </Button>
+                  )}
+                  {placements.length > 0 && activePrinter.printType === 'resin' && (
+                    <>
+                      <Select
+                        items={SUPPORT_PRESETS}
+                        value={supportPreset}
+                        disabled={!!exportingPlate || generatingSupports}
+                        onValueChange={(value) => value && setSupportPreset(value)}
+                      >
+                        <SelectTrigger size="sm" aria-label="Starting support preset">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SUPPORT_PRESETS.map((preset) => (
+                            <SelectItem key={preset.value} value={preset.value}>
+                              {preset.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={!!exportingPlate || generatingSupports}
+                        onClick={() =>
+                          void generateSupports(visibleSupports !== undefined).catch((cause) =>
+                            setError(cause instanceof Error ? cause.message : 'Could not generate supports'),
+                          )
+                        }
+                      >
+                        {generatingSupports ? <Spinner /> : <WandSparkles />}
+                        {generatingSupports ? 'Generating…' : visibleSupports ? 'Regenerate supports' : 'Generate supports'}
+                      </Button>
+                      {visibleSupports && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={!!exportingPlate || generatingSupports}
+                          onClick={() => void downloadPlate('prepared')}
+                        >
+                          {exportingPlate === 'prepared' ? <Spinner /> : <Download />}
+                          {exportingPlate === 'prepared' ? 'Preparing…' : 'Download prepared 3MF'}
+                        </Button>
+                      )}
+                    </>
                   )}
                   {plannedPlates.length > 1 && (
                     <>
@@ -484,6 +631,8 @@ function PlannerPage() {
                   printer={activePrinter}
                   placements={placements}
                   geometries={geometries}
+                  supportGeometry={visibleSupports?.geometry}
+                  modelElevationMm={visibleSupports?.elevationMm}
                   invalidCopyIds={invalidCopyIds}
                   geometryRevision={geometryRevision}
                 />
@@ -507,6 +656,11 @@ function PlannerPage() {
                 </div>
               )}
               {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
+              {visibleSupports && (
+                <p className="mt-3 text-sm text-muted-foreground">
+                  Showing the PrusaSlicer-generated supports and pad included in the prepared 3MF.
+                </p>
+              )}
               {placements.length > 0 && waitingCount > 0 && (
                 <p className="mt-3 text-sm text-muted-foreground">
                   Plate contains {readyCount} analyzed models; {waitingCount} more are being prepared in the background.

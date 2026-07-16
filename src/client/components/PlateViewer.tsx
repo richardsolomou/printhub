@@ -7,11 +7,21 @@ type Props = {
   printer: PrinterProfile
   placements: PlatePlacement[]
   geometries: Map<string, THREE.BufferGeometry>
+  supportGeometry?: THREE.BufferGeometry
+  modelElevationMm?: number
   invalidCopyIds: Set<string>
   geometryRevision?: number
 }
 
-export function PlateViewer({ printer, placements, geometries, invalidCopyIds, geometryRevision = 0 }: Props) {
+export function PlateViewer({
+  printer,
+  placements,
+  geometries,
+  supportGeometry,
+  modelElevationMm = 0,
+  invalidCopyIds,
+  geometryRevision = 0,
+}: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -93,19 +103,31 @@ export function PlateViewer({ printer, placements, geometries, invalidCopyIds, g
     scene.add(fillLight)
 
     const modelMaterials: THREE.Material[] = []
+    let supportMaterial: THREE.MeshStandardMaterial | undefined
+    if (supportGeometry) {
+      supportMaterial = new THREE.MeshStandardMaterial({
+        color: 0xf2a33c,
+        roughness: 0.6,
+        metalness: 0.02,
+        side: THREE.DoubleSide,
+      })
+      scene.add(new THREE.Mesh(supportGeometry, supportMaterial))
+    }
     const padGeometry = new THREE.BoxGeometry(1, 1, 0.3)
     const padMaterials: THREE.Material[] = []
     const hulls = new Map<string, Point[]>()
     const pads: { x: number; y: number; size: number; invalid: boolean }[] = []
-    for (const placement of placements) {
-      const geometry = geometries.get(placement.requestId)
-      if (!geometry) continue
-      let hull = hulls.get(placement.requestId)
-      if (!hull) {
-        hull = projectedHull(geometry, placement.orientationQuaternion)
-        hulls.set(placement.requestId, hull)
+    if (!supportGeometry) {
+      for (const placement of placements) {
+        const geometry = geometries.get(placement.requestId)
+        if (!geometry) continue
+        let hull = hulls.get(placement.requestId)
+        if (!hull) {
+          hull = projectedHull(geometry, placement.orientationQuaternion)
+          hulls.set(placement.requestId, hull)
+        }
+        pads.push(...allowancePads(hull, placement, printer, invalidCopyIds.has(placement.copyId)))
       }
-      pads.push(...allowancePads(hull, placement, printer, invalidCopyIds.has(placement.copyId)))
     }
     for (const invalid of [false, true]) {
       const group = pads.filter((pad) => pad.invalid === invalid)
@@ -165,7 +187,7 @@ export function PlateViewer({ printer, placements, geometries, invalidCopyIds, g
       for (const [index, placement] of group.entries()) {
         plateRotation.setFromAxisAngle(axis, (placement.rotationZDegrees * Math.PI) / 180)
         rotatedCenter.copy(geometryCenter).applyQuaternion(plateRotation)
-        position.set(placement.xMm - rotatedCenter.x, placement.yMm - rotatedCenter.y, -geometryBounds.min.z)
+        position.set(placement.xMm - rotatedCenter.x, placement.yMm - rotatedCenter.y, -geometryBounds.min.z + modelElevationMm)
         rotation.copy(plateRotation).multiply(new THREE.Quaternion(...(placement.orientationQuaternion ?? [0, 0, 0, 1])))
         mesh.setMatrixAt(index, matrix.compose(position, rotation, scale))
       }
@@ -212,10 +234,11 @@ export function PlateViewer({ printer, placements, geometries, invalidCopyIds, g
       padGeometry.dispose()
       for (const material of padMaterials) material.dispose()
       for (const material of modelMaterials) material.dispose()
+      supportMaterial?.dispose()
       renderer.dispose()
       renderer.domElement.remove()
     }
-  }, [geometries, geometryRevision, invalidCopyIds, placements, printer])
+  }, [geometries, geometryRevision, invalidCopyIds, modelElevationMm, placements, printer, supportGeometry])
 
   return (
     <div

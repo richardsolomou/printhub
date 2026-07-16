@@ -8,6 +8,7 @@ const email = 'owner@example.com'
 const password = 'correct-horse-battery-staple'
 const screenshots = path.join(process.cwd(), 'test-results/manual-inspection')
 const captureScreenshots = !process.env.CI
+const useRealResinSupports = process.env.REAL_RESIN_SUPPORTS === '1'
 
 test.beforeAll(async () => {
   if (captureScreenshots) await fs.mkdir(screenshots, { recursive: true })
@@ -62,11 +63,36 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
   await expect(page.getByLabel('Filter by assigned printer')).toHaveCount(0)
   await page.getByRole('button', { name: 'Close filters' }).click()
 
+  if (!useRealResinSupports) {
+    await page.route('**/api/resin-supports', async (route) => {
+      const project = route.request().postDataBuffer()
+      if (!project) throw new Error('support request did not contain a 3MF project')
+      const model = strFromU8(unzipSync(new Uint8Array(project))['3D/3dmodel.model'])
+      const transform = model
+        .match(/<item objectid="\d+" transform="([^"]+)"/i)?.[1]
+        .split(' ')
+        .map(Number)
+      if (!transform || transform.length !== 12) throw new Error('support request did not contain a placed model')
+      const [x, y] = transform.slice(-3)
+      await route.fulfill({
+        body: boxStl('generated-supports', 2, 2, 6, [x - 1, y - 1, 0]),
+        contentType: 'model/stl',
+        headers: { 'X-Model-Elevation': '6' },
+      })
+    })
+  }
   await mainNav(page, 'Planner').click()
   await expect(page.getByText('Layouts use resin orientation analysis')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Export 3MF' })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByRole('button', { name: 'Generate supports' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'resin-cube' })).toBeVisible()
   await verify3mfDownload(page, 'resin-station-plate-1.3mf')
+  await verifyPrepared3mfDownload(page, 'resin-station-plate-1-prepared.3mf')
+  if (useRealResinSupports) {
+    const regenerated = page.waitForResponse((response) => response.url().endsWith('/api/resin-supports'))
+    await page.getByRole('button', { name: 'Regenerate supports' }).click()
+    expect((await regenerated).ok()).toBeTruthy()
+  }
   await screenshot(page, 'resin-planner-desktop')
 
   await mainNav(page, 'Board').click()
@@ -419,6 +445,25 @@ async function verify3mfDownload(page: Page, expectedName: string) {
   expect(file).toBeTruthy()
   const archive = unzipSync(new Uint8Array(await fs.readFile(file)))
   expect(strFromU8(archive['3D/3dmodel.model'])).toContain('<model')
+}
+
+async function verifyPrepared3mfDownload(page: Page, expectedName: string) {
+  await page.getByRole('button', { name: 'Generate supports' }).click()
+  await expect(page.getByText('Showing the PrusaSlicer-generated supports and pad')).toBeVisible()
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Download prepared 3MF' }).click()
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toBe(expectedName)
+  const file = await download.path()
+  expect(file).toBeTruthy()
+  const archive = unzipSync(new Uint8Array(await fs.readFile(file)))
+  const model = strFromU8(archive['3D/3dmodel.model'])
+  const config = strFromU8(archive['Metadata/Slic3r_PE.config'])
+  expect(model).toContain('name="PrintHub generated supports"')
+  expect(config).toContain('; printer_technology = SLA')
+  expect(config).toContain('; pad_enable = 0')
+  expect(config).toContain('; support_head_front_diameter = 0.8')
+  expect(config).toContain('; supports_enable = 0')
 }
 
 async function screenshot(page: Page, name: string) {

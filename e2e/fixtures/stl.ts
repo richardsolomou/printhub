@@ -1,15 +1,16 @@
 type Point = [number, number, number]
 
-export function boxStl(name: string, width: number, depth: number, height: number) {
+export function boxStl(name: string, width: number, depth: number, height: number, origin: Point = [0, 0, 0]) {
+  const [originX, originY, originZ] = origin
   const points: Point[] = [
-    [0, 0, 0],
-    [width, 0, 0],
-    [width, depth, 0],
-    [0, depth, 0],
-    [0, 0, height],
-    [width, 0, height],
-    [width, depth, height],
-    [0, depth, height],
+    [originX, originY, originZ],
+    [originX + width, originY, originZ],
+    [originX + width, originY + depth, originZ],
+    [originX, originY + depth, originZ],
+    [originX, originY, originZ + height],
+    [originX + width, originY, originZ + height],
+    [originX + width, originY + depth, originZ + height],
+    [originX, originY + depth, originZ + height],
   ]
   const faces = [
     [0, 2, 1],

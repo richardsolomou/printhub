@@ -20,6 +20,7 @@ services:
       AUTH_DISCORD_CLIENT_SECRET: ${AUTH_DISCORD_CLIENT_SECRET:-}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-}
       BETTER_AUTH_TRUSTED_ORIGINS: ${BETTER_AUTH_TRUSTED_ORIGINS:-}
+      RESIN_SUPPORT_WORKER_URL: ${RESIN_SUPPORT_WORKER_URL:-http://prusa-support:8080}
       # Optional SMTP delivery for invitation and password-reset email.
       EMAIL_FROM: ${EMAIL_FROM:-}
       SMTP_HOST: ${SMTP_HOST:-}
@@ -32,3 +33,28 @@ services:
       - ${DATA_HOST_DIR:-./printhub-data}:/data
       # Your resin and filament files stay private as plain files organized by production stage.
       - ${PRINTS_HOST_DIR:-./prints}:/prints
+    depends_on:
+      prusa-support:
+        condition: service_healthy
+
+  prusa-support:
+    image: ghcr.io/richardsolomou/printhub-prusa-support:latest
+    build:
+      context: workers/prusa-support
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=1g,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 4g
+    cpus: 2
+    healthcheck:
+      test: ['CMD', 'python3', '-c', "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3

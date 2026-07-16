@@ -1,8 +1,9 @@
 import * as THREE from 'three'
 import { STLExporter, STLLoader } from 'three-stdlib'
 
-export function parseStl(file: Uint8Array): Float32Array {
-  const binary = parseBinaryPositions(file)
+export function parseStl(file: Uint8Array, options?: { center?: boolean }): Float32Array {
+  const center = options?.center ?? true
+  const binary = parseBinaryPositions(file, center)
   if (binary) return binary
   const buffer =
     file.byteOffset === 0 && file.byteLength === file.buffer.byteLength
@@ -11,11 +12,11 @@ export function parseStl(file: Uint8Array): Float32Array {
   const geometry = new STLLoader().parse(buffer)
   const position = geometry.getAttribute('position')
   if (!position || position.count === 0) throw new Error('empty STL')
-  geometry.center()
+  if (center) geometry.center()
   return new Float32Array(position.array)
 }
 
-function parseBinaryPositions(file: Uint8Array): Float32Array | undefined {
+function parseBinaryPositions(file: Uint8Array, center: boolean): Float32Array | undefined {
   if (file.byteLength < 84) return undefined
   const view = new DataView(file.buffer, file.byteOffset, file.byteLength)
   const triangleCount = view.getUint32(80, true)
@@ -47,13 +48,15 @@ function parseBinaryPositions(file: Uint8Array): Float32Array | undefined {
       if (z > maxZ) maxZ = z
     }
   }
-  const centerX = (minX + maxX) / 2
-  const centerY = (minY + maxY) / 2
-  const centerZ = (minZ + maxZ) / 2
-  for (let index = 0; index < positions.length; index += 3) {
-    positions[index] -= centerX
-    positions[index + 1] -= centerY
-    positions[index + 2] -= centerZ
+  if (center) {
+    const centerX = (minX + maxX) / 2
+    const centerY = (minY + maxY) / 2
+    const centerZ = (minZ + maxZ) / 2
+    for (let index = 0; index < positions.length; index += 3) {
+      positions[index] -= centerX
+      positions[index + 1] -= centerY
+      positions[index + 2] -= centerZ
+    }
   }
   return positions
 }
