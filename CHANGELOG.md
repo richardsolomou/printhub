@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.20.0
+
+### Minor Changes
+
+- 28062bb: Add OAuth-connected Dropbox, Google Drive, and OneDrive storage with guided setup, encrypted refresh tokens, resumable uploads, and background migration support.
+
 ## 0.19.1
 
 ### Patch Changes
