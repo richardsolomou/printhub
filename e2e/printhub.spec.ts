@@ -443,7 +443,7 @@ test('health and protected routes expose security and correlation headers', asyn
 test('admin routes redirect unauthenticated users', async ({ page }) => {
   await page.goto('/admin/integrations')
   await expect(page).toHaveURL(/\/$/)
-  await expect(page.getByRole('heading', { name: 'Your private 3D-print production queue' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^(Set up PrintHub|Sign in)$/ })).toBeVisible()
 })
 
 async function fillPrinter(
