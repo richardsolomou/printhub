@@ -231,6 +231,10 @@ export class SqliteRepository implements Repository {
         .get()
       if (existing) {
         if (existing.ownerId !== ownerId) throw new Response('upload id belongs to another user', { status: 409 })
+        tx.update(uploadSessions)
+          .set({ expiresAt })
+          .where(and(eq(uploadSessions.id, uploadId), isNull(uploadSessions.completedRequestId)))
+          .run()
         return { fresh: false, completedRequestId: existing.completedRequestId ?? undefined }
       }
       const active = tx
@@ -251,29 +255,7 @@ export class SqliteRepository implements Repository {
     })
   }
 
-  refreshUploadSession(uploadId: string, ownerId: string) {
-    const result = this.database.transaction((tx) => {
-      const existing = tx
-        .select({
-          ownerId: uploadSessions.ownerId,
-          completedRequestId: uploadSessions.completedRequestId,
-          expiresAt: uploadSessions.expiresAt,
-        })
-        .from(uploadSessions)
-        .where(eq(uploadSessions.id, uploadId))
-        .get()
-      if (!existing) throw new Response('upload session not found', { status: 404 })
-      if (existing.ownerId !== ownerId) throw new Response('upload id belongs to another user', { status: 409 })
-      if (!existing.completedRequestId) {
-        if (existing.expiresAt <= Date.now()) return { expired: true as const }
-      }
-      return { completedRequestId: existing.completedRequestId ?? undefined }
-    })
-    if ('expired' in result) throw new Response('upload session expired', { status: 410 })
-    return result
-  }
-
-  reserveUpload(uploadId: string, ownerId: string, bytes: number, limits: { count: number; bytes: number }) {
+  reserveUpload(uploadId: string, ownerId: string, bytes: number, expiresAt: number, limits: { count: number; bytes: number }) {
     return this.database.transaction((tx) => {
       const session = tx.select().from(uploadSessions).where(eq(uploadSessions.id, uploadId)).get()
       if (!session || session.ownerId !== ownerId || session.completedRequestId) return false
@@ -294,7 +276,7 @@ export class SqliteRepository implements Repository {
         if (session.bytes === 0) tx.delete(uploadSessions).where(eq(uploadSessions.id, uploadId)).run()
         return false
       }
-      tx.update(uploadSessions).set({ bytes }).where(eq(uploadSessions.id, uploadId)).run()
+      tx.update(uploadSessions).set({ bytes, expiresAt }).where(eq(uploadSessions.id, uploadId)).run()
       return true
     })
   }
@@ -306,33 +288,18 @@ export class SqliteRepository implements Repository {
       .run()
   }
 
-  expiredUploadIds(now: number) {
-    return this.database
-      .select({ id: uploadSessions.id })
-      .from(uploadSessions)
-      .where(and(isNull(uploadSessions.completedRequestId), lte(uploadSessions.expiresAt, now)))
-      .all()
-      .map(({ id }) => id)
-  }
-
-  uploadSessionStatus(uploadId: string, now: number) {
-    const session = this.database
-      .select({ expiresAt: uploadSessions.expiresAt, completedRequestId: uploadSessions.completedRequestId })
-      .from(uploadSessions)
-      .where(eq(uploadSessions.id, uploadId))
-      .get()
-    if (!session) return 'missing' as const
-    if (session.completedRequestId) return 'completed' as const
-    return session.expiresAt <= now ? ('expired' as const) : ('active' as const)
-  }
-
-  deleteExpiredUploadSession(uploadId: string, now: number) {
-    return (
-      this.database
-        .delete(uploadSessions)
-        .where(and(eq(uploadSessions.id, uploadId), isNull(uploadSessions.completedRequestId), lte(uploadSessions.expiresAt, now)))
-        .run().changes > 0
-    )
+  expireUploads(now: number) {
+    return this.database.transaction((tx) => {
+      const expired = and(isNull(uploadSessions.completedRequestId), lte(uploadSessions.expiresAt, now))
+      const ids = tx
+        .select({ id: uploadSessions.id })
+        .from(uploadSessions)
+        .where(expired)
+        .all()
+        .map(({ id }) => id)
+      tx.delete(uploadSessions).where(expired).run()
+      return ids
+    })
   }
 
   activeUploadIds(now: number) {
@@ -494,14 +461,7 @@ export class SqliteRepository implements Repository {
     stage: import('../core/types').AssetGenerationStage,
     outcome: { status: 'ready' | 'skipped' | 'failed'; path?: string; error?: string },
   ) {
-    return this.database.transaction((tx) => {
-      const activeDelete = tx
-        .select({ id: operations.id })
-        .from(operations)
-        .where(and(eq(operations.kind, 'delete'), eq(operations.requestId, id), ne(operations.state, 'committed')))
-        .limit(1)
-        .get()
-      if (activeDelete || !this.getRequestFrom(tx, id)) return false
+    this.database.transaction((tx) => {
       const now = Date.now()
       tx.update(assetGenerationJobs)
         .set({ status: outcome.status, error: outcome.error?.slice(0, 1_000) ?? null, finishedAt: now })
@@ -520,7 +480,6 @@ export class SqliteRepository implements Repository {
         .limit(1)
         .get()
       if (!unfinished) tx.update(requests).set({ assetsGeneratedAt: now, updatedAt: now }).where(eq(requests.id, id)).run()
-      return true
     })
   }
 

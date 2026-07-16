@@ -1,7 +1,7 @@
 images:
   image:
     repository: ghcr.io/richardsolomou/printhub
-    tag: v0.19.1
+    tag: 0.16.0
 
 consts:
   printhub_container_name: printhub

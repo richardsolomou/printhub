@@ -1,7 +1,6 @@
 import { wrap } from 'comlink'
 import * as THREE from 'three'
 import type { PlateAnalysisWorker } from './plateAnalysis.worker'
-import type { ModelFormat } from '../core/modelFormat'
 
 type WorkerSlot = { worker: Worker; api: ReturnType<typeof wrap<PlateAnalysisWorker>> }
 
@@ -23,9 +22,9 @@ function slot() {
   return selected
 }
 
-export function loadPlateGeometry(buffer: ArrayBuffer, format: ModelFormat = 'stl') {
+export function loadPlateGeometry(buffer: ArrayBuffer) {
   return slot()
-    .api.analyze(buffer, format)
+    .api.analyze(buffer)
     .then(({ positions, normals }) => {
       const geometry = new THREE.BufferGeometry()
       geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))

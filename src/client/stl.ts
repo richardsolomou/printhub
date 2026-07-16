@@ -1,19 +1,11 @@
 import * as THREE from 'three'
 import { STLLoader } from 'three-stdlib'
-import type { PreparedModelGeometry } from './modelGeometry'
 
 export function parseStl(buffer: ArrayBuffer): THREE.BufferGeometry {
   const geometry = new STLLoader().parse(buffer)
   geometry.center()
   // STLs carry face normals; recomputing costs seconds on large meshes.
   if (!geometry.hasAttribute('normal')) geometry.computeVertexNormals()
-  return geometry
-}
-
-export function geometryFromPreparedModel(prepared: PreparedModelGeometry): THREE.BufferGeometry {
-  const geometry = new THREE.BufferGeometry()
-  geometry.setAttribute('position', new THREE.BufferAttribute(prepared.positions, 3))
-  geometry.setAttribute('normal', new THREE.BufferAttribute(prepared.normals, 3))
   return geometry
 }
 

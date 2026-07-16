@@ -149,7 +149,7 @@ jobs:
             exit 1
           fi
 
-          git add .changeset CHANGELOG.md deploy/truenas/printhub/app.yaml deploy/truenas/printhub/ix_values.yaml package.json
+          git add .changeset CHANGELOG.md deploy/truenas/printhub/app.yaml package.json
           git commit -m "chore: release ${tag} [skip ci]"
           release_sha="$(git rev-parse HEAD)"
           git tag "$tag"

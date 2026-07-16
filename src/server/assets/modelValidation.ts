@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import { Worker } from 'node:worker_threads'
-import { parseThreeMf, SUPPORTED_THREE_MF_PARSE_OPTIONS } from '../../core/mesh/threeMf'
+import { parseThreeMf } from '../../core/mesh/threeMf'
 import { MODEL_WORKER_RESOURCE_LIMITS, resolveWorkerConfig, type WorkerConfig } from './workerConfig'
 
 const VALIDATION_TIMEOUT_MS = 60_000
@@ -19,7 +19,7 @@ export async function validateThreeMfFile(path: string, workerConfig: WorkerConf
 async function validateThreeMfBytes(file: Uint8Array, workerConfig: WorkerConfig) {
   if ('inline' in workerConfig) {
     try {
-      parseThreeMf(file, SUPPORTED_THREE_MF_PARSE_OPTIONS)
+      parseThreeMf(file)
     } catch (error) {
       throw new InvalidThreeMfError(error instanceof Error ? error.message : String(error), { cause: error })
     }

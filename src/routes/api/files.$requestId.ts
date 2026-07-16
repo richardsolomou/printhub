@@ -3,7 +3,6 @@ import { Readable } from 'node:stream'
 import { createFileRoute } from '@tanstack/react-router'
 import { app } from '../../server/app'
 import { attachmentContentDisposition } from '../../server/contentDisposition'
-import { readRequestedFileAsset } from '../../server/fileAsset'
 import { withRequestContext } from '../../server/requestContext'
 
 export const Route = createFileRoute('/api/files/$requestId')({
@@ -18,14 +17,19 @@ export const Route = createFileRoute('/api/files/$requestId')({
 
           const url = new URL(request.url)
           const wantPreview = url.searchParams.get('preview') === '1'
-          let requestedAsset: Awaited<ReturnType<typeof readRequestedFileAsset>>
+          const originalIsStl = printRequest.filePath.toLowerCase().endsWith('.stl')
+          const relativePath = wantPreview
+            ? (printRequest.previewPath ?? (originalIsStl ? printRequest.filePath : undefined))
+            : printRequest.filePath
+          if (!relativePath) return new Response('preview not available', { status: 404 })
+          const fileName =
+            wantPreview && printRequest.previewPath ? printRequest.fileName.replace(/\.[^.]+$/, '.stl') : printRequest.fileName
+          let asset: { stream: ReadableStream; size: number }
           try {
-            requestedAsset = await readRequestedFileAsset(printRequest, wantPreview, (path) => instance.assets.read(path))
+            asset = await instance.assets.read(relativePath)
           } catch {
             return new Response('file missing in storage', { status: 404 })
           }
-          if (!requestedAsset) return new Response('preview not available', { status: 404 })
-          const { path: relativePath, fileName, asset, previewFallback } = requestedAsset
 
           const headers = new Headers({
             'Content-Type': relativePath.toLowerCase().endsWith('.3mf') ? 'model/3mf' : 'model/stl',
@@ -33,7 +37,6 @@ export const Route = createFileRoute('/api/files/$requestId')({
             // Uncompressed size, so the client can show progress across gzip.
             'X-File-Size': String(asset.size),
           })
-          if (previewFallback) headers.set('X-Preview-Fallback', 'original')
           if (url.searchParams.get('inline') !== '1') {
             headers.set('Content-Disposition', attachmentContentDisposition(fileName))
           }

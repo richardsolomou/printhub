@@ -8,7 +8,6 @@ describe('app initialization', () => {
   let temporary: string | undefined
 
   afterEach(async () => {
-    vi.useRealTimers()
     delete process.env.DATA_DIR
     const singleton = globalThis as typeof globalThis & { __printhub?: Promise<{ close(): Promise<void> }> }
     const running = singleton.__printhub
@@ -75,46 +74,15 @@ describe('app initialization', () => {
     repository.setSetting('storage', { adapter: 'local', root: path.join(temporary, 'prints') })
     const liveExpiry = Date.now() + 60_000
     repository.createUploadSession('live-upload-id', 'owner', liveExpiry, 3)
-    repository.reserveUpload('live-upload-id', 'owner', 4, { count: 3, bytes: 100 })
+    repository.reserveUpload('live-upload-id', 'owner', 4, liveExpiry, { count: 3, bytes: 100 })
     const expiredExpiry = Date.now() - 1
     repository.createUploadSession('expired-upload-id', 'owner', expiredExpiry, 3)
-    repository.reserveUpload('expired-upload-id', 'owner', 7, { count: 3, bytes: 100 })
+    repository.reserveUpload('expired-upload-id', 'owner', 7, expiredExpiry, { count: 3, bytes: 100 })
     repository.close()
     const { app } = await import('./app')
     await app()
     expect(await fs.promises.readFile(live, 'utf8')).toBe('live')
     await expect(fs.promises.stat(expired)).rejects.toMatchObject({ code: 'ENOENT' })
-  })
-
-  it('runs periodic upload cleanup without overlap and awaits it during shutdown', async () => {
-    vi.useFakeTimers()
-    const { startPeriodicExpiredUploadCleanup } = await import('./app')
-    let runs = 0
-    let release!: () => void
-    const cleanup = vi.fn(async () => {
-      runs++
-      await new Promise<void>((resolve) => {
-        release = resolve
-      })
-    })
-    const stop = startPeriodicExpiredUploadCleanup(cleanup, 100)
-
-    await vi.advanceTimersByTimeAsync(100)
-    expect(runs).toBe(1)
-    await vi.advanceTimersByTimeAsync(500)
-    expect(runs).toBe(1)
-
-    let stopped = false
-    const stopping = stop().then(() => {
-      stopped = true
-    })
-    await Promise.resolve()
-    expect(stopped).toBe(false)
-    release()
-    await stopping
-
-    await vi.advanceTimersByTimeAsync(500)
-    expect(cleanup).toHaveBeenCalledOnce()
   })
 
   it('enables telemetry until an admin opts out', async () => {

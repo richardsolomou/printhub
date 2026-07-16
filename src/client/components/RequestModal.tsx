@@ -114,7 +114,6 @@ export function RequestModal({
         <LazyStlViewer
           requestId={request.id}
           hasPreview={request.hasPreview}
-          modelFormat={request.modelFormat}
           previewStatus={request.previewStatus}
           previewError={request.previewError}
         />

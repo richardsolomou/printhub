@@ -194,12 +194,9 @@ export interface Repository {
     expiresAt: number,
     maxIncomplete: number,
   ): { fresh: boolean; completedRequestId?: string }
-  refreshUploadSession(uploadId: string, ownerId: string): { completedRequestId?: string }
-  reserveUpload(uploadId: string, ownerId: string, bytes: number, limits: { count: number; bytes: number }): boolean
+  reserveUpload(uploadId: string, ownerId: string, bytes: number, expiresAt: number, limits: { count: number; bytes: number }): boolean
   deleteUploadSession(uploadId: string, ownerId: string): void
-  expiredUploadIds(now: number): string[]
-  uploadSessionStatus(uploadId: string, now: number): 'active' | 'expired' | 'completed' | 'missing'
-  deleteExpiredUploadSession(uploadId: string, now: number): boolean
+  expireUploads(now: number): string[]
   activeUploadIds(now: number): Set<string>
   incompleteUploadStats(now: number): { count: number; bytes: number }
   uploadIdsOwnedBy(ownerId: string): string[]
@@ -227,7 +224,7 @@ export interface Repository {
     id: string,
     stage: AssetGenerationStage,
     outcome: { status: 'ready' | 'skipped' | 'failed'; path?: string; error?: string },
-  ): boolean
+  ): void
   listAssetGenerationJobs(): AssetGenerationJob[]
   assetGenerationJobs(id: string): AssetGenerationJob[]
   requeueInterruptedAssetGeneration(): void

@@ -10,7 +10,7 @@ import { Progress } from '@/components/ui/progress'
 import { Spinner } from '@/components/ui/spinner'
 import { renderRowThumbnail } from '../rowThumb'
 import { isIOS, isPhone } from '../device'
-import { modelUploadRejection } from '../../core/modelFormat'
+import { modelFormat, modelUploadRejection } from '../../core/modelFormat'
 import { DialogShell } from './DialogShell'
 import { ConfirmDialog } from './ConfirmDialog'
 import { LazyStlViewer } from './LazyStlViewer'
@@ -165,7 +165,7 @@ export function UploadForm({ initialFiles, onClose }: { initialFiles?: File[]; o
             </EmptyDescription>
           </Empty>
 
-          {entries.length === 1 && !isPhone() && <LazyStlViewer file={entries[0].file} />}
+          {entries.length === 1 && !isPhone() && modelFormat(entries[0].file.name) === 'stl' && <LazyStlViewer file={entries[0].file} />}
 
           {entries.length > 0 && (
             <div className="mb-3 flex max-h-[40dvh] flex-col gap-2 overflow-y-auto">

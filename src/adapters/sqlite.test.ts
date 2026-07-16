@@ -767,36 +767,13 @@ describe('SqliteRepository contract', () => {
   it('persists incomplete-upload ownership, quotas, and completion receipts', () => {
     const expires = Date.now() + 60_000
     expect(repository.createUploadSession('persisted-upload-id', 'owner', expires, 3)).toEqual({ fresh: true })
-    expect(repository.reserveUpload('persisted-upload-id', 'owner', 60, { count: 2, bytes: 100 })).toBe(true)
+    expect(repository.reserveUpload('persisted-upload-id', 'owner', 60, expires, { count: 2, bytes: 100 })).toBe(true)
     repository.createUploadSession('second-upload-id', 'owner', expires, 3)
-    expect(repository.reserveUpload('second-upload-id', 'owner', 41, { count: 2, bytes: 100 })).toBe(false)
+    expect(repository.reserveUpload('second-upload-id', 'owner', 41, expires, { count: 2, bytes: 100 })).toBe(false)
     expect(() => repository.createUploadSession('persisted-upload-id', 'attacker', expires, 3)).toThrow(
       expect.objectContaining({ status: 409 }),
     )
     expect(() => repository.database.delete(user).where(eq(user.id, 'owner')).run()).toThrow('FOREIGN KEY constraint failed')
-  })
-
-  it('refreshes only existing upload sessions without extending their expiry', () => {
-    const expires = Date.now() + 60_000
-    repository.createUploadSession('existing-upload-id', 'owner', expires, 3)
-
-    expect(repository.refreshUploadSession('existing-upload-id', 'owner')).toEqual({ completedRequestId: undefined })
-    expect(repository.database.select({ expiresAt: uploadSessions.expiresAt }).from(uploadSessions).get()?.expiresAt).toBe(expires)
-    expect(() => repository.refreshUploadSession('random-upload-id', 'owner')).toThrow(expect.objectContaining({ status: 404 }))
-    expect(repository.uploadIdsOwnedBy('owner')).toEqual(['existing-upload-id'])
-  })
-
-  it('removes expired upload sessions and releases their reservations', () => {
-    const expiredAt = Date.now() - 1
-    repository.createUploadSession('expired-upload-id', 'owner', expiredAt, 3)
-    repository.database.update(uploadSessions).set({ bytes: 60 }).where(eq(uploadSessions.id, 'expired-upload-id')).run()
-
-    expect(repository.incompleteUploadStats(expiredAt - 1)).toEqual({ count: 1, bytes: 60 })
-    expect(() => repository.refreshUploadSession('expired-upload-id', 'owner')).toThrow(expect.objectContaining({ status: 410 }))
-    expect(repository.incompleteUploadStats(Date.now())).toEqual({ count: 0, bytes: 0 })
-    expect(repository.uploadIdsOwnedBy('owner')).toEqual(['expired-upload-id'])
-    expect(repository.deleteExpiredUploadSession('expired-upload-id', Date.now())).toBe(true)
-    expect(repository.uploadIdsOwnedBy('owner')).toEqual([])
   })
 
   it('atomically reserves a request against overlapping durable operations', () => {
@@ -827,14 +804,13 @@ describe('SqliteRepository contract', () => {
     const expires = Date.now() + 60_000
     for (const id of ['quota-upload-one', 'quota-upload-two', 'quota-upload-three']) {
       expect(repository.createUploadSession(id, 'owner', expires, 3)).toEqual({ fresh: true })
-      expect(repository.reserveUpload(id, 'owner', 1, { count: 3, bytes: 100 })).toBe(true)
+      expect(repository.reserveUpload(id, 'owner', 1, expires, { count: 3, bytes: 100 })).toBe(true)
     }
     expect(() => repository.createUploadSession('quota-upload-four', 'owner', expires, 3)).toThrow(expect.objectContaining({ status: 429 }))
     expect(
       repository.database.select({ count: count() }).from(uploadSessions).where(eq(uploadSessions.ownerId, 'owner')).get()?.count,
     ).toBe(3)
-    expect(repository.expiredUploadIds(expires + 1)).toHaveLength(3)
-    for (const uploadId of repository.expiredUploadIds(expires + 1)) repository.deleteExpiredUploadSession(uploadId, expires + 1)
+    repository.expireUploads(expires + 1)
     expect(repository.createUploadSession('quota-upload-four', 'owner', expires + 60_000, 3)).toEqual({ fresh: true })
   })
 
@@ -842,10 +818,10 @@ describe('SqliteRepository contract', () => {
     const expires = Date.now() + 60_000
     for (const id of ['rejected-upload-one', 'rejected-upload-two', 'rejected-upload-three']) {
       repository.createUploadSession(id, 'owner', expires, 3)
-      expect(repository.reserveUpload(id, 'owner', 101, { count: 3, bytes: 100 })).toBe(false)
+      expect(repository.reserveUpload(id, 'owner', 101, expires, { count: 3, bytes: 100 })).toBe(false)
     }
     expect(repository.createUploadSession('accepted-upload', 'owner', expires, 3)).toEqual({ fresh: true })
-    expect(repository.reserveUpload('accepted-upload', 'owner', 100, { count: 3, bytes: 100 })).toBe(true)
+    expect(repository.reserveUpload('accepted-upload', 'owner', 100, expires, { count: 3, bytes: 100 })).toBe(true)
     expect(repository.incompleteUploadStats(Date.now())).toEqual({ count: 1, bytes: 100 })
   })
 
@@ -856,15 +832,15 @@ describe('SqliteRepository contract', () => {
     const first = SqliteRepository.open(file)
     insertUser(first, { id: 'owner', name: 'Owner', email: 'owner@example.com' })
     first.createUploadSession('restart-upload-one', 'owner', expires, 3)
-    expect(first.reserveUpload('restart-upload-one', 'owner', 70, { count: 2, bytes: 100 })).toBe(true)
+    expect(first.reserveUpload('restart-upload-one', 'owner', 70, expires, { count: 2, bytes: 100 })).toBe(true)
     first.createUploadSession('restart-upload-two', 'owner', expires, 2)
-    expect(first.reserveUpload('restart-upload-two', 'owner', 30, { count: 2, bytes: 100 })).toBe(true)
+    expect(first.reserveUpload('restart-upload-two', 'owner', 30, expires, { count: 2, bytes: 100 })).toBe(true)
     expect(() => first.createUploadSession('restart-upload-rejected', 'owner', expires, 2)).toThrow(
       expect.objectContaining({ status: 429 }),
     )
     first.close()
     const reopened = SqliteRepository.open(file)
-    expect(reopened.reserveUpload('restart-upload-two', 'owner', 31, { count: 2, bytes: 100 })).toBe(false)
+    expect(reopened.reserveUpload('restart-upload-two', 'owner', 31, expires, { count: 2, bytes: 100 })).toBe(false)
     expect(reopened.createUploadSession('restart-upload-one', 'owner', expires, 2)).toEqual({ fresh: false })
     expect(() => reopened.createUploadSession('restart-upload-rejected', 'owner', expires, 2)).toThrow(
       expect.objectContaining({ status: 429 }),

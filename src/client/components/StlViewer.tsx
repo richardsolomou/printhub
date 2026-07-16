@@ -1,56 +1,38 @@
-import { useEffect, useReducer, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { usePostHog } from '@posthog/react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three-stdlib'
-import { Button } from '@/components/ui/button'
-import { buildScene, frameCamera, geometryFromPreparedModel, parseStl } from '../stl'
-import { createModelGeometryWorker } from '../modelGeometryClient'
-import { persistedModelGeometryState } from '../modelGeometry'
-import { isOriginalPreviewFallback } from '../platePreview'
-import { modelFormat as formatOf, type ModelFormat } from '../../core/modelFormat'
-import { initialViewerLoadState, reduceViewerLoadState } from '../viewerLoadState'
+import { buildScene, frameCamera, parseStl } from '../stl'
+
+type PreviewStatus = 'pending' | 'running' | 'ready' | 'skipped' | 'failed'
 
 export default function StlViewer({
   requestId,
   file,
   hasPreview = false,
-  modelFormat,
   previewStatus,
   previewError,
 }: {
   requestId?: string
   file?: File
   hasPreview?: boolean
-  modelFormat?: ModelFormat
-  previewStatus?: 'pending' | 'running' | 'ready' | 'skipped' | 'failed'
+  previewStatus?: PreviewStatus
   previewError?: string
 }) {
   const posthog = usePostHog()
   const mountRef = useRef<HTMLDivElement>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [statusText, setStatusText] = useState('loading model…')
-  const [loadState, dispatchLoad] = useReducer(reduceViewerLoadState, initialViewerLoadState)
-  const { fullRequested, retryAttempt, stalePreviewFallback } = loadState
-
-  useEffect(() => dispatchLoad('reset'), [requestId, file])
-
-  const format = modelFormat ?? (file ? formatOf(file.name) : undefined) ?? 'stl'
-  const persisted = persistedModelGeometryState(format, hasPreview, fullRequested, previewStatus)
-  const waitingForPreview = !!requestId && persisted.waitingForPreview
-  const requiresFullDetailConfirmation =
-    !!requestId && (persisted.requiresFullDetailConfirmation || (stalePreviewFallback && !fullRequested))
-  const source = file ? { preview: false, format } : persisted.source
-  const showingPreview = source.preview
 
   useEffect(() => {
     const mount = mountRef.current
     if (!mount || (!requestId && !file)) return
-    if (waitingForPreview) {
+    if (requestId && !hasPreview && (previewStatus === 'pending' || previewStatus === 'running')) {
       setStatus('loading')
       setStatusText('generating preview…')
       return
     }
-    if (requiresFullDetailConfirmation) {
+    if (requestId && !hasPreview && previewStatus === 'failed') {
       setStatus('error')
       setStatusText(previewError ? `Preview failed: ${previewError}` : 'Preview generation failed.')
       return
@@ -61,33 +43,20 @@ export default function StlViewer({
     let controls: OrbitControls | undefined
     let frame = 0
     let observer: ResizeObserver | undefined
-    let geometryWorker: ReturnType<typeof createModelGeometryWorker> | undefined
 
     setStatus('loading')
     setStatusText('loading model…')
     void (async () => {
       try {
         let buffer: ArrayBuffer
-        let responseFormat = source.format
         if (file) {
           buffer = await file.arrayBuffer()
         } else {
-          const res = await fetch(`/api/files/${requestId}?inline=1${showingPreview ? '&preview=1' : ''}`)
-          if (!res.ok) throw new Error(`fetch failed: ${res.status}`)
-          if (showingPreview && isOriginalPreviewFallback(res)) {
-            await res.body?.cancel()
-            if (!disposed) {
-              dispatchLoad('preview-fallback')
-              setStatusText('Preview is unavailable. Load the original full-detail model?')
-              setStatus('error')
-            }
-            return
-          }
-          if (res.headers.get('Content-Type') === 'model/3mf') responseFormat = '3mf'
-          // Content-Length is the compressed size when gzipped; the real size travels separately.
-          const total = Number(res.headers.get('X-File-Size') ?? res.headers.get('Content-Length')) || 0
-          if (res.body && total) {
-            const reader = res.body.getReader()
+          const response = await fetch(`/api/files/${requestId}?inline=1${hasPreview ? '&preview=1' : ''}`)
+          if (!response.ok) throw new Error(`fetch failed: ${response.status}`)
+          const total = Number(response.headers.get('X-File-Size') ?? response.headers.get('Content-Length')) || 0
+          if (response.body && total) {
+            const reader = response.body.getReader()
             const data = new Uint8Array(total)
             let received = 0
             for (;;) {
@@ -99,15 +68,13 @@ export default function StlViewer({
             }
             buffer = data.buffer
           } else {
-            buffer = await res.arrayBuffer()
+            buffer = await response.arrayBuffer()
           }
         }
         setStatusText('preparing model…')
-        await new Promise((resolve) => setTimeout(resolve)) // Allow the status to paint before synchronous parsing.
+        await new Promise((resolve) => setTimeout(resolve))
 
-        if (responseFormat === '3mf') geometryWorker = createModelGeometryWorker()
-        const geometry =
-          responseFormat === '3mf' ? geometryFromPreparedModel(await geometryWorker!.prepareThreeMf(buffer)) : parseStl(buffer)
+        const geometry = parseStl(buffer)
         if (disposed) {
           geometry.dispose()
           return
@@ -116,7 +83,6 @@ export default function StlViewer({
         const { scene, mesh } = buildScene(geometry)
         const camera = new THREE.PerspectiveCamera(40, mount.clientWidth / mount.clientHeight)
         frameCamera(camera, mesh)
-
         renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
         renderer.setSize(mount.clientWidth, mount.clientHeight)
@@ -124,9 +90,7 @@ export default function StlViewer({
 
         controls = new OrbitControls(camera, renderer.domElement)
         controls.enableDamping = true
-        const sphere = new THREE.Box3().setFromObject(mesh).getBoundingSphere(new THREE.Sphere())
-        controls.target.copy(sphere.center)
-
+        controls.target.copy(new THREE.Box3().setFromObject(mesh).getBoundingSphere(new THREE.Sphere()).center)
         observer = new ResizeObserver(() => {
           if (!renderer) return
           camera.aspect = mount.clientWidth / mount.clientHeight
@@ -144,10 +108,7 @@ export default function StlViewer({
         setStatus('ready')
       } catch (error) {
         if (!disposed) {
-          posthog.captureException(error, {
-            area: 'stl_viewer',
-            showing_preview: showingPreview,
-          })
+          posthog.captureException(error, { area: 'stl_viewer', showing_preview: hasPreview })
           setStatusText("couldn't load this model")
           setStatus('error')
         }
@@ -156,7 +117,6 @@ export default function StlViewer({
 
     return () => {
       disposed = true
-      geometryWorker?.terminate()
       cancelAnimationFrame(frame)
       observer?.disconnect()
       controls?.dispose()
@@ -165,57 +125,17 @@ export default function StlViewer({
         renderer.domElement.remove()
       }
     }
-  }, [
-    requestId,
-    file,
-    source.format,
-    showingPreview,
-    waitingForPreview,
-    requiresFullDetailConfirmation,
-    previewError,
-    posthog,
-    retryAttempt,
-  ])
+  }, [requestId, file, hasPreview, previewStatus, previewError, posthog])
 
   return (
     <div
       className="viewer relative mb-3.5 aspect-4/3 w-full overflow-hidden rounded-lg border bg-background [background-image:var(--grid)] [&_canvas]:block [&_canvas]:size-full max-sm:[&_canvas]:pointer-events-none"
       ref={mountRef}
     >
-      {status === 'loading' && (
-        <div className="absolute inset-0 grid place-items-center font-mono text-xs text-muted-foreground">{statusText}</div>
-      )}
-      {status === 'error' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center font-mono text-xs text-muted-foreground">
-          <span>{statusText}</span>
-          {(requiresFullDetailConfirmation || fullRequested) && (
-            <Button
-              type="button"
-              variant="secondary"
-              size="xs"
-              onClick={() => {
-                posthog.capture('stl_full_detail_requested', { preview_failed: true })
-                dispatchLoad(requiresFullDetailConfirmation ? 'request-full' : 'retry')
-              }}
-            >
-              {requiresFullDetailConfirmation ? 'load original full detail' : 'retry original full detail'}
-            </Button>
-          )}
+      {status !== 'ready' && (
+        <div className="absolute inset-0 grid place-items-center px-4 text-center font-mono text-xs text-muted-foreground">
+          {statusText}
         </div>
-      )}
-      {status === 'ready' && showingPreview && (
-        <Button
-          type="button"
-          variant="secondary"
-          size="xs"
-          className="absolute right-2 bottom-2 font-mono opacity-90"
-          onClick={() => {
-            posthog.capture('stl_full_detail_requested')
-            dispatchLoad('request-full')
-          }}
-        >
-          preview · load full detail
-        </Button>
       )}
     </div>
   )

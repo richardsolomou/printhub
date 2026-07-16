@@ -1,6 +1,6 @@
 import { parentPort, workerData } from 'node:worker_threads'
 import { generateAssets, generateVisualAssets, type AssetWants, type GeneratedAssets } from './pipeline'
-import { parseThreeMf, SUPPORTED_THREE_MF_PARSE_OPTIONS } from '../../core/mesh/threeMf'
+import { parseThreeMf } from '../../core/mesh/threeMf'
 import type { ModelFormat } from '../../core/modelFormat'
 
 // worker_threads entry, bundled separately by `pnpm build` into
@@ -19,7 +19,7 @@ const wants = data.wants ?? { thumbnail: false, preview: false }
 const work: Promise<GeneratedAssets> =
   mode === 'validate'
     ? Promise.resolve().then(() => {
-        parseThreeMf(file, SUPPORTED_THREE_MF_PARSE_OPTIONS)
+        parseThreeMf(file)
         return {}
       })
     : mode === 'visual'

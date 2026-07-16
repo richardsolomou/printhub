@@ -13,7 +13,6 @@ type Props = {
 
 export function PlateViewer({ printer, placements, geometries, invalidCopyIds, geometryRevision = 0 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
-  const renderedModelCount = placements.filter((placement) => geometries.has(placement.requestId)).length
 
   useEffect(() => {
     const host = hostRef.current
@@ -221,8 +220,6 @@ export function PlateViewer({ printer, placements, geometries, invalidCopyIds, g
   return (
     <div
       ref={hostRef}
-      aria-label="Build plate preview"
-      data-model-count={renderedModelCount}
       className="h-[min(62dvh,820px)] min-h-72 w-full max-w-full min-w-0 overflow-hidden rounded-xl border bg-[#17181c] sm:h-[min(70dvh,820px)] sm:min-h-90"
     />
   )

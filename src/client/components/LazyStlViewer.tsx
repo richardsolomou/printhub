@@ -1,6 +1,5 @@
 import { Suspense, lazy } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { ModelFormat } from '../../core/modelFormat'
 
 const loadStlViewer = () => import('./StlViewer')
 const StlViewer = lazy(loadStlViewer)
@@ -9,7 +8,6 @@ type Props = {
   requestId?: string
   file?: File
   hasPreview?: boolean
-  modelFormat?: ModelFormat
   previewStatus?: 'pending' | 'running' | 'ready' | 'skipped' | 'failed'
   previewError?: string
 }
