@@ -85,6 +85,7 @@ const plateCandidateSchema = z.object({
   copyId: id,
   requestId: id,
   name: z.string().max(200),
+  queueOrder: z.number().finite().optional(),
   footprint: footprintSchema,
   estimatedSupportedHeightMm: z.number().nonnegative(),
   orientationQuaternion: z.tuple([z.number(), z.number(), z.number(), z.number()]).optional(),

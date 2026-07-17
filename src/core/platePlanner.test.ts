@@ -27,12 +27,13 @@ const printer: PrinterProfile = {
   maxHeightDifferenceMm: 20,
 }
 
-const candidate = (copyId: string, widthMm: number, depthMm: number, height = 30): PlateCandidate => ({
+const candidate = (copyId: string, widthMm: number, depthMm: number, height = 30, queueOrder?: number): PlateCandidate => ({
   copyId,
   requestId: copyId.split(':')[0] ?? copyId,
   name: copyId,
   footprint: { widthMm, depthMm, known: true },
   estimatedSupportedHeightMm: height,
+  queueOrder,
 })
 
 describe('plate planner', () => {
@@ -170,6 +171,12 @@ describe('plate planner', () => {
     expect(result.plates[0]?.some((entry) => entry.copyId === 'tall:1')).toBe(true)
   })
 
+  it('prints manually prioritized requests before taller resin plates', () => {
+    const result = planPlates([candidate('tall:1', 100, 60, 80, 10), candidate('priority:1', 100, 60, 20, 0)], printer)
+
+    expect(result.plates.map((plate) => plate[0]?.copyId)).toEqual(['priority:1', 'tall:1'])
+  })
+
   it('consolidates sparse tail plates even when their heights differ', () => {
     const resinPrinter = {
       ...printer,
@@ -255,6 +262,25 @@ describe('plate planner', () => {
     }
     const result = planPlates([candidate('short', 40, 40, 10), candidate('tall', 40, 40, 90)], filament)
     expect(result.plates).toHaveLength(1)
+  })
+
+  it('prints manually prioritized filament requests first', () => {
+    const filament: PrinterProfile = {
+      id: 'filament',
+      name: 'Filament',
+      printType: 'filament',
+      enabled: true,
+      widthMm: 100,
+      depthMm: 60,
+      heightMm: 100,
+      spacingMm: 0,
+      brimMarginMm: 0,
+      filamentDiameterMm: 1.75,
+      materialDensityGPerCm3: 1.24,
+    }
+    const result = planPlates([candidate('later:1', 100, 60, 30, 10), candidate('priority:1', 100, 60, 30, 0)], filament)
+
+    expect(result.plates.map((plate) => plate[0]?.copyId)).toEqual(['priority:1', 'later:1'])
   })
 
   it('normalizes legacy profiles to resin without changing their build volume', () => {

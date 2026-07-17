@@ -71,6 +71,10 @@ export type PrintRequest = {
   updatedAt: number
 }
 
+export function requestQueueOrder(request: Pick<PrintRequest, 'orders' | 'createdAt'>, status: string) {
+  return request.orders[status] ?? -request.createdAt
+}
+
 export type PublicPrintRequest = Omit<
   PrintRequest,
   'fileName' | 'filePath' | 'ownerUserId' | 'ownerEmail' | 'ownerName' | 'thumbnailPath' | 'previewPath' | 'requestedPrintType'

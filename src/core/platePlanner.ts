@@ -34,6 +34,7 @@ export type PlateCandidate = {
   copyId: string
   requestId: string
   name: string
+  queueOrder?: number
   footprint: { widthMm: number; depthMm: number; known: boolean }
   estimatedSupportedHeightMm: number
   orientationQuaternion?: [number, number, number, number]
@@ -226,10 +227,10 @@ export function planPlates(candidates: PlateCandidate[], printer: PrinterProfile
 
     plates.push(...packGeometry(packable, printer))
   }
-  const ordered = printer.printType === 'resin' ? orderPlates(plates, printer) : plates
+  const ordered = printer.printType === 'resin' ? orderResinPlates(plates, printer) : plates
   const filled = printer.printType === 'resin' ? backfillShorterModels(ordered, printer) : ordered
   const consolidated = consolidatePlates(filled, printer)
-  return { plates: printer.printType === 'resin' ? orderPlates(consolidated, printer) : consolidated, skipped }
+  return { plates: orderPlates(consolidated, printer), skipped }
 }
 
 export function allocateFleetCandidates(candidates: FleetCandidate[], printers: PrinterProfile[]) {
@@ -358,10 +359,25 @@ function backfillShorterModels(plates: PlatePlacement[][], printer: PrinterProfi
 
 function orderPlates(plates: PlatePlacement[][], printer: PrinterProfile) {
   return [...plates].sort((first, second) => {
-    const heightDifference = tallestModel(second) - tallestModel(first)
-    if (Math.abs(heightDifference) > PLACEMENT_EPSILON_MM) return heightDifference
-    return occupiedArea(second, printer) - occupiedArea(first, printer)
+    const firstQueueOrder = earliestQueueOrder(first)
+    const secondQueueOrder = earliestQueueOrder(second)
+    if (firstQueueOrder !== secondQueueOrder) return firstQueueOrder < secondQueueOrder ? -1 : 1
+    return printer.printType === 'resin' ? compareResinPlates(first, second, printer) : 0
   })
+}
+
+function orderResinPlates(plates: PlatePlacement[][], printer: PrinterProfile) {
+  return [...plates].sort((first, second) => compareResinPlates(first, second, printer))
+}
+
+function compareResinPlates(first: PlatePlacement[], second: PlatePlacement[], printer: PrinterProfile) {
+  const heightDifference = tallestModel(second) - tallestModel(first)
+  if (Math.abs(heightDifference) > PLACEMENT_EPSILON_MM) return heightDifference
+  return occupiedArea(second, printer) - occupiedArea(first, printer)
+}
+
+function earliestQueueOrder(plate: PlatePlacement[]) {
+  return Math.min(...plate.map((placement) => placement.queueOrder ?? Number.POSITIVE_INFINITY))
 }
 
 function tallestModel(plate: PlatePlacement[]) {

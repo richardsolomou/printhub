@@ -21,6 +21,7 @@ import { peopleQuery, platePlannerQuery, requestsQuery, sessionQuery } from '../
 import { enabledPrinters, printTypeLabel } from '../client/fleet'
 import { savePlatePlannerDraft } from '../server/fns'
 import type { ResinOrientation } from '../core/mesh/resinOrientation'
+import { requestQueueOrder } from '../core/types'
 import {
   normalizePrinterProfile,
   ORIENTATION_ANALYSIS_VERSION,
@@ -46,7 +47,7 @@ export const Route = createFileRoute('/planner')({
   component: PlannerPage,
 })
 
-const PLATE_LAYOUT_VERSION = 5
+const PLATE_LAYOUT_VERSION = 6
 const EMPTY_PLACEMENTS: PlatePlacement[] = []
 const EMPTY_PLATES: PlatePlacement[][] = []
 
@@ -196,6 +197,7 @@ function PlannerPage() {
                   copyId,
                   requestId: request.id,
                   name: `${request.name} #${copy}`,
+                  queueOrder: requestQueueOrder(request, 'todo'),
                   footprint: { widthMm: orientation.widthMm, depthMm: orientation.depthMm, known: true },
                   estimatedSupportedHeightMm: orientation.heightMm + (printer.printType === 'resin' ? printer.heightAllowanceMm : 0),
                   orientationQuaternion: orientation.quaternion,
@@ -569,7 +571,13 @@ async function mapConcurrent<Input, Output>(items: Input[], concurrency: number,
 }
 
 function plannerFingerprint(
-  requests: { id: string; counts: Record<string, number>; printType?: 'resin' | 'filament' }[],
+  requests: {
+    id: string
+    counts: Record<string, number>
+    orders: Record<string, number | undefined>
+    createdAt: number
+    printType?: 'resin' | 'filament'
+  }[],
   printers: PrinterProfile[],
   analyses = new Map<string, import('../core/platePlanner').PlateModelAnalysis>(),
 ) {
@@ -580,6 +588,7 @@ function plannerFingerprint(
     requests: requests.map((request) => ({
       id: request.id,
       todo: request.counts.todo ?? 0,
+      queueOrder: requestQueueOrder(request, 'todo'),
       printType: request.printType,
       analysisVersion: analyses.get(request.id)?.analysisVersion,
       orientationCount: analyses.get(request.id)?.orientationCandidates?.length ?? 0,

@@ -4,7 +4,7 @@ import { extractClosestEdge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/clo
 import { useServerFn } from '@tanstack/react-start'
 import { usePostHog } from '@posthog/react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import type { PublicPrintRequest, RequestSort } from '../../core/types'
+import { requestQueueOrder, type PublicPrintRequest, type RequestSort } from '../../core/types'
 import type { StatusId, WorkflowDefinition } from '../../core/workflow'
 import { moveCopies, reorderRequest } from '../../server/fns'
 import { canDropOnColumn } from '../boardDrag'
@@ -53,9 +53,9 @@ export function Board({
 
   const countsOf = useCallback((request: PublicPrintRequest) => overrides[request.id]?.counts ?? request.counts, [overrides])
   const ordersOf = useCallback((request: PublicPrintRequest) => overrides[request.id]?.orders ?? request.orders, [overrides])
-  // Unordered requests sort by recency (newest first) via the negated timestamp.
   const sortKey = useCallback(
-    (request: PublicPrintRequest, status: StatusId) => ordersOf(request)[status] ?? -request.createdAt,
+    (request: PublicPrintRequest, status: StatusId) =>
+      requestQueueOrder({ orders: ordersOf(request), createdAt: request.createdAt }, status),
     [ordersOf],
   )
   const serverRank = useMemo(() => new Map(requests.map((request, index) => [request.id, index])), [requests])
