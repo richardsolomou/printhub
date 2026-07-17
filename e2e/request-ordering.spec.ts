@@ -8,20 +8,7 @@ const password = 'correct-horse-battery-staple'
 test('admin reorders personal queues without changing another requester priority', async ({ page, browser }) => {
   test.setTimeout(180_000)
   await page.setViewportSize({ width: 1280, height: 800 })
-  await page.goto('/')
-  await page.getByRole('button', { name: 'Set up PrintHub' }).click()
-  await page.getByLabel('Name').fill('Owner')
-  await page.getByLabel('Email').fill('owner@example.com')
-  await page.getByLabel('Password').fill(password)
-  await page.getByLabel('Password').press('Enter')
-  await page.getByRole('button', { name: 'Finish setup' }).click()
-  await page.getByRole('button', { name: 'Add printer' }).click()
-  const printer = page.getByRole('region', { name: 'Printer 1' })
-  await printer.getByLabel('Printer name').fill('Resin printer')
-  await printer.getByLabel('Usable width').fill('130')
-  await printer.getByLabel('Usable depth').fill('80')
-  await printer.getByLabel('Usable height').fill('160')
-  await page.getByRole('button', { name: 'Save printers and finish' }).click()
+  await enterAdminWorkspace(page)
 
   await upload(page, 'admin-first', 8)
   await upload(page, 'admin-second', 9)
@@ -35,8 +22,8 @@ test('admin reorders personal queues without changing another requester priority
   const requesterPage = await requesterContext.newPage()
   await requesterPage.goto(inviteUrl)
   await expect(requesterPage.locator('form[data-hydrated="true"]')).toBeVisible()
-  await requesterPage.getByLabel('Name').fill('Requester')
-  await requesterPage.getByLabel('Email').fill('requester@example.com')
+  await requesterPage.getByLabel('Name').fill('Queue Requester')
+  await requesterPage.getByLabel('Email').fill('queue-requester@example.com')
   await requesterPage.getByLabel('Password').fill(password)
   await requesterPage.getByRole('button', { name: 'Create account' }).click()
   await upload(requesterPage, 'requester-first', 10)
@@ -48,7 +35,7 @@ test('admin reorders personal queues without changing another requester priority
   await expect(requestCard(page, 'requester-first')).toBeVisible({ timeout: 30_000 })
   await expect(requestCard(page, 'requester-second')).toBeVisible()
   await expect(requestCard(page, 'admin-first')).toContainText('For Owner')
-  await expect(requestCard(page, 'requester-first')).toContainText('For Requester')
+  await expect(requestCard(page, 'requester-first')).toContainText('For Queue Requester')
 
   const requesterOrder = (await todoCardNames(page)).filter((name) => name.startsWith('requester-'))
   await dragCardOnto(page, 'requester-first', 'admin-first')
@@ -73,6 +60,34 @@ test('admin reorders personal queues without changing another requester priority
   await fs.mkdir(screenshotDirectory, { recursive: true })
   await page.screenshot({ path: path.join(screenshotDirectory, 'admin-requester-queue-reorder-desktop.png'), fullPage: true })
 })
+
+async function enterAdminWorkspace(page: Page) {
+  await page.goto('/')
+  const setupButton = page.getByRole('button', { name: 'Set up PrintHub' })
+  const signInButton = page.getByRole('button', { name: 'Sign in', exact: true })
+  await expect(setupButton.or(signInButton)).toBeVisible()
+  if (await signInButton.isVisible()) {
+    await page.getByLabel('Email').fill('owner@example.com')
+    await page.getByLabel('Password').fill(password)
+    await signInButton.click()
+    await expect(page.getByRole('button', { name: 'Add a print' })).toBeVisible()
+    return
+  }
+
+  await setupButton.click()
+  await page.getByLabel('Name').fill('Owner')
+  await page.getByLabel('Email').fill('owner@example.com')
+  await page.getByLabel('Password').fill(password)
+  await page.getByLabel('Password').press('Enter')
+  await page.getByRole('button', { name: 'Finish setup' }).click()
+  await page.getByRole('button', { name: 'Add printer' }).click()
+  const printer = page.getByRole('region', { name: 'Printer 1' })
+  await printer.getByLabel('Printer name').fill('Resin printer')
+  await printer.getByLabel('Usable width').fill('130')
+  await printer.getByLabel('Usable depth').fill('80')
+  await printer.getByLabel('Usable height').fill('160')
+  await page.getByRole('button', { name: 'Save printers and finish' }).click()
+}
 
 async function upload(page: Page, name: string, size: number) {
   const fileInput = page.locator('input[type=file]')
