@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.21.2
+
+### Patch Changes
+
+- 4b8501e: Choose the available print material automatically when adding prints.
+
 ## 0.21.1
 
 ### Patch Changes
