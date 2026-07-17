@@ -6,7 +6,7 @@ import { boxStl } from './fixtures/stl'
 const password = 'correct-horse-battery-staple'
 
 test('admin reorders personal queues without changing another requester priority', async ({ page, browser }) => {
-  test.setTimeout(120_000)
+  test.setTimeout(180_000)
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/')
   await page.getByRole('button', { name: 'Set up PrintHub' }).click()
@@ -34,6 +34,7 @@ test('admin reorders personal queues without changing another requester priority
   const requesterContext = await browser.newContext()
   const requesterPage = await requesterContext.newPage()
   await requesterPage.goto(inviteUrl)
+  await expect(requesterPage.locator('form[data-hydrated="true"]')).toBeVisible()
   await requesterPage.getByLabel('Name').fill('Requester')
   await requesterPage.getByLabel('Email').fill('requester@example.com')
   await requesterPage.getByLabel('Password').fill(password)
@@ -46,10 +47,18 @@ test('admin reorders personal queues without changing another requester priority
   await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Board', exact: true }).click()
   await expect(requestCard(page, 'requester-first')).toBeVisible({ timeout: 30_000 })
   await expect(requestCard(page, 'requester-second')).toBeVisible()
+  await expect(requestCard(page, 'admin-first')).toContainText('For Owner')
+  await expect(requestCard(page, 'requester-first')).toContainText('For Requester')
 
   const requesterOrder = (await todoCardNames(page)).filter((name) => name.startsWith('requester-'))
   await dragCardOnto(page, 'requester-first', 'admin-first')
   await expect.poll(async () => (await todoCardNames(page)).filter((name) => name.startsWith('requester-'))).toEqual(requesterOrder)
+
+  await dragCardToColumn(page, 'admin-first', 'in_progress')
+  await expect(requestCardInColumn(page, 'admin-first', 'in_progress')).toBeVisible()
+  await dragCardOnto(page, 'requester-first', 'admin-first')
+  await expect(requestCardInColumn(page, 'requester-first', 'todo')).toBeVisible()
+  await expect(requestCardInColumn(page, 'requester-first', 'in_progress')).toHaveCount(0)
 
   const adminOrder = (await todoCardNames(page)).filter((name) => name.startsWith('admin-'))
   await dragCardOnto(page, 'requester-first', 'requester-second')
@@ -66,17 +75,23 @@ test('admin reorders personal queues without changing another requester priority
 })
 
 async function upload(page: Page, name: string, size: number) {
-  await page.getByRole('button', { name: 'Add a print' }).click()
-  await page
-    .locator('input[type=file]')
-    .setInputFiles({ name: `${name}.stl`, mimeType: 'model/stl', buffer: boxStl(name, size, size, size) })
+  const fileInput = page.locator('input[type=file]')
+  await expect(async () => {
+    await page.getByRole('button', { name: 'Add a print' }).click()
+    await expect(fileInput).toBeVisible({ timeout: 1_000 })
+  }).toPass()
+  await fileInput.setInputFiles({ name: `${name}.stl`, mimeType: 'model/stl', buffer: boxStl(name, size, size, size) })
   await page.getByLabel('Name').fill(name)
   await page.getByRole('button', { name: 'Add 1 print' }).click()
   await expect(requestCard(page, name)).toBeVisible({ timeout: 30_000 })
 }
 
 function requestCard(page: Page, name: string) {
-  return page.locator('button.card').filter({ hasText: name })
+  return page.locator(`button.card[data-request-name="${name}"]`)
+}
+
+function requestCardInColumn(page: Page, name: string, status: string) {
+  return page.locator(`[data-status="${status}"] button.card[data-request-name="${name}"]`)
 }
 
 async function dragCardOnto(page: Page, sourceName: string, targetName: string) {
@@ -89,6 +104,19 @@ async function dragCardOnto(page: Page, sourceName: string, targetName: string) 
   await page.mouse.move(sourceBox!.x + 32, sourceBox!.y + 32)
   await page.mouse.down()
   await page.mouse.move(targetBox!.x + targetBox!.width / 2, targetBox!.y + 12, { steps: 12 })
+  await page.mouse.up()
+}
+
+async function dragCardToColumn(page: Page, sourceName: string, status: string) {
+  const [sourceBox, targetBox] = await Promise.all([
+    requestCard(page, sourceName).boundingBox(),
+    page.locator(`[data-status="${status}"] .column-body`).boundingBox(),
+  ])
+  expect(sourceBox).not.toBeNull()
+  expect(targetBox).not.toBeNull()
+  await page.mouse.move(sourceBox!.x + 32, sourceBox!.y + 32)
+  await page.mouse.down()
+  await page.mouse.move(targetBox!.x + targetBox!.width / 2, targetBox!.y + targetBox!.height / 2, { steps: 12 })
   await page.mouse.up()
 }
 

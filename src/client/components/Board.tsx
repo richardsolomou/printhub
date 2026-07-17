@@ -174,7 +174,7 @@ export function Board({
         if (target.data.type === 'card') {
           const targetRequest = requests.find((request) => request.id === target.data.requestId)
           if (!targetRequest) return
-          if (!canDropOnRequest(sourceRequest.requesterId, targetRequest.requesterId)) return
+          if (!canDropOnRequest(source.data, { requesterId: targetRequest.requesterId, requestId: targetRequest.id })) return
           to = target.data.status as StatusId
           if (sort === 'board') {
             const list = columnOf(to)
