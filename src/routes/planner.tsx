@@ -1,9 +1,8 @@
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { Link, createFileRoute, redirect } from '@tanstack/react-router'
-import { Box, ChevronLeft, ChevronRight, Download, Settings, TriangleAlert } from 'lucide-react'
+import { Box, ChevronLeft, ChevronRight, Download, Settings } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -139,19 +138,6 @@ function PlannerPage() {
     return modelAnalysisReady(analysis) && (requestPrintType(request) === 'filament' || orientationAnalysisReady(analysis))
   }).length
   const waitingCount = selectedOutstanding.length - readyCount
-  const unfitRequests = useMemo(
-    () =>
-      allOutstanding.filter((request) => {
-        const analysis = analyses.get(request.id)
-        const printType = requestPrintType(request)
-        return (
-          !!printType &&
-          modelAnalysisReady(analysis) &&
-          !printers.some((profile) => profile.printType === printType && analysisFitsPrinter(analysis, profile))
-        )
-      }),
-    [allOutstanding, analyses, printers],
-  )
   const fingerprint = useMemo(
     () => plannerFingerprint(outstanding, printers, analyses, planningStrategy, queuePositions),
     [analyses, outstanding, planningStrategy, printers, queuePositions],
@@ -342,26 +328,6 @@ function PlannerPage() {
             })
           }
         />
-        {unfitRequests.length > 0 && (
-          <Alert className="mb-4 border-amber-500/40 bg-amber-500/5">
-            <TriangleAlert />
-            <AlertTitle>
-              {unfitRequests.length} queued {unfitRequests.length === 1 ? 'model does' : 'models do'} not fit any enabled printer
-            </AlertTitle>
-            <AlertDescription>
-              <p>
-                These analyzed models are excluded from generated plates. Check their scale or add a printer with a larger usable volume.
-              </p>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {unfitRequests.map((request) => (
-                  <Button key={request.id} type="button" variant="outline" size="xs" onClick={() => setOpenRequestId(request.id)}>
-                    {request.name}
-                  </Button>
-                ))}
-              </div>
-            </AlertDescription>
-          </Alert>
-        )}
         <div className="grid min-w-0 gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
           <div className="min-w-0 space-y-4">
             <Card className="h-fit min-w-0">

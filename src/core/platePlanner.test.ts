@@ -321,10 +321,46 @@ describe('plate planner', () => {
     expect(result.plates.map((plate) => plate[0]?.copyId)).toEqual(['alice-first:1', 'bob-first:1', 'alice-second:1'])
   })
 
-  it('supports largest-first and height-first plate ordering', () => {
+  it('balances requester priority against plate utilization', () => {
+    const candidates = [candidate('priority:1', 60, 60, 30, 0, 'alice', 1), candidate('fuller:1', 100, 60, 30, 1, 'bob', 2)]
+
+    expect(planPlates(candidates, filamentPrinter, 'user-priority').plates[0]?.[0]?.copyId).toBe('priority:1')
+    expect(planPlates(candidates, filamentPrinter, 'balanced').plates[0]?.[0]?.copyId).toBe('fuller:1')
+  })
+
+  it('balances requester priority against resin height compatibility', () => {
+    const candidates = [
+      candidate('priority-short:1', 60, 60, 10, 0, 'alice', 1),
+      candidate('compatible-tall:1', 49, 60, 80, 1, 'bob', 2),
+      candidate('compatible-tall:2', 49, 60, 82, 2, 'bob', 3),
+    ]
+
+    expect(planPlates(candidates, printer, 'user-priority').plates[0]?.some((placement) => placement.copyId === 'priority-short:1')).toBe(
+      true,
+    )
+    expect(planPlates(candidates, printer, 'balanced').plates[0]?.some((placement) => placement.copyId.startsWith('compatible-tall'))).toBe(
+      true,
+    )
+  })
+
+  it('uses fewer plates when maximizing utilization', () => {
+    const candidates = [
+      candidate('one:1', 46, 36, 20, 0),
+      candidate('two:1', 57, 46, 20, 1),
+      candidate('three:1', 69, 31, 20, 2),
+      candidate('four:1', 48, 49, 20, 3),
+      candidate('five:1', 40, 34, 20, 4),
+      candidate('six:1', 21, 44, 20, 5),
+      candidate('seven:1', 73, 29, 20, 6),
+    ]
+
+    expect(planPlates(candidates, filamentPrinter, 'user-priority').plates).toHaveLength(4)
+    expect(planPlates(candidates, filamentPrinter, 'utilization').plates).toHaveLength(3)
+  })
+
+  it('supports tallest-first plate ordering', () => {
     const candidates = [candidate('wide:1', 100, 60, 20), candidate('tall:1', 50, 60, 90)]
 
-    expect(planPlates(candidates, filamentPrinter, 'largest-first').plates[0]?.[0]?.copyId).toBe('wide:1')
     expect(planPlates(candidates, filamentPrinter, 'height-first').plates[0]?.[0]?.copyId).toBe('tall:1')
   })
 

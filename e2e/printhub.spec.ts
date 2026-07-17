@@ -110,8 +110,13 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
   await choose(planningStrategy, 'User priority')
   await expect(page.getByText('Board settings saved.')).toBeVisible()
   await expect(page.getByText("Work through every requester's personal queue as fairly as possible.")).toBeVisible()
+  await choose(planningStrategy, 'Tallest first')
+  await expect(page.getByText('Start with the tallest models and compatible resin height bands.')).toBeVisible()
+  await screenshot(page, 'workspace-settings-tallest-strategy-desktop')
   await choose(planningStrategy, 'Balanced')
-  await expect(page.getByText('Balance user priority, plate utilization, and resin height compatibility.')).toBeVisible()
+  await expect(
+    page.getByText('Weight plate fill (40%), requester priority (35%), and resin height compatibility (25% when applicable).'),
+  ).toBeVisible()
   await mobileScreenshot(page, 'workspace-settings-mobile')
   await screenshot(page, 'workspace-settings-desktop')
   await expect(page.getByRole('link', { name: 'Diagnostics', exact: true })).toHaveCount(0)
@@ -372,8 +377,9 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
   })
   await expect(page.getByLabel('Fits no enabled printer')).toBeVisible({ timeout: 30_000 })
   await mainNav(page, 'Planner').click()
-  await expect(page.getByText(/queued model does not fit any enabled printer/)).toBeVisible({ timeout: 30_000 })
-  await expect(page.getByRole('button', { name: 'too-large' })).toBeVisible()
+  await expect(page.getByText(/queued model does not fit any enabled printer/)).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'too-large' })).toHaveCount(0)
+  await screenshot(page, 'unsupported-model-planner-desktop')
 
   await workspaceSettings(page)
   await page.getByRole('link', { name: 'Printers' }).click()

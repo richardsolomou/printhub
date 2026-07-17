@@ -1,7 +1,13 @@
-import type { PlatePlanningStrategy } from '../core/platePlanner'
+import { BALANCED_PLANNING_WEIGHTS, type PlatePlanningStrategy } from '../core/planningStrategy'
+
+const percentage = (weight: number) => `${Math.round(weight * 100)}%`
 
 export const PLANNING_OPTIONS: { value: PlatePlanningStrategy; label: string; description: string }[] = [
-  { value: 'balanced', label: 'Balanced', description: 'Balance user priority, plate utilization, and resin height compatibility.' },
+  {
+    value: 'balanced',
+    label: 'Balanced',
+    description: `Weight plate fill (${percentage(BALANCED_PLANNING_WEIGHTS.utilization)}), requester priority (${percentage(BALANCED_PLANNING_WEIGHTS.userPriority)}), and resin height compatibility (${percentage(BALANCED_PLANNING_WEIGHTS.heightCompatibility)} when applicable).`,
+  },
   { value: 'user-priority', label: 'User priority', description: "Work through every requester's personal queue as fairly as possible." },
   { value: 'oldest-first', label: 'Oldest first', description: 'Process the longest-waiting requests before newer work.' },
   {
@@ -9,6 +15,5 @@ export const PLANNING_OPTIONS: { value: PlatePlanningStrategy; label: string; de
     label: 'Maximum utilization',
     description: 'Prefer the fewest, fullest plates regardless of requester priority.',
   },
-  { value: 'largest-first', label: 'Largest first', description: 'Start with the models that occupy the most build-plate area.' },
-  { value: 'height-first', label: 'Height first', description: 'Prioritize taller models and compatible resin height bands.' },
+  { value: 'height-first', label: 'Tallest first', description: 'Start with the tallest models and compatible resin height bands.' },
 ]
