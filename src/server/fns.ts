@@ -157,6 +157,7 @@ export const sessionInfo = createServerFn({ method: 'GET' })
         printers,
         telemetryEnabled: resolveTelemetryConfig(deploymentSettings(instance.repository)).enabled,
         privateRequests: context ? resolveBoardConfig(context.repository).privateRequests : false,
+        planningStrategy: context ? resolveBoardConfig(context.repository).planningStrategy : 'balanced',
         auth: instance.authCapabilities,
         hosted: process.env.PRINTHUB_HOSTED === 'true',
         email: instance.emailCapabilities,
@@ -756,7 +757,11 @@ export const updateBoardSettings = createServerFn({ method: 'POST' })
       const instance = await app()
       requireMutationOrigin()
       const context = await workspaceAdmin(instance, data.workspaceSlug)
-      const config = { privateRequests: data.privateRequests }
+      const current = resolveBoardConfig(context.repository)
+      const config = {
+        privateRequests: data.privateRequests ?? current.privateRequests,
+        planningStrategy: data.planningStrategy ?? current.planningStrategy,
+      }
       context.repository.setSetting('board', config)
       // Boards refetch over SSE so requesters' views update immediately.
       context.events.publish('board.changed')

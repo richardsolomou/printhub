@@ -4,7 +4,7 @@ import { extractClosestEdge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/clo
 import { useServerFn } from '@tanstack/react-start'
 import { usePostHog } from '@posthog/react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import type { PublicPrintRequest, RequestSort } from '../../core/types'
+import { requestQueueOrder, type PublicPrintRequest, type RequestSort } from '../../core/types'
 import type { StatusId, WorkflowDefinition } from '../../core/workflow'
 import { moveCopies, reorderRequest } from '../../server/fns'
 import { canDropOnColumn } from '../boardDrag'
@@ -53,9 +53,9 @@ export function Board({
 
   const countsOf = useCallback((request: PublicPrintRequest) => overrides[request.id]?.counts ?? request.counts, [overrides])
   const ordersOf = useCallback((request: PublicPrintRequest) => overrides[request.id]?.orders ?? request.orders, [overrides])
-  // Unordered requests sort by recency (newest first) via the negated timestamp.
   const sortKey = useCallback(
-    (request: PublicPrintRequest, status: StatusId) => ordersOf(request)[status] ?? -request.createdAt,
+    (request: PublicPrintRequest, status: StatusId) =>
+      requestQueueOrder({ orders: ordersOf(request), createdAt: request.createdAt }, status),
     [ordersOf],
   )
   const serverRank = useMemo(() => new Map(requests.map((request, index) => [request.id, index])), [requests])
@@ -142,9 +142,16 @@ export function Board({
         setSettlingIds((current) => new Set(current).add(requestId))
         window.setTimeout(() => setSettlingIds((current) => new Set([...current].filter((id) => id !== requestId))), 260)
 
+        const sourceRequest = requests.find((request) => request.id === requestId)
+        if (!sourceRequest) return
         const columnOf = (status: StatusId) =>
           requests
-            .filter((request) => !(request.id === requestId && status === from) && countsOf(request)[status] > 0)
+            .filter(
+              (request) =>
+                request.requesterId === sourceRequest.requesterId &&
+                !(request.id === requestId && status === from) &&
+                countsOf(request)[status] > 0,
+            )
             .sort((a, b) => compare(a, b, status))
 
         let to: StatusId
@@ -156,18 +163,19 @@ export function Board({
           if (sort === 'board') {
             const list = columnOf(to)
             const index = list.findIndex((request) => request.id === targetRequest.id)
-            if (index === -1) return
-            const edge = extractClosestEdge(target.data)
-            const before = edge === 'top' ? list[index - 1] : list[index]
-            const after = edge === 'top' ? list[index] : list[index + 1]
-            order =
-              before && after
-                ? (sortKey(before, to) + sortKey(after, to)) / 2
-                : before
-                  ? sortKey(before, to) + 1
-                  : after
-                    ? sortKey(after, to) - 1
-                    : 0
+            if (index >= 0) {
+              const edge = extractClosestEdge(target.data)
+              const before = edge === 'top' ? list[index - 1] : list[index]
+              const after = edge === 'top' ? list[index] : list[index + 1]
+              order =
+                before && after
+                  ? (sortKey(before, to) + sortKey(after, to)) / 2
+                  : before
+                    ? sortKey(before, to) + 1
+                    : after
+                      ? sortKey(after, to) - 1
+                      : 0
+            } else order = list.length ? sortKey(list[list.length - 1], to) + 1 : 0
           }
         } else if (target.data.type === 'column') {
           to = target.data.status as StatusId

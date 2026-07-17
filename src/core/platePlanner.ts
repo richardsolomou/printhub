@@ -1,4 +1,7 @@
 import { MaxRectsPacker, Rectangle } from 'maxrects-packer'
+import { BALANCED_PLANNING_WEIGHTS, type PlatePlanningStrategy } from './planningStrategy'
+
+export { BALANCED_PLANNING_WEIGHTS, PLATE_PLANNING_STRATEGIES, type PlatePlanningStrategy } from './planningStrategy'
 
 export const ORIENTATION_ANALYSIS_VERSION = 7
 
@@ -34,6 +37,9 @@ export type PlateCandidate = {
   copyId: string
   requestId: string
   name: string
+  requesterId?: string
+  userQueuePosition?: number
+  queuedAt?: number
   footprint: { widthMm: number; depthMm: number; known: boolean }
   estimatedSupportedHeightMm: number
   orientationQuaternion?: [number, number, number, number]
@@ -208,13 +214,13 @@ export function packPlate(candidates: PlateCandidate[], printer: PrinterProfile)
   return { placements, skipped: candidates.filter((candidate) => !placedIds.has(candidate.copyId)) }
 }
 
-export function planPlates(candidates: PlateCandidate[], printer: PrinterProfile) {
+export function planPlates(candidates: PlateCandidate[], printer: PrinterProfile, strategy: PlatePlanningStrategy = 'balanced') {
   const plates: PlatePlacement[][] = []
   const skipped: PlateCandidate[] = []
-  let remaining = [...candidates]
+  let remaining = orderCandidates(candidates, printer, strategy)
 
   while (remaining.length) {
-    const compatible = printer.printType === 'resin' ? bestHeightBand(remaining, printer) : remaining
+    const compatible = printer.printType === 'resin' ? heightBand(remaining, printer, strategy) : remaining
     const compatibleIds = new Set(compatible.map((candidate) => candidate.copyId))
     const packable: PlateCandidate[] = []
     for (const candidate of compatible) {
@@ -224,12 +230,75 @@ export function planPlates(candidates: PlateCandidate[], printer: PrinterProfile
     remaining = remaining.filter((candidate) => !compatibleIds.has(candidate.copyId))
     if (!packable.length) continue
 
-    plates.push(...packGeometry(packable, printer))
+    plates.push(...packForStrategy(packable, printer, strategy))
   }
-  const ordered = printer.printType === 'resin' ? orderPlates(plates, printer) : plates
+  const ordered = printer.printType === 'resin' ? orderResinPlates(plates, printer) : plates
   const filled = printer.printType === 'resin' ? backfillShorterModels(ordered, printer) : ordered
   const consolidated = consolidatePlates(filled, printer)
-  return { plates: printer.printType === 'resin' ? orderPlates(consolidated, printer) : consolidated, skipped }
+  return { plates: orderPlates(consolidated, printer, strategy), skipped }
+}
+
+function orderCandidates(candidates: PlateCandidate[], printer: PrinterProfile, strategy: PlatePlanningStrategy) {
+  if (strategy === 'balanced') return orderBalancedCandidates(candidates, printer)
+  return [...candidates].sort((first, second) => {
+    if (strategy === 'height-first') return second.estimatedSupportedHeightMm - first.estimatedSupportedHeightMm
+    if (strategy === 'utilization') return candidateArea(second, printer) - candidateArea(first, printer)
+    if (strategy === 'oldest-first') return compareOldest(first, second)
+    return compareUserPriority(first, second)
+  })
+}
+
+function orderBalancedCandidates(candidates: PlateCandidate[], printer: PrinterProfile) {
+  const priorityScores = normalizedRankScores(candidates, compareUserPriorityValue)
+  const utilizationScores = normalizedRankScores(
+    candidates,
+    (first, second) => candidateArea(second, printer) - candidateArea(first, printer),
+  )
+  const compatibleAreas =
+    printer.printType === 'resin'
+      ? new Map(candidates.map((candidate) => [candidate, compatibleHeightArea(candidate, candidates, printer)]))
+      : undefined
+  const heightScores =
+    compatibleAreas !== undefined
+      ? normalizedRankScores(candidates, (first, second) => (compatibleAreas.get(second) ?? 0) - (compatibleAreas.get(first) ?? 0))
+      : undefined
+  return [...candidates].sort((first, second) => {
+    const scoreDifference =
+      balancedScore(priorityScores.get(second) ?? 0, utilizationScores.get(second) ?? 0, heightScores?.get(second)) -
+      balancedScore(priorityScores.get(first) ?? 0, utilizationScores.get(first) ?? 0, heightScores?.get(first))
+    return scoreDifference || compareUserPriority(first, second)
+  })
+}
+
+function heightBand(candidates: PlateCandidate[], printer: ResinPrinterProfile, strategy: PlatePlanningStrategy) {
+  if (strategy === 'height-first') {
+    const tallest = Math.max(...candidates.map((candidate) => candidate.estimatedSupportedHeightMm))
+    return candidates.filter((candidate) => tallest - candidate.estimatedSupportedHeightMm <= printer.maxHeightDifferenceMm)
+  }
+  if (strategy === 'balanced' || strategy === 'user-priority' || strategy === 'oldest-first') {
+    const priority = candidates[0]
+    if (!priority) return candidates
+    return candidates.filter(
+      (candidate) => Math.abs(candidate.estimatedSupportedHeightMm - priority.estimatedSupportedHeightMm) <= printer.maxHeightDifferenceMm,
+    )
+  }
+  return bestHeightBand(candidates, printer)
+}
+
+function packForStrategy(candidates: PlateCandidate[], printer: PrinterProfile, strategy: PlatePlanningStrategy) {
+  if (strategy !== 'utilization') return packGeometry(candidates, printer)
+  const plans = [
+    packGeometry(candidates, printer),
+    packGeometry(
+      [...candidates].sort((first, second) => candidateArea(second, printer) - candidateArea(first, printer)),
+      printer,
+    ),
+    packGeometry(
+      [...candidates].sort((first, second) => second.estimatedSupportedHeightMm - first.estimatedSupportedHeightMm),
+      printer,
+    ),
+  ]
+  return plans.reduce((best, plan) => (plan.length < best.length ? plan : best))
 }
 
 export function allocateFleetCandidates(candidates: FleetCandidate[], printers: PrinterProfile[]) {
@@ -356,12 +425,71 @@ function backfillShorterModels(plates: PlatePlacement[][], printer: PrinterProfi
   return filled.filter((plate) => plate.length)
 }
 
-function orderPlates(plates: PlatePlacement[][], printer: PrinterProfile) {
+function orderPlates(plates: PlatePlacement[][], printer: PrinterProfile, strategy: PlatePlanningStrategy) {
+  if (strategy === 'balanced') return orderBalancedPlates(plates, printer)
   return [...plates].sort((first, second) => {
-    const heightDifference = tallestModel(second) - tallestModel(first)
-    if (Math.abs(heightDifference) > PLACEMENT_EPSILON_MM) return heightDifference
-    return occupiedArea(second, printer) - occupiedArea(first, printer)
+    if (strategy === 'height-first') return tallestModel(second) - tallestModel(first)
+    if (strategy === 'utilization') return occupiedArea(second, printer) - occupiedArea(first, printer)
+    if (strategy === 'oldest-first') return compareOldest(bestOldest(first), bestOldest(second))
+    return compareUserPriority(bestPriority(first), bestPriority(second))
   })
+}
+
+function orderBalancedPlates(plates: PlatePlacement[][], printer: PrinterProfile) {
+  const priorityScores = normalizedRankScores(plates, (first, second) =>
+    compareUserPriorityValue(bestPriority(first), bestPriority(second)),
+  )
+  const utilizationScores = normalizedRankScores(plates, (first, second) => occupiedArea(second, printer) - occupiedArea(first, printer))
+  const heightScores =
+    printer.printType === 'resin'
+      ? normalizedRankScores(plates, (first, second) => plateHeightEfficiency(second, printer) - plateHeightEfficiency(first, printer))
+      : undefined
+  return [...plates].sort((first, second) => {
+    const scoreDifference =
+      balancedScore(priorityScores.get(second) ?? 0, utilizationScores.get(second) ?? 0, heightScores?.get(second)) -
+      balancedScore(priorityScores.get(first) ?? 0, utilizationScores.get(first) ?? 0, heightScores?.get(first))
+    return scoreDifference || compareUserPriority(bestPriority(first), bestPriority(second))
+  })
+}
+
+function orderResinPlates(plates: PlatePlacement[][], printer: PrinterProfile) {
+  return [...plates].sort((first, second) => compareResinPlates(first, second, printer))
+}
+
+function compareResinPlates(first: PlatePlacement[], second: PlatePlacement[], printer: PrinterProfile) {
+  const heightDifference = tallestModel(second) - tallestModel(first)
+  if (Math.abs(heightDifference) > PLACEMENT_EPSILON_MM) return heightDifference
+  return occupiedArea(second, printer) - occupiedArea(first, printer)
+}
+
+function bestPriority(plate: PlatePlacement[]) {
+  return [...plate].sort(compareUserPriority)[0]
+}
+
+function compareUserPriority(first: PlateCandidate, second: PlateCandidate) {
+  return (
+    compareUserPriorityValue(first, second) ||
+    (first.requesterId ?? '').localeCompare(second.requesterId ?? '') ||
+    first.copyId.localeCompare(second.copyId)
+  )
+}
+
+function compareUserPriorityValue(first: PlateCandidate, second: PlateCandidate) {
+  const position = (first.userQueuePosition ?? Number.POSITIVE_INFINITY) - (second.userQueuePosition ?? Number.POSITIVE_INFINITY)
+  if (position) return position
+  const queuedAt = (first.queuedAt ?? Number.POSITIVE_INFINITY) - (second.queuedAt ?? Number.POSITIVE_INFINITY)
+  return queuedAt || 0
+}
+
+function bestOldest(plate: PlatePlacement[]) {
+  return [...plate].sort(compareOldest)[0]
+}
+
+function compareOldest(first: PlateCandidate, second: PlateCandidate) {
+  return (
+    (first.queuedAt ?? Number.POSITIVE_INFINITY) - (second.queuedAt ?? Number.POSITIVE_INFINITY) ||
+    first.copyId.localeCompare(second.copyId)
+  )
 }
 
 function tallestModel(plate: PlatePlacement[]) {
@@ -370,6 +498,45 @@ function tallestModel(plate: PlatePlacement[]) {
 
 function occupiedArea(plate: PlatePlacement[], printer: PrinterProfile) {
   return plate.reduce((total, placement) => total + candidateArea(placement, printer), 0)
+}
+
+function compatibleHeightArea(candidate: PlateCandidate, candidates: PlateCandidate[], printer: ResinPrinterProfile) {
+  return candidates
+    .filter((other) => Math.abs(other.estimatedSupportedHeightMm - candidate.estimatedSupportedHeightMm) <= printer.maxHeightDifferenceMm)
+    .reduce((total, other) => total + candidateArea(other, printer), 0)
+}
+
+function plateHeightEfficiency(plate: PlatePlacement[], printer: ResinPrinterProfile) {
+  const tallest = tallestModel(plate)
+  if (!tallest) return 0
+  return (
+    plate.reduce((total, placement) => total + candidateArea(placement, printer) * (placement.estimatedSupportedHeightMm / tallest), 0) /
+    (printer.widthMm * printer.depthMm)
+  )
+}
+
+function balancedScore(userPriority: number, utilization: number, heightCompatibility?: number) {
+  const heightWeight = heightCompatibility === undefined ? 0 : BALANCED_PLANNING_WEIGHTS.heightCompatibility
+  const totalWeight = BALANCED_PLANNING_WEIGHTS.userPriority + BALANCED_PLANNING_WEIGHTS.utilization + heightWeight
+  return (
+    (userPriority * BALANCED_PLANNING_WEIGHTS.userPriority +
+      utilization * BALANCED_PLANNING_WEIGHTS.utilization +
+      (heightCompatibility ?? 0) * heightWeight) /
+    totalWeight
+  )
+}
+
+function normalizedRankScores<Item>(items: Item[], compare: (first: Item, second: Item) => number) {
+  const ordered = [...items].sort(compare)
+  const scores = new Map<Item, number>()
+  const divisor = Math.max(ordered.length - 1, 1)
+  let rank = 0
+  ordered.forEach((item, index) => {
+    const previous = ordered[index - 1]
+    if (previous !== undefined && compare(previous, item)) rank = index
+    scores.set(item, 1 - rank / divisor)
+  })
+  return scores
 }
 
 function candidateArea(candidate: Pick<PlateCandidate, 'footprint'>, printer: PrinterProfile) {

@@ -27,12 +27,37 @@ const printer: PrinterProfile = {
   maxHeightDifferenceMm: 20,
 }
 
-const candidate = (copyId: string, widthMm: number, depthMm: number, height = 30): PlateCandidate => ({
+const filamentPrinter: PrinterProfile = {
+  id: 'filament',
+  name: 'Filament',
+  printType: 'filament',
+  enabled: true,
+  widthMm: 100,
+  depthMm: 60,
+  heightMm: 100,
+  spacingMm: 0,
+  brimMarginMm: 0,
+  filamentDiameterMm: 1.75,
+  materialDensityGPerCm3: 1.24,
+}
+
+const candidate = (
+  copyId: string,
+  widthMm: number,
+  depthMm: number,
+  height = 30,
+  userQueuePosition?: number,
+  requesterId = copyId.split(':')[0] ?? copyId,
+  queuedAt = 0,
+): PlateCandidate => ({
   copyId,
   requestId: copyId.split(':')[0] ?? copyId,
   name: copyId,
   footprint: { widthMm, depthMm, known: true },
   estimatedSupportedHeightMm: height,
+  userQueuePosition,
+  requesterId,
+  queuedAt,
 })
 
 describe('plate planner', () => {
@@ -170,6 +195,12 @@ describe('plate planner', () => {
     expect(result.plates[0]?.some((entry) => entry.copyId === 'tall:1')).toBe(true)
   })
 
+  it('prints manually prioritized requests before taller resin plates', () => {
+    const result = planPlates([candidate('tall:1', 100, 60, 80, 10), candidate('priority:1', 100, 60, 20, 0)], printer)
+
+    expect(result.plates.map((plate) => plate[0]?.copyId)).toEqual(['priority:1', 'tall:1'])
+  })
+
   it('consolidates sparse tail plates even when their heights differ', () => {
     const resinPrinter = {
       ...printer,
@@ -255,6 +286,92 @@ describe('plate planner', () => {
     }
     const result = planPlates([candidate('short', 40, 40, 10), candidate('tall', 40, 40, 90)], filament)
     expect(result.plates).toHaveLength(1)
+  })
+
+  it('prints manually prioritized filament requests first', () => {
+    const filament: PrinterProfile = {
+      id: 'filament',
+      name: 'Filament',
+      printType: 'filament',
+      enabled: true,
+      widthMm: 100,
+      depthMm: 60,
+      heightMm: 100,
+      spacingMm: 0,
+      brimMarginMm: 0,
+      filamentDiameterMm: 1.75,
+      materialDensityGPerCm3: 1.24,
+    }
+    const result = planPlates([candidate('later:1', 100, 60, 30, 10), candidate('priority:1', 100, 60, 30, 0)], filament)
+
+    expect(result.plates.map((plate) => plate[0]?.copyId)).toEqual(['priority:1', 'later:1'])
+  })
+
+  it('merges requester queues by each request position', () => {
+    const result = planPlates(
+      [
+        candidate('alice-second:1', 100, 60, 30, 1, 'alice', 1),
+        candidate('bob-first:1', 100, 60, 30, 0, 'bob', 2),
+        candidate('alice-first:1', 100, 60, 30, 0, 'alice', 1),
+      ],
+      filamentPrinter,
+      'user-priority',
+    )
+
+    expect(result.plates.map((plate) => plate[0]?.copyId)).toEqual(['alice-first:1', 'bob-first:1', 'alice-second:1'])
+  })
+
+  it('balances requester priority against plate utilization', () => {
+    const candidates = [candidate('priority:1', 60, 60, 30, 0, 'alice', 1), candidate('fuller:1', 100, 60, 30, 1, 'bob', 2)]
+
+    expect(planPlates(candidates, filamentPrinter, 'user-priority').plates[0]?.[0]?.copyId).toBe('priority:1')
+    expect(planPlates(candidates, filamentPrinter, 'balanced').plates[0]?.[0]?.copyId).toBe('fuller:1')
+  })
+
+  it('balances requester priority against resin height compatibility', () => {
+    const candidates = [
+      candidate('priority-short:1', 60, 60, 10, 0, 'alice', 1),
+      candidate('compatible-tall:1', 49, 60, 80, 1, 'bob', 2),
+      candidate('compatible-tall:2', 49, 60, 82, 2, 'bob', 3),
+    ]
+
+    expect(planPlates(candidates, printer, 'user-priority').plates[0]?.some((placement) => placement.copyId === 'priority-short:1')).toBe(
+      true,
+    )
+    expect(planPlates(candidates, printer, 'balanced').plates[0]?.some((placement) => placement.copyId.startsWith('compatible-tall'))).toBe(
+      true,
+    )
+  })
+
+  it('uses fewer plates when maximizing utilization', () => {
+    const candidates = [
+      candidate('one:1', 46, 36, 20, 0),
+      candidate('two:1', 57, 46, 20, 1),
+      candidate('three:1', 69, 31, 20, 2),
+      candidate('four:1', 48, 49, 20, 3),
+      candidate('five:1', 40, 34, 20, 4),
+      candidate('six:1', 21, 44, 20, 5),
+      candidate('seven:1', 73, 29, 20, 6),
+    ]
+
+    expect(planPlates(candidates, filamentPrinter, 'user-priority').plates).toHaveLength(4)
+    expect(planPlates(candidates, filamentPrinter, 'utilization').plates).toHaveLength(3)
+  })
+
+  it('supports tallest-first plate ordering', () => {
+    const candidates = [candidate('wide:1', 100, 60, 20), candidate('tall:1', 50, 60, 90)]
+
+    expect(planPlates(candidates, filamentPrinter, 'height-first').plates[0]?.[0]?.copyId).toBe('tall:1')
+  })
+
+  it('supports strict oldest-first plate ordering', () => {
+    const newer = candidate('newer:1', 100, 60, 30, 0, 'newer', 20)
+    const older = candidate('older:1', 100, 60, 30, 1, 'older', 10)
+
+    expect(planPlates([newer, older], filamentPrinter, 'oldest-first').plates.map((plate) => plate[0]?.copyId)).toEqual([
+      'older:1',
+      'newer:1',
+    ])
   })
 
   it('normalizes legacy profiles to resin without changing their build volume', () => {

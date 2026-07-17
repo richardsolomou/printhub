@@ -71,6 +71,10 @@ export type PrintRequest = {
   updatedAt: number
 }
 
+export function requestQueueOrder(request: Pick<PrintRequest, 'orders' | 'createdAt'>, status: string) {
+  return request.orders[status] ?? -request.createdAt
+}
+
 export type PublicPrintRequest = Omit<
   PrintRequest,
   'fileName' | 'filePath' | 'ownerUserId' | 'ownerEmail' | 'ownerName' | 'thumbnailPath' | 'previewPath' | 'requestedPrintType'
@@ -145,7 +149,10 @@ export type RequestQuery = {
 export type RequestQueryResult = { requests: PrintRequest[]; facets: RequestFacets }
 export type PublicRequestQueryResult = { requests: PublicPrintRequest[]; facets: RequestFacets }
 
-export type BoardConfig = { privateRequests: boolean }
+export type BoardConfig = {
+  privateRequests: boolean
+  planningStrategy: import('./platePlanner').PlatePlanningStrategy
+}
 
 export type NewPrintRequest = Pick<
   PrintRequest,
