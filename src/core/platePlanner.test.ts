@@ -27,13 +27,37 @@ const printer: PrinterProfile = {
   maxHeightDifferenceMm: 20,
 }
 
-const candidate = (copyId: string, widthMm: number, depthMm: number, height = 30, queueOrder?: number): PlateCandidate => ({
+const filamentPrinter: PrinterProfile = {
+  id: 'filament',
+  name: 'Filament',
+  printType: 'filament',
+  enabled: true,
+  widthMm: 100,
+  depthMm: 60,
+  heightMm: 100,
+  spacingMm: 0,
+  brimMarginMm: 0,
+  filamentDiameterMm: 1.75,
+  materialDensityGPerCm3: 1.24,
+}
+
+const candidate = (
+  copyId: string,
+  widthMm: number,
+  depthMm: number,
+  height = 30,
+  userQueuePosition?: number,
+  requesterId = copyId.split(':')[0] ?? copyId,
+  queuedAt = 0,
+): PlateCandidate => ({
   copyId,
   requestId: copyId.split(':')[0] ?? copyId,
   name: copyId,
   footprint: { widthMm, depthMm, known: true },
   estimatedSupportedHeightMm: height,
-  queueOrder,
+  userQueuePosition,
+  requesterId,
+  queuedAt,
 })
 
 describe('plate planner', () => {
@@ -281,6 +305,27 @@ describe('plate planner', () => {
     const result = planPlates([candidate('later:1', 100, 60, 30, 10), candidate('priority:1', 100, 60, 30, 0)], filament)
 
     expect(result.plates.map((plate) => plate[0]?.copyId)).toEqual(['priority:1', 'later:1'])
+  })
+
+  it('merges requester queues by each request position', () => {
+    const result = planPlates(
+      [
+        candidate('alice-second:1', 100, 60, 30, 1, 'alice', 1),
+        candidate('bob-first:1', 100, 60, 30, 0, 'bob', 2),
+        candidate('alice-first:1', 100, 60, 30, 0, 'alice', 1),
+      ],
+      filamentPrinter,
+      'user-priority',
+    )
+
+    expect(result.plates.map((plate) => plate[0]?.copyId)).toEqual(['alice-first:1', 'bob-first:1', 'alice-second:1'])
+  })
+
+  it('supports largest-first and height-first plate ordering', () => {
+    const candidates = [candidate('wide:1', 100, 60, 20), candidate('tall:1', 50, 60, 90)]
+
+    expect(planPlates(candidates, filamentPrinter, 'largest-first').plates[0]?.[0]?.copyId).toBe('wide:1')
+    expect(planPlates(candidates, filamentPrinter, 'height-first').plates[0]?.[0]?.copyId).toBe('tall:1')
   })
 
   it('normalizes legacy profiles to resin without changing their build volume', () => {

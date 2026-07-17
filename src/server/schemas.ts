@@ -35,7 +35,12 @@ export const acceptInviteSchema = z.object({
 })
 
 export const telemetrySettingsSchema = z.object({ enabled: z.boolean() })
-export const boardSettingsSchema = z.object({ privateRequests: z.boolean() })
+export const boardSettingsSchema = z
+  .object({
+    privateRequests: z.boolean().optional(),
+    planningStrategy: z.enum(['balanced', 'user-priority', 'utilization', 'largest-first', 'height-first']).optional(),
+  })
+  .refine((value) => value.privateRequests !== undefined || value.planningStrategy !== undefined)
 
 const printerProfileBaseSchema = z.object({
   id: id,
@@ -85,7 +90,9 @@ const plateCandidateSchema = z.object({
   copyId: id,
   requestId: id,
   name: z.string().max(200),
-  queueOrder: z.number().finite().optional(),
+  requesterId: id.optional(),
+  userQueuePosition: z.number().int().nonnegative().optional(),
+  queuedAt: z.number().finite().optional(),
   footprint: footprintSchema,
   estimatedSupportedHeightMm: z.number().nonnegative(),
   orientationQuaternion: z.tuple([z.number(), z.number(), z.number(), z.number()]).optional(),

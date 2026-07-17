@@ -142,9 +142,16 @@ export function Board({
         setSettlingIds((current) => new Set(current).add(requestId))
         window.setTimeout(() => setSettlingIds((current) => new Set([...current].filter((id) => id !== requestId))), 260)
 
+        const sourceRequest = requests.find((request) => request.id === requestId)
+        if (!sourceRequest) return
         const columnOf = (status: StatusId) =>
           requests
-            .filter((request) => !(request.id === requestId && status === from) && countsOf(request)[status] > 0)
+            .filter(
+              (request) =>
+                request.requesterId === sourceRequest.requesterId &&
+                !(request.id === requestId && status === from) &&
+                countsOf(request)[status] > 0,
+            )
             .sort((a, b) => compare(a, b, status))
 
         let to: StatusId
@@ -156,18 +163,19 @@ export function Board({
           if (sort === 'board') {
             const list = columnOf(to)
             const index = list.findIndex((request) => request.id === targetRequest.id)
-            if (index === -1) return
-            const edge = extractClosestEdge(target.data)
-            const before = edge === 'top' ? list[index - 1] : list[index]
-            const after = edge === 'top' ? list[index] : list[index + 1]
-            order =
-              before && after
-                ? (sortKey(before, to) + sortKey(after, to)) / 2
-                : before
-                  ? sortKey(before, to) + 1
-                  : after
-                    ? sortKey(after, to) - 1
-                    : 0
+            if (index >= 0) {
+              const edge = extractClosestEdge(target.data)
+              const before = edge === 'top' ? list[index - 1] : list[index]
+              const after = edge === 'top' ? list[index] : list[index + 1]
+              order =
+                before && after
+                  ? (sortKey(before, to) + sortKey(after, to)) / 2
+                  : before
+                    ? sortKey(before, to) + 1
+                    : after
+                      ? sortKey(after, to) - 1
+                      : 0
+            } else order = list.length ? sortKey(list[list.length - 1], to) + 1 : 0
           }
         } else if (target.data.type === 'column') {
           to = target.data.status as StatusId

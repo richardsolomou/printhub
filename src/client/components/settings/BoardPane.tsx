@@ -17,6 +17,7 @@ import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { Identity } from '../../../core/types'
+import type { PlatePlanningStrategy } from '../../../core/platePlanner'
 import { deleteWorkspace, updateBoardSettings } from '../../../server/fns'
 import { boardQuery } from '../../queries'
 import { reloadAfterWorkspaceChange, useWorkspaceSlug } from '../../workspace'
@@ -26,6 +27,18 @@ const VISIBILITY_OPTIONS = [
   { value: 'shared', label: 'Shared — everyone sees every request' },
   { value: 'private', label: 'Private — requesters see only their own' },
 ] as const
+
+const PLANNING_OPTIONS: { value: PlatePlanningStrategy; label: string; description: string }[] = [
+  { value: 'balanced', label: 'Balanced', description: 'Balance user priority, plate utilization, and resin height compatibility.' },
+  { value: 'user-priority', label: 'User priority', description: "Work through every requester's personal queue as fairly as possible." },
+  {
+    value: 'utilization',
+    label: 'Maximum utilization',
+    description: 'Prefer the fewest, fullest plates regardless of requester priority.',
+  },
+  { value: 'largest-first', label: 'Largest first', description: 'Start with the models that occupy the most build-plate area.' },
+  { value: 'height-first', label: 'Height first', description: 'Prioritize taller models and compatible resin height bands.' },
+]
 
 export function BoardPane({ me, workspaceName, workspaceCount }: { me: Identity; workspaceName: string; workspaceCount: number }) {
   const workspaceSlug = useWorkspaceSlug()
@@ -77,6 +90,27 @@ export function BoardPane({ me, workspaceName, workspaceCount }: { me: Identity;
             Private suits print farms and paid work: requesters see, reorder, and withdraw only their own requests. Admins always see
             everything.
           </FieldDescription>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="planning-strategy">Plate planning strategy</FieldLabel>
+          <Select
+            items={PLANNING_OPTIONS}
+            value={current.planningStrategy}
+            disabled={mutation.isPending}
+            onValueChange={(value) => mutation.mutate({ data: { workspaceSlug, planningStrategy: value as PlatePlanningStrategy } })}
+          >
+            <SelectTrigger className="w-full" id="planning-strategy">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PLANNING_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <FieldDescription>{PLANNING_OPTIONS.find((option) => option.value === current.planningStrategy)?.description}</FieldDescription>
         </Field>
         <FieldError>{mutation.error?.message || (mutation.error ? 'Could not save board settings.' : '')}</FieldError>
       </SettingsSection>

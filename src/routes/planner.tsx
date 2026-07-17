@@ -33,6 +33,7 @@ import {
   planPlates,
   placementIssues,
   type PlateCandidate,
+  type PlatePlanningStrategy,
   type FleetCandidate,
   type PlatePlacement,
   type PrinterProfile,
@@ -47,7 +48,7 @@ export const Route = createFileRoute('/planner')({
   component: PlannerPage,
 })
 
-const PLATE_LAYOUT_VERSION = 6
+const PLATE_LAYOUT_VERSION = 7
 const EMPTY_PLACEMENTS: PlatePlacement[] = []
 const EMPTY_PLATES: PlatePlacement[][] = []
 
@@ -73,6 +74,7 @@ function PlannerPage() {
   const navigate = Route.useNavigate()
   const { data: session } = useSuspenseQuery(sessionQuery())
   const workspaceSlug = session.identity?.workspaceSlug ?? ''
+  const planningStrategy = session.planningStrategy
   const filters = filtersFromSearch(search, 'created-asc')
   const { data, isFetching } = useQuery({ ...requestsQuery(workspaceSlug, filters), enabled: Boolean(workspaceSlug) })
   const { data: allData } = useQuery({ ...requestsQuery(workspaceSlug, { sort: 'created-asc' }), enabled: Boolean(workspaceSlug) })
@@ -104,6 +106,7 @@ function PlannerPage() {
     [data?.requests, printers],
   )
   const allOutstanding = useMemo(() => (allData?.requests ?? []).filter((request) => (request.counts.todo ?? 0) > 0), [allData?.requests])
+  const queuePositions = useMemo(() => userQueuePositions(allOutstanding), [allOutstanding])
   const issues = useMemo(() => placementIssues(placements, activePrinter), [placements, activePrinter])
   const invalidCopyIds = useMemo(() => new Set(issues.keys()), [issues])
   const plateContents = useMemo(() => {
@@ -143,7 +146,10 @@ function PlannerPage() {
       }),
     [allOutstanding, analyses, printers],
   )
-  const fingerprint = useMemo(() => plannerFingerprint(outstanding, printers, analyses), [analyses, outstanding, printers])
+  const fingerprint = useMemo(
+    () => plannerFingerprint(outstanding, printers, analyses, planningStrategy, queuePositions),
+    [analyses, outstanding, planningStrategy, printers, queuePositions],
+  )
 
   useEffect(() => {
     preloadStlViewer()
@@ -162,7 +168,7 @@ function PlannerPage() {
       const printType = requestPrintType(request)
       return (request.counts.todo ?? 0) > 0 && !!printType && profiles.some((profile) => profile.printType === printType)
     })
-    const storedFingerprint = plannerFingerprint(outstandingForProfiles, profiles, storedAnalyses)
+    const storedFingerprint = plannerFingerprint(outstandingForProfiles, profiles, storedAnalyses, planningStrategy, queuePositions)
     if (profiles.every((profile) => drafts[profile.id]?.fingerprint === storedFingerprint)) {
       setPlans(
         Object.fromEntries(
@@ -174,7 +180,7 @@ function PlannerPage() {
       generatedFingerprintRef.current = storedFingerprint
     }
     setRestored(true)
-  }, [data?.requests, restored, storedPlanner])
+  }, [data?.requests, planningStrategy, queuePositions, restored, storedPlanner])
 
   const generate = useCallback(async () => {
     const generation = ++generationRef.current
@@ -197,7 +203,9 @@ function PlannerPage() {
                   copyId,
                   requestId: request.id,
                   name: `${request.name} #${copy}`,
-                  queueOrder: requestQueueOrder(request, 'todo'),
+                  requesterId: request.requesterId,
+                  userQueuePosition: queuePositions.get(request.id),
+                  queuedAt: request.createdAt,
                   footprint: { widthMm: orientation.widthMm, depthMm: orientation.depthMm, known: true },
                   estimatedSupportedHeightMm: orientation.heightMm + (printer.printType === 'resin' ? printer.heightAllowanceMm : 0),
                   orientationQuaternion: orientation.quaternion,
@@ -211,7 +219,9 @@ function PlannerPage() {
         }
       }
       const assignments = allocateFleetCandidates(fleetCandidates, printers)
-      const nextPlans = Object.fromEntries(printers.map((printer) => [printer.id, planPlates(assignments.get(printer.id) ?? [], printer)]))
+      const nextPlans = Object.fromEntries(
+        printers.map((printer) => [printer.id, planPlates(assignments.get(printer.id) ?? [], printer, planningStrategy)]),
+      )
       if (generation !== generationRef.current) return
       setPlans(Object.fromEntries(Object.entries(nextPlans).map(([profileId, result]) => [profileId, result.plates])))
       setPlateIndex(0)
@@ -234,7 +244,7 @@ function PlannerPage() {
     } finally {
       // Generation only packs cached server analyses; background workers own STL analysis.
     }
-  }, [analyses, fingerprint, outstanding, printers, workspaceSlug])
+  }, [analyses, fingerprint, outstanding, planningStrategy, printers, queuePositions, workspaceSlug])
 
   const downloadPlate = useCallback(async () => {
     if (!placements.length || exportingPlate) return
@@ -580,15 +590,19 @@ function plannerFingerprint(
   }[],
   printers: PrinterProfile[],
   analyses = new Map<string, import('../core/platePlanner').PlateModelAnalysis>(),
+  planningStrategy: PlatePlanningStrategy = 'balanced',
+  queuePositions = userQueuePositions(requests),
 ) {
   return JSON.stringify({
     analysisVersion: ORIENTATION_ANALYSIS_VERSION,
     plateLayoutVersion: PLATE_LAYOUT_VERSION,
+    planningStrategy,
     printers,
     requests: requests.map((request) => ({
       id: request.id,
       todo: request.counts.todo ?? 0,
-      queueOrder: requestQueueOrder(request, 'todo'),
+      requesterId: 'requesterId' in request ? request.requesterId : undefined,
+      userQueuePosition: queuePositions.get(request.id),
       printType: request.printType,
       analysisVersion: analyses.get(request.id)?.analysisVersion,
       orientationCount: analyses.get(request.id)?.orientationCandidates?.length ?? 0,
@@ -597,6 +611,25 @@ function plannerFingerprint(
         : undefined,
     })),
   })
+}
+
+function userQueuePositions(
+  requests: { id: string; requesterId?: string; orders: Record<string, number | undefined>; createdAt: number }[],
+) {
+  const byRequester = new Map<string, typeof requests>()
+  for (const request of requests) {
+    const requester = request.requesterId ?? request.id
+    const current = byRequester.get(requester) ?? []
+    current.push(request)
+    byRequester.set(requester, current)
+  }
+  const positions = new Map<string, number>()
+  for (const owned of byRequester.values()) {
+    owned
+      .sort((first, second) => requestQueueOrder(first, 'todo') - requestQueueOrder(second, 'todo') || first.id.localeCompare(second.id))
+      .forEach((request, index) => positions.set(request.id, index))
+  }
+  return positions
 }
 
 function selectedOrientation(analysis: import('../core/platePlanner').PlateModelAnalysis, printer: PrinterProfile): ResinOrientation {

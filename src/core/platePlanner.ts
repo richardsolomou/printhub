@@ -1,6 +1,8 @@
 import { MaxRectsPacker, Rectangle } from 'maxrects-packer'
 
 export const ORIENTATION_ANALYSIS_VERSION = 7
+export const PLATE_PLANNING_STRATEGIES = ['balanced', 'user-priority', 'utilization', 'largest-first', 'height-first'] as const
+export type PlatePlanningStrategy = (typeof PLATE_PLANNING_STRATEGIES)[number]
 
 type BasePrinterProfile = {
   id: string
@@ -34,7 +36,9 @@ export type PlateCandidate = {
   copyId: string
   requestId: string
   name: string
-  queueOrder?: number
+  requesterId?: string
+  userQueuePosition?: number
+  queuedAt?: number
   footprint: { widthMm: number; depthMm: number; known: boolean }
   estimatedSupportedHeightMm: number
   orientationQuaternion?: [number, number, number, number]
@@ -209,13 +213,13 @@ export function packPlate(candidates: PlateCandidate[], printer: PrinterProfile)
   return { placements, skipped: candidates.filter((candidate) => !placedIds.has(candidate.copyId)) }
 }
 
-export function planPlates(candidates: PlateCandidate[], printer: PrinterProfile) {
+export function planPlates(candidates: PlateCandidate[], printer: PrinterProfile, strategy: PlatePlanningStrategy = 'balanced') {
   const plates: PlatePlacement[][] = []
   const skipped: PlateCandidate[] = []
-  let remaining = [...candidates]
+  let remaining = orderCandidates(candidates, printer, strategy)
 
   while (remaining.length) {
-    const compatible = printer.printType === 'resin' ? bestHeightBand(remaining, printer) : remaining
+    const compatible = printer.printType === 'resin' ? heightBand(remaining, printer, strategy) : remaining
     const compatibleIds = new Set(compatible.map((candidate) => candidate.copyId))
     const packable: PlateCandidate[] = []
     for (const candidate of compatible) {
@@ -225,12 +229,51 @@ export function planPlates(candidates: PlateCandidate[], printer: PrinterProfile
     remaining = remaining.filter((candidate) => !compatibleIds.has(candidate.copyId))
     if (!packable.length) continue
 
-    plates.push(...packGeometry(packable, printer))
+    plates.push(...packForStrategy(packable, printer, strategy))
   }
   const ordered = printer.printType === 'resin' ? orderResinPlates(plates, printer) : plates
   const filled = printer.printType === 'resin' ? backfillShorterModels(ordered, printer) : ordered
   const consolidated = consolidatePlates(filled, printer)
-  return { plates: orderPlates(consolidated, printer), skipped }
+  return { plates: orderPlates(consolidated, printer, strategy), skipped }
+}
+
+function orderCandidates(candidates: PlateCandidate[], printer: PrinterProfile, strategy: PlatePlanningStrategy) {
+  return [...candidates].sort((first, second) => {
+    if (strategy === 'height-first') return second.estimatedSupportedHeightMm - first.estimatedSupportedHeightMm
+    if (strategy === 'largest-first' || strategy === 'utilization') return candidateArea(second, printer) - candidateArea(first, printer)
+    return compareUserPriority(first, second)
+  })
+}
+
+function heightBand(candidates: PlateCandidate[], printer: ResinPrinterProfile, strategy: PlatePlanningStrategy) {
+  if (strategy === 'height-first') {
+    const tallest = Math.max(...candidates.map((candidate) => candidate.estimatedSupportedHeightMm))
+    return candidates.filter((candidate) => tallest - candidate.estimatedSupportedHeightMm <= printer.maxHeightDifferenceMm)
+  }
+  if (strategy === 'balanced' || strategy === 'user-priority') {
+    const priority = candidates[0]
+    if (!priority) return candidates
+    return candidates.filter(
+      (candidate) => Math.abs(candidate.estimatedSupportedHeightMm - priority.estimatedSupportedHeightMm) <= printer.maxHeightDifferenceMm,
+    )
+  }
+  return bestHeightBand(candidates, printer)
+}
+
+function packForStrategy(candidates: PlateCandidate[], printer: PrinterProfile, strategy: PlatePlanningStrategy) {
+  if (strategy !== 'utilization') return packGeometry(candidates, printer)
+  const plans = [
+    packGeometry(candidates, printer),
+    packGeometry(
+      [...candidates].sort((first, second) => candidateArea(second, printer) - candidateArea(first, printer)),
+      printer,
+    ),
+    packGeometry(
+      [...candidates].sort((first, second) => second.estimatedSupportedHeightMm - first.estimatedSupportedHeightMm),
+      printer,
+    ),
+  ]
+  return plans.reduce((best, plan) => (plan.length < best.length ? plan : best))
 }
 
 export function allocateFleetCandidates(candidates: FleetCandidate[], printers: PrinterProfile[]) {
@@ -357,12 +400,14 @@ function backfillShorterModels(plates: PlatePlacement[][], printer: PrinterProfi
   return filled.filter((plate) => plate.length)
 }
 
-function orderPlates(plates: PlatePlacement[][], printer: PrinterProfile) {
+function orderPlates(plates: PlatePlacement[][], printer: PrinterProfile, strategy: PlatePlanningStrategy) {
   return [...plates].sort((first, second) => {
-    const firstQueueOrder = earliestQueueOrder(first)
-    const secondQueueOrder = earliestQueueOrder(second)
-    if (firstQueueOrder !== secondQueueOrder) return firstQueueOrder < secondQueueOrder ? -1 : 1
-    return printer.printType === 'resin' ? compareResinPlates(first, second, printer) : 0
+    if (strategy === 'height-first') return tallestModel(second) - tallestModel(first)
+    if (strategy === 'largest-first') return largestModelArea(second, printer) - largestModelArea(first, printer)
+    if (strategy === 'utilization') return occupiedArea(second, printer) - occupiedArea(first, printer)
+    const priority = compareUserPriority(bestPriority(first), bestPriority(second))
+    if (priority) return priority
+    return strategy === 'balanced' && printer.printType === 'resin' ? compareResinPlates(first, second, printer) : 0
   })
 }
 
@@ -376,8 +421,20 @@ function compareResinPlates(first: PlatePlacement[], second: PlatePlacement[], p
   return occupiedArea(second, printer) - occupiedArea(first, printer)
 }
 
-function earliestQueueOrder(plate: PlatePlacement[]) {
-  return Math.min(...plate.map((placement) => placement.queueOrder ?? Number.POSITIVE_INFINITY))
+function bestPriority(plate: PlatePlacement[]) {
+  return [...plate].sort(compareUserPriority)[0]
+}
+
+function compareUserPriority(first: PlateCandidate, second: PlateCandidate) {
+  const position = (first.userQueuePosition ?? Number.POSITIVE_INFINITY) - (second.userQueuePosition ?? Number.POSITIVE_INFINITY)
+  if (position) return position
+  const queuedAt = (first.queuedAt ?? Number.POSITIVE_INFINITY) - (second.queuedAt ?? Number.POSITIVE_INFINITY)
+  if (queuedAt) return queuedAt
+  return (first.requesterId ?? '').localeCompare(second.requesterId ?? '') || first.copyId.localeCompare(second.copyId)
+}
+
+function largestModelArea(plate: PlatePlacement[], printer: PrinterProfile) {
+  return Math.max(...plate.map((placement) => candidateArea(placement, printer)))
 }
 
 function tallestModel(plate: PlatePlacement[]) {

@@ -149,7 +149,10 @@ export type RequestQuery = {
 export type RequestQueryResult = { requests: PrintRequest[]; facets: RequestFacets }
 export type PublicRequestQueryResult = { requests: PublicPrintRequest[]; facets: RequestFacets }
 
-export type BoardConfig = { privateRequests: boolean }
+export type BoardConfig = {
+  privateRequests: boolean
+  planningStrategy: import('./platePlanner').PlatePlanningStrategy
+}
 
 export type NewPrintRequest = Pick<
   PrintRequest,
