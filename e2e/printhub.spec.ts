@@ -141,6 +141,11 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
 
   await mainNav(page, 'Planner').click()
   await expect(page.getByText('Layouts use resin orientation analysis')).toBeVisible()
+  const plannerStrategy = page.getByLabel('Planning strategy')
+  await expect(plannerStrategy).toContainText('Balanced')
+  await choose(plannerStrategy, 'Oldest first')
+  await expect(page.getByText('Process the longest-waiting requests before newer work.')).toBeVisible()
+  await choose(plannerStrategy, 'Balanced')
   await expect(page.getByRole('button', { name: 'Export 3MF' })).toBeVisible({ timeout: 30_000 })
   await expect(page.getByRole('button', { name: 'resin-cube' })).toBeVisible()
   await verify3mfDownload(page, 'resin-station-plate-1.3mf')

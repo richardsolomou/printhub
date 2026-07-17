@@ -1,7 +1,14 @@
 import { MaxRectsPacker, Rectangle } from 'maxrects-packer'
 
 export const ORIENTATION_ANALYSIS_VERSION = 7
-export const PLATE_PLANNING_STRATEGIES = ['balanced', 'user-priority', 'utilization', 'largest-first', 'height-first'] as const
+export const PLATE_PLANNING_STRATEGIES = [
+  'balanced',
+  'user-priority',
+  'oldest-first',
+  'utilization',
+  'largest-first',
+  'height-first',
+] as const
 export type PlatePlanningStrategy = (typeof PLATE_PLANNING_STRATEGIES)[number]
 
 type BasePrinterProfile = {
@@ -241,6 +248,7 @@ function orderCandidates(candidates: PlateCandidate[], printer: PrinterProfile, 
   return [...candidates].sort((first, second) => {
     if (strategy === 'height-first') return second.estimatedSupportedHeightMm - first.estimatedSupportedHeightMm
     if (strategy === 'largest-first' || strategy === 'utilization') return candidateArea(second, printer) - candidateArea(first, printer)
+    if (strategy === 'oldest-first') return compareOldest(first, second)
     return compareUserPriority(first, second)
   })
 }
@@ -250,7 +258,7 @@ function heightBand(candidates: PlateCandidate[], printer: ResinPrinterProfile, 
     const tallest = Math.max(...candidates.map((candidate) => candidate.estimatedSupportedHeightMm))
     return candidates.filter((candidate) => tallest - candidate.estimatedSupportedHeightMm <= printer.maxHeightDifferenceMm)
   }
-  if (strategy === 'balanced' || strategy === 'user-priority') {
+  if (strategy === 'balanced' || strategy === 'user-priority' || strategy === 'oldest-first') {
     const priority = candidates[0]
     if (!priority) return candidates
     return candidates.filter(
@@ -405,6 +413,7 @@ function orderPlates(plates: PlatePlacement[][], printer: PrinterProfile, strate
     if (strategy === 'height-first') return tallestModel(second) - tallestModel(first)
     if (strategy === 'largest-first') return largestModelArea(second, printer) - largestModelArea(first, printer)
     if (strategy === 'utilization') return occupiedArea(second, printer) - occupiedArea(first, printer)
+    if (strategy === 'oldest-first') return compareOldest(bestOldest(first), bestOldest(second))
     const priority = compareUserPriority(bestPriority(first), bestPriority(second))
     if (priority) return priority
     return strategy === 'balanced' && printer.printType === 'resin' ? compareResinPlates(first, second, printer) : 0
@@ -431,6 +440,17 @@ function compareUserPriority(first: PlateCandidate, second: PlateCandidate) {
   const queuedAt = (first.queuedAt ?? Number.POSITIVE_INFINITY) - (second.queuedAt ?? Number.POSITIVE_INFINITY)
   if (queuedAt) return queuedAt
   return (first.requesterId ?? '').localeCompare(second.requesterId ?? '') || first.copyId.localeCompare(second.copyId)
+}
+
+function bestOldest(plate: PlatePlacement[]) {
+  return [...plate].sort(compareOldest)[0]
+}
+
+function compareOldest(first: PlateCandidate, second: PlateCandidate) {
+  return (
+    (first.queuedAt ?? Number.POSITIVE_INFINITY) - (second.queuedAt ?? Number.POSITIVE_INFINITY) ||
+    first.copyId.localeCompare(second.copyId)
+  )
 }
 
 function largestModelArea(plate: PlatePlacement[], printer: PrinterProfile) {

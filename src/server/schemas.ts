@@ -38,7 +38,7 @@ export const telemetrySettingsSchema = z.object({ enabled: z.boolean() })
 export const boardSettingsSchema = z
   .object({
     privateRequests: z.boolean().optional(),
-    planningStrategy: z.enum(['balanced', 'user-priority', 'utilization', 'largest-first', 'height-first']).optional(),
+    planningStrategy: z.enum(['balanced', 'user-priority', 'oldest-first', 'utilization', 'largest-first', 'height-first']).optional(),
   })
   .refine((value) => value.privateRequests !== undefined || value.planningStrategy !== undefined)
 

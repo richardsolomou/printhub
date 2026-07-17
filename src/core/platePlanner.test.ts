@@ -328,6 +328,16 @@ describe('plate planner', () => {
     expect(planPlates(candidates, filamentPrinter, 'height-first').plates[0]?.[0]?.copyId).toBe('tall:1')
   })
 
+  it('supports strict oldest-first plate ordering', () => {
+    const newer = candidate('newer:1', 100, 60, 30, 0, 'newer', 20)
+    const older = candidate('older:1', 100, 60, 30, 1, 'older', 10)
+
+    expect(planPlates([newer, older], filamentPrinter, 'oldest-first').plates.map((plate) => plate[0]?.copyId)).toEqual([
+      'older:1',
+      'newer:1',
+    ])
+  })
+
   it('normalizes legacy profiles to resin without changing their build volume', () => {
     expect(normalizePrinterProfile({ id: 'legacy', name: 'Legacy', widthMm: 130, depthMm: 80, heightMm: 160 })).toMatchObject({
       printType: 'resin',

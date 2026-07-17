@@ -1,4 +1,4 @@
-import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { Link, createFileRoute, redirect } from '@tanstack/react-router'
 import { Box, ChevronLeft, ChevronRight, Download, Settings, TriangleAlert } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -17,9 +17,10 @@ import { RequestCard } from '../client/components/RequestCard'
 import { RequestModal } from '../client/components/RequestModal'
 import { loadPlateGeometry } from '../client/plateAnalysis'
 import { exportPlate } from '../client/plateExport'
+import { PLANNING_OPTIONS } from '../client/planningStrategies'
 import { peopleQuery, platePlannerQuery, requestsQuery, sessionQuery } from '../client/queries'
 import { enabledPrinters, printTypeLabel } from '../client/fleet'
-import { savePlatePlannerDraft } from '../server/fns'
+import { savePlatePlannerDraft, updateBoardSettings } from '../server/fns'
 import type { ResinOrientation } from '../core/mesh/resinOrientation'
 import { requestQueueOrder } from '../core/types'
 import {
@@ -73,6 +74,7 @@ function PlannerPage() {
   const search = Route.useSearch()
   const navigate = Route.useNavigate()
   const { data: session } = useSuspenseQuery(sessionQuery())
+  const queryClient = useQueryClient()
   const workspaceSlug = session.identity?.workspaceSlug ?? ''
   const planningStrategy = session.planningStrategy
   const filters = filtersFromSearch(search, 'created-asc')
@@ -93,6 +95,10 @@ function PlannerPage() {
   const [openRequestId, setOpenRequestId] = useState<string>()
   const generationRef = useRef(0)
   const generatedFingerprintRef = useRef<string | undefined>(undefined)
+  const strategyMutation = useMutation({
+    mutationFn: updateBoardSettings,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['session'] }),
+  })
 
   const activePrinter = printers.find((printer) => printer.id === printerId) ?? printers[0]
   const plannedPlates = plans[activePrinter.id] ?? EMPTY_PLATES
@@ -363,6 +369,34 @@ function PlannerPage() {
                 <CardTitle>Printer</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium" htmlFor="planner-strategy">
+                    Planning strategy
+                  </label>
+                  <Select
+                    items={PLANNING_OPTIONS}
+                    value={planningStrategy}
+                    disabled={strategyMutation.isPending}
+                    onValueChange={(value) => {
+                      if (!value || value === planningStrategy) return
+                      strategyMutation.mutate({ data: { workspaceSlug, planningStrategy: value } })
+                    }}
+                  >
+                    <SelectTrigger id="planner-strategy" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PLANNING_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {PLANNING_OPTIONS.find((option) => option.value === planningStrategy)?.description}
+                  </p>
+                </div>
                 <div>
                   <Select
                     items={printers.map((printer) => ({

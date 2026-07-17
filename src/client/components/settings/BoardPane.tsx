@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import type { Identity } from '../../../core/types'
 import type { PlatePlanningStrategy } from '../../../core/platePlanner'
 import { deleteWorkspace, updateBoardSettings } from '../../../server/fns'
+import { PLANNING_OPTIONS } from '../../planningStrategies'
 import { boardQuery } from '../../queries'
 import { reloadAfterWorkspaceChange, useWorkspaceSlug } from '../../workspace'
 import { SettingsHeader, SettingsPage, SettingsSection } from './SettingsLayout'
@@ -27,18 +28,6 @@ const VISIBILITY_OPTIONS = [
   { value: 'shared', label: 'Shared — everyone sees every request' },
   { value: 'private', label: 'Private — requesters see only their own' },
 ] as const
-
-const PLANNING_OPTIONS: { value: PlatePlanningStrategy; label: string; description: string }[] = [
-  { value: 'balanced', label: 'Balanced', description: 'Balance user priority, plate utilization, and resin height compatibility.' },
-  { value: 'user-priority', label: 'User priority', description: "Work through every requester's personal queue as fairly as possible." },
-  {
-    value: 'utilization',
-    label: 'Maximum utilization',
-    description: 'Prefer the fewest, fullest plates regardless of requester priority.',
-  },
-  { value: 'largest-first', label: 'Largest first', description: 'Start with the models that occupy the most build-plate area.' },
-  { value: 'height-first', label: 'Height first', description: 'Prioritize taller models and compatible resin height bands.' },
-]
 
 export function BoardPane({ me, workspaceName, workspaceCount }: { me: Identity; workspaceName: string; workspaceCount: number }) {
   const workspaceSlug = useWorkspaceSlug()
