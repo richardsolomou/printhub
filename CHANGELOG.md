@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.21.4
+
+### Patch Changes
+
+- 15e6e42: Preload active workspace session data during server rendering so route navigation does not suspend.
+
 ## 0.21.3
 
 ### Patch Changes
