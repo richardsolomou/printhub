@@ -52,7 +52,7 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
   await page.getByRole('button', { name: 'Save printers and finish' }).click()
   await expect(page.getByRole('button', { name: 'Add a print' })).toBeVisible()
 
-  await expectSuspendedNavigationToStayRendered(page)
+  await expectSuspendedNavigationToKeepCurrentRoute(page)
   await mainNav(page, 'Board').click()
   await expect(page.getByRole('button', { name: 'Add a print' })).toBeVisible()
 
@@ -507,20 +507,20 @@ async function workspaceSettings(page: Page) {
   await expect(page).toHaveURL(/\/settings\/board$/)
 }
 
-async function expectSuspendedNavigationToStayRendered(page: Page) {
+async function expectSuspendedNavigationToKeepCurrentRoute(page: Page) {
   await page.evaluate(() => {
     const router = window.__TSR_ROUTER__
-    router.options.context.queryClient.removeQueries({ queryKey: ['session'] })
-    const originalFetch = window.fetch.bind(window)
-    window.fetch = async (...args) => {
-      window.fetch = originalFetch
-      await new Promise((resolve) => setTimeout(resolve, 1_500))
-      return originalFetch(...args)
+    const route = router.routesByPath['/about']
+    route.options.loader = async () => {
+      route.options.loader = undefined
+      await new Promise((resolve) => setTimeout(resolve, 3_000))
     }
     void router.navigate({ to: '/about' })
   })
-  await expect(page.getByRole('status')).toContainText('Loading page…')
-  await screenshot(page, 'route-pending-desktop')
+  await page.waitForTimeout(1_500)
+  expect(await page.getByRole('button', { name: 'Add a print' }).isVisible()).toBe(true)
+  expect(await page.getByRole('heading', { name: 'About', exact: true }).count()).toBe(0)
+  await screenshot(page, 'route-transition-desktop')
   await expect(page.getByRole('heading', { name: 'About', exact: true })).toBeVisible()
 }
 
