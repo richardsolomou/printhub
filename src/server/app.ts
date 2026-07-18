@@ -41,7 +41,7 @@ export function resolveStorageConfig(repository: Repository): StorageConfig {
   if (encrypted) return decryptSetting<StorageConfig>(encrypted)
   const configured = repository.getSetting<StorageConfig>('storage')
   if (configured) return configured
-  const root = process.env.PRINTS_DIR ?? '/prints'
+  const root = path.resolve(process.env.PRINTS_DIR ?? '/prints')
   return { adapter: 'local', root }
 }
 
@@ -105,10 +105,12 @@ function resolveAuthSecret(repository: SqliteRepository) {
 
 type WorkspaceRecord = Omit<WorkspaceSummary, 'role'>
 
-export function resolveHostedAuthUrl() {
-  if (process.env.PRINTHUB_HOSTED !== 'true') return undefined
+export function resolveAuthUrl() {
   const configured = process.env.BETTER_AUTH_URL?.trim()
-  if (!configured) throw new Error('BETTER_AUTH_URL is required when PRINTHUB_HOSTED=true')
+  if (!configured) {
+    if (process.env.PRINTHUB_HOSTED === 'true') throw new Error('BETTER_AUTH_URL is required when PRINTHUB_HOSTED=true')
+    return undefined
+  }
   const url = new URL(configured)
   if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('BETTER_AUTH_URL must use http or https')
   return configured.replace(/\/$/, '')
@@ -116,7 +118,7 @@ export function resolveHostedAuthUrl() {
 
 async function createApp() {
   let repository: SqliteRepository | undefined
-  const hostedAuthUrl = resolveHostedAuthUrl()
+  const authUrl = resolveAuthUrl()
   const dataDirectory = path.resolve(process.env.DATA_DIR ?? '/data')
   const lease = acquireDataDirectoryLease(dataDirectory)
   try {
@@ -170,8 +172,8 @@ async function createApp() {
       completeInvite: (id, userId) => repository!.completeInviteGlobally(id, userId),
       auth: { ...authConfig, passwordReset: authConfig.password && email !== undefined },
       email,
-      baseURL: hostedAuthUrl,
-      trustedOrigins: hostedAuthUrl ? [new URL(hostedAuthUrl).origin] : undefined,
+      baseURL: authUrl,
+      trustedOrigins: authUrl ? [new URL(authUrl).origin] : undefined,
     })
 
     const requireIdentity = async (headers: Headers) => {

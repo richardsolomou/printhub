@@ -674,6 +674,24 @@ function resolveStorageInput(data: StorageConfig, current: StorageConfig): Stora
   }
 }
 
+export function storageConfigChanged(current: StorageConfig, next: StorageConfig) {
+  if (current.adapter !== next.adapter) return true
+  if (current.adapter === 'local') return next.adapter !== 'local' || current.root !== next.root
+  if (current.adapter === 'dropbox') return next.adapter !== 'dropbox' || current.root !== next.root
+  if (current.adapter === 'google-drive') return next.adapter !== 'google-drive' || current.root !== next.root
+  if (current.adapter === 'onedrive') return next.adapter !== 'onedrive' || current.root !== next.root
+  return (
+    next.adapter !== 's3' ||
+    current.endpoint !== next.endpoint ||
+    current.region !== next.region ||
+    current.bucket !== next.bucket ||
+    (current.prefix ?? '') !== (next.prefix ?? '') ||
+    current.accessKeyId !== next.accessKeyId ||
+    current.secretAccessKey !== next.secretAccessKey ||
+    current.forcePathStyle !== next.forcePathStyle
+  )
+}
+
 function cloudProviderName(provider: 'dropbox' | 'google-drive' | 'onedrive') {
   return provider === 'dropbox' ? 'Dropbox' : provider === 'google-drive' ? 'Google Drive' : 'OneDrive'
 }
@@ -921,11 +939,11 @@ export const updateStorageSettings = createServerFn({ method: 'POST' })
 
       const config = resolveStorageInput(data, context.storage)
 
-      if (
+      const storageHasActivity =
         context.repository.listRequests().length > 0 ||
         context.repository.listOperations().length > 0 ||
         context.repository.activeUploadIds(Date.now()).size > 0
-      ) {
+      if (storageHasActivity && storageConfigChanged(context.storage, config)) {
         throw new Response('storage can only be changed while the board is empty and no uploads are in flight', { status: 409 })
       }
 
