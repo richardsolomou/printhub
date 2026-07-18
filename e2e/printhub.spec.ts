@@ -1,13 +1,13 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { expect, type Locator, type Page, test } from '@playwright/test'
-import { strFromU8 } from 'fflate'
+import { strFromU8, unzipSync } from 'fflate'
 import { boxStl } from './fixtures/stl'
 
 const email = 'owner@example.com'
 const password = 'correct-horse-battery-staple'
 const screenshots = path.join(process.cwd(), 'test-results/manual-inspection')
-const captureScreenshots = !process.env.CI
+const captureScreenshots = process.env.CAPTURE_SCREENSHOTS === '1' || !process.env.CI
 
 test.beforeAll(async () => {
   if (captureScreenshots) await fs.mkdir(screenshots, { recursive: true })
@@ -195,14 +195,21 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
   await choose(plannerStrategy, 'Oldest first')
   await expect(page.getByText('Fill plates efficiently while processing the longest-waiting requests first.')).toBeVisible()
   await choose(plannerStrategy, 'Balanced')
-  const dragonFruitExport = page.getByRole('button', { name: 'Export for DragonFruit' })
-  await expect(dragonFruitExport).toBeVisible({ timeout: 30_000 })
-  await expect.poll(() => dragonFruitExport.locator('img').evaluate((image) => image.naturalWidth)).toBeGreaterThan(0)
+  const exportPlate = page.getByRole('button', { name: 'Export plate as DragonFruit' })
+  await expect(exportPlate).toBeVisible({ timeout: 30_000 })
+  await expect.poll(() => exportPlate.locator('img').evaluate((image) => image.naturalWidth)).toBeGreaterThan(0)
   await expect(page.getByRole('button', { name: 'resin-cube' })).toBeVisible()
   await expect(page.getByText('Manually planned next')).toHaveCount(2)
   await screenshot(page, 'plan-next-planner-desktop')
   await mobileScreenshot(page, 'plan-next-planner-mobile')
+  await page.getByRole('button', { name: 'Choose export format' }).click()
+  await expect(page.getByRole('button', { name: /DragonFruit.*\.voxl/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /3MF.*\.3mf/ })).toBeVisible()
+  await screenshot(page, 'export-format-menu-desktop')
+  await mobileScreenshot(page, 'export-format-menu-mobile')
+  await page.getByRole('button', { name: 'Choose export format' }).click()
   await verifyVoxlDownload(page, 'resin-station-plate-1.voxl')
+  await verify3mfMenuDownload(page, 'resin-station-plate-1.3mf')
   await expect(page.getByText('Manually planned next')).toHaveCount(2)
 
   await mainNav(page, 'Board').click()
@@ -423,8 +430,8 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
   await expect(page.getByText('Layouts preserve the uploaded orientation')).toBeVisible()
   await expect(page.locator('[data-request-name="filament-block"]')).toHaveCount(1, { timeout: 30_000 })
   await expect(page.locator('[data-request-name="resin-cube"]')).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Export for DragonFruit' })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: /^Export/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Export plate as 3MF' })).toBeVisible()
+  await verify3mfDownload(page, 'workshop-filament-plate-1.3mf')
   await screenshot(page, 'filament-planner-desktop')
   await mobileScreenshot(page, 'filament-planner-mobile')
 
@@ -616,13 +623,36 @@ async function moveCard(page: Page, name: string, from: string, to: string) {
 
 async function verifyVoxlDownload(page: Page, expectedName: string) {
   const downloadPromise = page.waitForEvent('download')
-  await page.getByRole('button', { name: 'Export for DragonFruit' }).click()
+  await page.getByRole('button', { name: 'Export plate as DragonFruit' }).click()
   const download = await downloadPromise
   expect(download.suggestedFilename()).toBe(expectedName)
   const file = await download.path()
   expect(file).toBeTruthy()
   const bytes = new Uint8Array(await fs.readFile(file))
   expect(strFromU8(bytes.subarray(0, 4))).toBe('VOXL')
+}
+
+async function verify3mfDownload(page: Page, expectedName: string) {
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export plate as 3MF' }).click()
+  const download = await downloadPromise
+  await expect3mfDownload(download, expectedName)
+}
+
+async function verify3mfMenuDownload(page: Page, expectedName: string) {
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Choose export format' }).click()
+  await page.getByRole('button', { name: /3MF.*\.3mf/ }).click()
+  const download = await downloadPromise
+  await expect3mfDownload(download, expectedName)
+}
+
+async function expect3mfDownload(download: import('@playwright/test').Download, expectedName: string) {
+  expect(download.suggestedFilename()).toBe(expectedName)
+  const file = await download.path()
+  expect(file).toBeTruthy()
+  const archive = unzipSync(new Uint8Array(await fs.readFile(file)))
+  expect(strFromU8(archive['3D/3dmodel.model'])).toContain('<model')
 }
 
 async function screenshot(page: Page, name: string) {
