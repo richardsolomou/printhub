@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.21.5
+
+### Patch Changes
+
+- a7bcb34: Improve build plate utilization across every planning strategy, guarantee maximum utilization selects the fewest generated layout, and tighten resin footprints using their minimum-area in-plane orientation.
+
 ## 0.21.4
 
 ### Patch Changes
