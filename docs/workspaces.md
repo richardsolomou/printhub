@@ -60,7 +60,7 @@ The active workspace is stored in Better Auth's `session.activeOrganizationId`. 
 /api/upload
 ```
 
-Switching workspaces updates the authenticated session and invalidates workspace-scoped client state without navigating, so the current path, search parameters, and hash remain unchanged. A browser storage event refreshes other tabs using the same session. Workspace-scoped server functions also carry the expected slug and resolve it through the caller's memberships, preventing stale tabs from operating on a different active workspace.
+Switching workspaces updates the authenticated session and reloads the page in place, so the current path, search parameters, and hash remain unchanged. A browser storage event reloads other tabs using the same session. Workspace-scoped server functions also carry the expected slug and resolve it through the caller's memberships, preventing stale tabs from operating on a different active workspace.
 
 Every server request resolves the active organization from the session, verifies membership, and scopes database access to that workspace. If the stored organization is missing or no longer accessible, PrintHub falls back to the user's personal workspace and repairs the session.
 
