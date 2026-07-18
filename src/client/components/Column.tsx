@@ -21,6 +21,8 @@ export function Column({
   showPrintType,
   filtered,
   settlingIds,
+  plateSelection,
+  onTogglePlateSelection,
   onOpenRequest,
 }: {
   status: StatusId
@@ -31,6 +33,8 @@ export function Column({
   showPrintType: boolean
   filtered: boolean
   settlingIds: Set<string>
+  plateSelection?: Record<string, number>
+  onTogglePlateSelection?: (request: PublicPrintRequest) => void
   onOpenRequest: (requestId: string) => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -129,6 +133,8 @@ export function Column({
         <div className="virtual-list relative w-full" style={{ height: virtualizer.getTotalSize() }}>
           {virtualizer.getVirtualItems().map((item) => {
             const { request, count } = entries[item.index]
+            const selectingPlate = plateSelection !== undefined
+            const selected = (plateSelection?.[request.id] ?? 0) > 0
             return (
               <VirtualRow key={request.id} index={item.index} start={item.start} measureElement={virtualizer.measureElement}>
                 <RequestCard
@@ -140,7 +146,12 @@ export function Column({
                   showPrintType={showPrintType}
                   showPrinter={false}
                   showRequester={isAdmin}
-                  onOpen={() => onOpenRequest(request.id)}
+                  selected={selected}
+                  selectionMode={selectingPlate}
+                  ariaLabel={
+                    selectingPlate ? `${selected ? 'Remove' : 'Add'} ${request.name} ${selected ? 'from' : 'to'} plate brief` : undefined
+                  }
+                  onOpen={() => (selectingPlate ? onTogglePlateSelection?.(request) : onOpenRequest(request.id))}
                 />
               </VirtualRow>
             )

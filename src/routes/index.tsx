@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { usePostHog } from '@posthog/react'
-import { Plus } from 'lucide-react'
+import { Layers3, Minus, Plus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AppHeader } from '../client/components/AppHeader'
 import { Board } from '../client/components/Board'
@@ -15,10 +15,15 @@ import { BoardFilters, filtersFromSearch, updateRequestSearch, validateRequestSe
 import { Brand } from '../client/components/Brand'
 import { OnboardingProgress } from '../client/components/OnboardingProgress'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { peopleQuery, requestsQuery, sessionQuery } from '../client/queries'
 import { enabledPrinters } from '../client/fleet'
 import { useWorkspaceSlug } from '../client/workspace'
+import { parsePlateBrief, serializePlateBrief } from '../core/plateBrief'
+import type { PrinterSummary, PublicPrintRequest } from '../core/types'
 export const Route = createFileRoute('/')({ validateSearch: validateRequestSearch, component: Home })
+
+const EMPTY_REQUESTS: PublicPrintRequest[] = []
 
 function Home() {
   const queryClient = useQueryClient()
@@ -70,8 +75,19 @@ function AuthenticatedHome() {
   const activePrinters = enabledPrinters(printers)
   const filters = filtersFromSearch(search)
   const { data: result, isFetching } = useQuery(requestsQuery(workspaceSlug, filters))
+  const initialPlateBrief = useMemo(() => parsePlateBrief(search.plateBrief), [search.plateBrief])
+  const [selectingPlate, setSelectingPlate] = useState(initialPlateBrief.length > 0)
+  const [plateSelection, setPlateSelection] = useState<Record<string, number>>(() =>
+    Object.fromEntries(initialPlateBrief.map((item) => [item.requestId, item.count])),
+  )
+  const [platePrinterId, setPlatePrinterId] = useState(search.platePrinter)
+  const [plateError, setPlateError] = useState<string>()
+  const { data: plateSelectionData } = useQuery({
+    ...requestsQuery(workspaceSlug, { sort: 'board' }),
+    enabled: selectingPlate,
+  })
   const { data: people = [] } = useQuery(peopleQuery(workspaceSlug))
-  const requests = result?.requests ?? []
+  const requests = result?.requests ?? EMPTY_REQUESTS
   const showPrintTypes = true
   const facets = result?.facets ?? { requesters: [], total: 0, available: 0 }
   const posthog = usePostHog()
@@ -81,6 +97,25 @@ function AuthenticatedHome() {
   const [openRequestId, setOpenRequestId] = useState<string | null>(null)
   const uploadOpenRef = useRef(uploadOpen)
   uploadOpenRef.current = uploadOpen
+  const plateRequests = useMemo(
+    () => new Map((plateSelectionData?.requests ?? requests).map((request) => [request.id, request])),
+    [plateSelectionData?.requests, requests],
+  )
+  const selectedPlateRequests = useMemo(
+    () =>
+      Object.entries(plateSelection).flatMap(([requestId, count]) => {
+        const request = plateRequests.get(requestId)
+        return request ? [{ request, count }] : []
+      }),
+    [plateRequests, plateSelection],
+  )
+  const compatiblePlatePrinters = useMemo(
+    () => activePrinters.filter((printer) => selectedPlateRequests.every(({ request }) => requestCompatibleWithPrinter(request, printer))),
+    [activePrinters, selectedPlateRequests],
+  )
+  const resolvedPlatePrinterId = compatiblePlatePrinters.some((printer) => printer.id === platePrinterId)
+    ? platePrinterId
+    : compatiblePlatePrinters[0]?.id
 
   useEffect(() => {
     let depth = 0
@@ -144,23 +179,159 @@ function AuthenticatedHome() {
         showPrintTypes={showPrintTypes}
         filtered={Object.entries(filters).some(([key, value]) => key !== 'sort' && value !== undefined)}
         sort={filters.sort ?? 'board'}
+        plateSelection={selectingPlate ? plateSelection : undefined}
+        onTogglePlateSelection={(request) => {
+          setPlateError(undefined)
+          if (plateSelection[request.id]) {
+            const { [request.id]: _removed, ...remaining } = plateSelection
+            setPlateSelection(remaining)
+            return
+          }
+          const selected = Object.keys(plateSelection).flatMap((requestId) => plateRequests.get(requestId) ?? [])
+          const hasCompatiblePrinter = activePrinters.some((printer) =>
+            [...selected, request].every((candidate) => requestCompatibleWithPrinter(candidate, printer)),
+          )
+          if (!hasCompatiblePrinter) {
+            setPlateError('That model cannot share a printer with the current plate brief.')
+            return
+          }
+          setPlateSelection((current) => ({ ...current, [request.id]: 1 }))
+        }}
         onOpenRequest={(id) => {
           setOpenRequestId(id)
           posthog.capture('request_viewed', { print_type: requests.find((request) => request.id === id)?.printType })
         }}
       />
-      <Button
-        type="button"
-        size="lg"
-        className="fixed right-4 bottom-4 z-10 shadow-lg max-sm:size-11 max-sm:rounded-full max-sm:p-0"
-        onClick={() => {
-          posthog.capture('upload_opened', { source: 'button' })
-          setUploadOpen(true)
-        }}
-      >
-        <Plus />
-        <span className="max-sm:sr-only">Add a print</span>
-      </Button>
+      {!selectingPlate && (
+        <>
+          {isAdmin && (
+            <Button
+              type="button"
+              size="lg"
+              variant="outline"
+              className="fixed right-4 bottom-20 z-10 shadow-lg"
+              onClick={() => setSelectingPlate(true)}
+            >
+              <Layers3 /> Build a plate
+            </Button>
+          )}
+          <Button
+            type="button"
+            size="lg"
+            className="fixed right-4 bottom-4 z-10 shadow-lg max-sm:size-11 max-sm:rounded-full max-sm:p-0"
+            onClick={() => {
+              posthog.capture('upload_opened', { source: 'button' })
+              setUploadOpen(true)
+            }}
+          >
+            <Plus />
+            <span className="max-sm:sr-only">Add a print</span>
+          </Button>
+        </>
+      )}
+      {selectingPlate && (
+        <Card className="fixed right-4 bottom-4 z-20 max-h-[min(70vh,680px)] w-[min(440px,calc(100vw-2rem))] gap-0 overflow-hidden py-0 shadow-2xl">
+          <CardHeader className="flex flex-row items-start gap-3 border-b px-4 py-3">
+            <div className="min-w-0 flex-1">
+              <h2 className="font-heading text-base font-semibold">Build a plate</h2>
+              <p className="text-xs text-muted-foreground">Select queued models, then choose how many copies must be on the plate.</p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Cancel plate selection"
+              onClick={() => {
+                setSelectingPlate(false)
+                setPlateSelection({})
+                setPlateError(undefined)
+                void navigate({
+                  to: '/',
+                  search: updateRequestSearch(search, { plateBrief: undefined, platePrinter: undefined }),
+                  replace: true,
+                })
+              }}
+            >
+              <X />
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-3 overflow-y-auto p-4">
+            {selectedPlateRequests.length ? (
+              <div className="space-y-2">
+                {selectedPlateRequests.map(({ request, count }) => (
+                  <div key={request.id} className="flex items-center gap-2 rounded-md border bg-muted/30 p-2">
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{request.name}</span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon-sm"
+                      disabled={count <= 1}
+                      aria-label={`Decrease ${request.name} copies`}
+                      onClick={() => setPlateSelection((current) => ({ ...current, [request.id]: Math.max(1, count - 1) }))}
+                    >
+                      <Minus />
+                    </Button>
+                    <span className="w-8 text-center font-mono text-sm">{count}</span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon-sm"
+                      disabled={count >= (request.counts.todo ?? 0)}
+                      aria-label={`Increase ${request.name} copies`}
+                      onClick={() =>
+                        setPlateSelection((current) => ({ ...current, [request.id]: Math.min(request.counts.todo ?? 0, count + 1) }))
+                      }
+                    >
+                      <Plus />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
+                Select models from the Queue column. Search and filters remain available.
+              </p>
+            )}
+            {selectedPlateRequests.length > 0 && compatiblePlatePrinters.length > 0 && (
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" htmlFor="plate-brief-printer">
+                  Printer
+                </label>
+                <Select
+                  items={compatiblePlatePrinters.map((printer) => ({ value: printer.id, label: printer.name }))}
+                  value={resolvedPlatePrinterId}
+                  onValueChange={(value) => value && setPlatePrinterId(value)}
+                >
+                  <SelectTrigger id="plate-brief-printer" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {compatiblePlatePrinters.map((printer) => (
+                      <SelectItem key={printer.id} value={printer.id}>
+                        {printer.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {plateError && <p className="text-sm text-destructive">{plateError}</p>}
+            <Button
+              type="button"
+              className="w-full"
+              disabled={!selectedPlateRequests.length || !resolvedPlatePrinterId}
+              onClick={() => {
+                const plateBrief = serializePlateBrief(
+                  selectedPlateRequests.map(({ request, count }) => ({ requestId: request.id, count })),
+                )
+                void navigate({ to: '/planner', search: { plateBrief, platePrinter: resolvedPlatePrinterId } })
+              }}
+            >
+              <Layers3 /> Plan selected copies
+            </Button>
+          </CardContent>
+        </Card>
+      )}
       {!result && <div className="absolute inset-0 grid place-items-center bg-background/70 text-muted-foreground">Loading board…</div>}
       {fileDragActive && !uploadOpen && (
         <div className="pointer-events-none fixed inset-3 z-9 grid place-items-center rounded-lg border-2 border-dashed border-primary bg-background/85 font-heading text-lg tracking-wide uppercase text-primary">
@@ -182,4 +353,9 @@ function AuthenticatedHome() {
       )}
     </div>
   )
+}
+
+function requestCompatibleWithPrinter(request: PublicPrintRequest, printer: PrinterSummary) {
+  if (request.printType !== printer.printType || request.fitState === 'none') return false
+  return !request.compatiblePrinterIds?.length || request.compatiblePrinterIds.includes(printer.id)
 }

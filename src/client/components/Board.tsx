@@ -23,6 +23,8 @@ export function Board({
   showPrintTypes,
   filtered = false,
   sort,
+  plateSelection,
+  onTogglePlateSelection,
   onOpenRequest,
 }: {
   requests: PublicPrintRequest[]
@@ -31,6 +33,8 @@ export function Board({
   showPrintTypes: boolean
   filtered?: boolean
   sort: RequestSort
+  plateSelection?: Record<string, number>
+  onTogglePlateSelection?: (request: PublicPrintRequest) => void
   onOpenRequest: (requestId: string) => void
 }) {
   const workspaceSlug = useWorkspaceSlug()
@@ -222,6 +226,7 @@ export function Board({
 
   const pendingRequest = pendingMove ? requests.find((j) => j.id === pendingMove.requestId) : undefined
   const dragEnabled = sort === 'board'
+  const selectingPlate = plateSelection !== undefined
 
   if (requests.length === 0) {
     return (
@@ -254,10 +259,12 @@ export function Board({
               .sort((a, b) => compare(a, b, status))
               .map((request) => ({ request, count: countsOf(request)[status] }))}
             isAdmin={isAdmin}
-            dragEnabled={dragEnabled}
+            dragEnabled={dragEnabled && !selectingPlate}
             showPrintType={showPrintTypes}
             filtered={filtered}
             settlingIds={settlingIds}
+            plateSelection={status === 'todo' ? plateSelection : undefined}
+            onTogglePlateSelection={status === 'todo' ? onTogglePlateSelection : undefined}
             onOpenRequest={onOpenRequest}
           />
         )

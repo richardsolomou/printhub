@@ -3,6 +3,7 @@ import { combine } from '@atlaskit/pragmatic-drag-and-drop/combine'
 import { draggable, dropTargetForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter'
 import { attachClosestEdge, extractClosestEdge, type Edge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge'
 import { Button } from '@/components/ui/button'
+import { Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { canDropOnRequest } from '../boardDrag'
 import { requesterColor, requesterLabel } from '../requester'
@@ -20,6 +21,10 @@ export function RequestCard({
   showPrintType = false,
   showPrinter = false,
   showRequester = false,
+  selected = false,
+  selectionMode = false,
+  selectionDisabled = false,
+  ariaLabel,
   onOpen,
 }: {
   request: PublicPrintRequest
@@ -30,6 +35,10 @@ export function RequestCard({
   showPrintType?: boolean
   showPrinter?: boolean
   showRequester?: boolean
+  selected?: boolean
+  selectionMode?: boolean
+  selectionDisabled?: boolean
+  ariaLabel?: string
   onOpen: () => void
 }) {
   const ref = useRef<HTMLButtonElement>(null)
@@ -74,14 +83,30 @@ export function RequestCard({
       className={cn(
         'card relative h-auto w-full justify-start gap-2.5 rounded-lg bg-secondary p-2.5 text-left transition-[border-color,transform,opacity,box-shadow] duration-200 hover:bg-secondary hover:text-foreground',
         canDrag && 'cursor-grab touch-manipulation',
+        selected && 'border-primary bg-primary/10 ring-1 ring-primary/30',
+        selectionDisabled && 'cursor-not-allowed opacity-45',
         dragging && 'dragging scale-[0.985] opacity-40',
         settling && 'animate-[card-settle_240ms_ease-out]',
       )}
       data-draggable={canDrag}
       data-edge={closestEdge ?? undefined}
       data-request-name={request.name}
+      aria-label={ariaLabel}
+      aria-pressed={selectionMode ? selected : undefined}
+      disabled={selectionDisabled}
       onClick={onOpen}
     >
+      {selectionMode && (
+        <span
+          aria-hidden="true"
+          className={cn(
+            'absolute top-2 right-2 z-2 grid size-5 place-items-center rounded border bg-background shadow-sm',
+            selected && 'border-primary bg-primary text-primary-foreground',
+          )}
+        >
+          {selected && <Check className="size-3.5" />}
+        </span>
+      )}
       {closestEdge && (
         <span
           aria-hidden="true"

@@ -163,7 +163,27 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
   await expect(page.getByLabel('Filter by assigned printer')).toHaveCount(0)
   await page.getByRole('button', { name: 'Close filters' }).click()
 
-  await mainNav(page, 'Planner').click()
+  await upload(page, {
+    name: 'resin-companion',
+    printType: 'Resin',
+    buffer: boxStl('resin-companion', 8, 8, 8),
+  })
+
+  await page.getByRole('button', { name: 'Build a plate' }).click()
+  await expect(page.getByText('Select queued models, then choose how many copies must be on the plate.')).toBeVisible()
+  await page.getByRole('button', { name: 'Add resin-cube to plate brief', exact: true }).click()
+  await page.getByRole('button', { name: 'Add resin-companion to plate brief', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Remove resin-cube from plate brief', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  await expect(page.getByRole('button', { name: 'Remove resin-companion from plate brief', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  await expect(page.getByRole('combobox', { name: 'Printer', exact: true })).toContainText('Resin Station')
+  await screenshot(page, 'plate-brief-board-desktop')
+  await page.getByRole('button', { name: 'Plan selected copies' }).click()
   await expect(page.getByText('Layouts use resin orientation analysis')).toBeVisible()
   const plannerStrategy = page.getByLabel('Planning strategy')
   await expect(plannerStrategy).toContainText('Balanced')
@@ -171,11 +191,23 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
   await expect(page.getByText('Fill plates efficiently while processing the longest-waiting requests first.')).toBeVisible()
   await choose(plannerStrategy, 'Balanced')
   await expect(page.getByRole('button', { name: 'Export 3MF' })).toBeVisible({ timeout: 30_000 })
-  await expect(page.getByRole('button', { name: 'resin-cube' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Plate brief' })).toBeVisible()
+  await expect(
+    page.getByText('2 selected copies are locked to this plate; remaining space is filled using the balanced strategy.'),
+  ).toBeVisible()
   await verify3mfDownload(page, 'resin-station-plate-1.3mf')
-  await screenshot(page, 'resin-planner-desktop')
+  await screenshot(page, 'plate-brief-planner-desktop')
 
-  await mainNav(page, 'Board').click()
+  await page.getByRole('link', { name: 'Edit', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Remove resin-cube from plate brief', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  await expect(page.getByRole('button', { name: 'Remove resin-companion from plate brief', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  await page.getByRole('button', { name: 'Cancel plate selection' }).click()
   await requestCard(page, 'resin-cube').click()
   await expect(page.getByText(/≈1 ml each/)).toBeVisible()
   await expect(page.getByText(/solid model volume/i)).toBeVisible()
@@ -385,8 +417,8 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
   await mainNav(page, 'Planner').click()
   await choose(page.getByLabel('Printer', { exact: true }), 'Workshop Filament · Filament · 1 plate')
   await expect(page.getByText('Layouts preserve the uploaded orientation')).toBeVisible()
-  await expect(page.getByRole('button', { name: 'filament-block' })).toBeVisible({ timeout: 30_000 })
-  await expect(page.getByRole('button', { name: 'resin-cube' })).not.toBeVisible()
+  await expect(page.locator('[data-request-name="filament-block"]')).toHaveCount(1, { timeout: 30_000 })
+  await expect(page.locator('[data-request-name="resin-cube"]')).toHaveCount(0)
   await verify3mfDownload(page, 'workshop-filament-plate-1.3mf')
   await screenshot(page, 'filament-planner-desktop')
   await mobileScreenshot(page, 'filament-planner-mobile')

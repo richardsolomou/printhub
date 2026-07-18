@@ -21,6 +21,7 @@ import { peopleQuery, platePlannerQuery, requestsQuery, sessionQuery } from '../
 import { enabledPrinters, printTypeLabel } from '../client/fleet'
 import { savePlatePlannerDraft, updateBoardSettings } from '../server/fns'
 import type { ResinOrientation } from '../core/mesh/resinOrientation'
+import { parsePlateBrief, plateBriefCopyIds, type PlateBriefItem } from '../core/plateBrief'
 import { requesterQueuePriorities, type RequestQueuePriority } from '../core/requestQueue'
 import {
   normalizePrinterProfile,
@@ -100,6 +101,12 @@ function PlannerPage() {
   })
 
   const activePrinter = printers.find((printer) => printer.id === printerId) ?? printers[0]
+  const plateBrief = useMemo(() => parsePlateBrief(search.plateBrief), [search.plateBrief])
+  const requiredSelection = useMemo(
+    () => (search.platePrinter && plateBrief.length ? { items: plateBrief, printerId: search.platePrinter } : undefined),
+    [plateBrief, search.platePrinter],
+  )
+  const requiredCopyIds = useMemo(() => plateBriefCopyIds(plateBrief), [plateBrief])
   const plannedPlates = plans[activePrinter.id] ?? EMPTY_PLATES
   const placements = plannedPlates[plateIndex] ?? EMPTY_PLACEMENTS
   const outstanding = useMemo(
@@ -133,14 +140,15 @@ function PlannerPage() {
     [storedPlanner?.analyses],
   )
   const selectedOutstanding = outstanding.filter((request) => requestPrintType(request) === activePrinter.printType)
+  const activeRequiredSelection = requiredSelection?.printerId === activePrinter.id ? requiredSelection : undefined
   const readyCount = selectedOutstanding.filter((request) => {
     const analysis = analyses.get(request.id)
     return modelAnalysisReady(analysis) && (requestPrintType(request) === 'filament' || orientationAnalysisReady(analysis))
   }).length
   const waitingCount = selectedOutstanding.length - readyCount
   const fingerprint = useMemo(
-    () => plannerFingerprint(outstanding, printers, analyses, planningStrategy, queuePriorities),
-    [analyses, outstanding, planningStrategy, printers, queuePriorities],
+    () => plannerFingerprint(outstanding, printers, analyses, planningStrategy, queuePriorities, requiredSelection),
+    [analyses, outstanding, planningStrategy, printers, queuePriorities, requiredSelection],
   )
 
   useEffect(() => {
@@ -154,13 +162,23 @@ function PlannerPage() {
       : DEFAULT_PRINTERS
     const drafts = plannerDrafts(storedPlanner)
     setPrinters(profiles)
-    setPrinterId((current) => (profiles.some((profile) => profile.id === current) ? current : profiles[0].id))
+    setPrinterId((current) => {
+      if (search.platePrinter && profiles.some((profile) => profile.id === search.platePrinter)) return search.platePrinter
+      return profiles.some((profile) => profile.id === current) ? current : profiles[0].id
+    })
     const storedAnalyses = new Map(storedPlanner.analyses.map((analysis) => [analysis.requestId, analysis]))
     const outstandingForProfiles = (data?.requests ?? []).filter((request) => {
       const printType = requestPrintType(request)
       return (request.counts.todo ?? 0) > 0 && !!printType && profiles.some((profile) => profile.printType === printType)
     })
-    const storedFingerprint = plannerFingerprint(outstandingForProfiles, profiles, storedAnalyses, planningStrategy, queuePriorities)
+    const storedFingerprint = plannerFingerprint(
+      outstandingForProfiles,
+      profiles,
+      storedAnalyses,
+      planningStrategy,
+      queuePriorities,
+      requiredSelection,
+    )
     if (profiles.every((profile) => drafts[profile.id]?.fingerprint === storedFingerprint)) {
       setPlans(
         Object.fromEntries(
@@ -172,7 +190,7 @@ function PlannerPage() {
       generatedFingerprintRef.current = storedFingerprint
     }
     setRestored(true)
-  }, [data?.requests, planningStrategy, queuePriorities, restored, storedPlanner])
+  }, [data?.requests, planningStrategy, queuePriorities, requiredSelection, restored, search.platePrinter, storedPlanner])
 
   const generate = useCallback(async () => {
     const generation = ++generationRef.current
@@ -211,11 +229,52 @@ function PlannerPage() {
         }
       }
       const assignments = allocateFleetCandidates(fleetCandidates, printers)
-      const nextPlans = Object.fromEntries(
-        printers.map((printer) => [printer.id, planPlates(assignments.get(printer.id) ?? [], printer, planningStrategy)]),
+      const requiredCopiesAvailable =
+        !requiredSelection ||
+        requiredSelection.items.every(
+          (item) => (outstanding.find((request) => request.id === item.requestId)?.counts.todo ?? 0) >= item.count,
+        )
+      const requiredCopiesReady =
+        requiredCopiesAvailable &&
+        (!requiredSelection ||
+          requiredCopyIds.every((copyId) =>
+            fleetCandidates.some(
+              (candidate) => candidate.copyId === copyId && candidate.candidatesByPrinterId[requiredSelection.printerId],
+            ),
+          ))
+      if (requiredSelection) {
+        for (const requiredCopyId of requiredCopyIds) {
+          const fleetRequired = fleetCandidates.find((candidate) => candidate.copyId === requiredCopyId)
+          const requiredCandidate = fleetRequired?.candidatesByPrinterId[requiredSelection.printerId]
+          if (!requiredCandidate) continue
+          for (const candidates of assignments.values()) {
+            const index = candidates.findIndex((candidate) => candidate.copyId === requiredCopyId)
+            if (index >= 0) candidates.splice(index, 1)
+          }
+          assignments.get(requiredSelection.printerId)?.push(requiredCandidate)
+        }
+      }
+      const nextPlans: Record<string, import('../core/platePlanner').PlatePlan> = Object.fromEntries(
+        printers.map((printer) => {
+          if (printer.id === requiredSelection?.printerId && !requiredCopiesReady) {
+            return [printer.id, { plates: [], skipped: [] }] as const
+          }
+          return [
+            printer.id,
+            planPlates(
+              assignments.get(printer.id) ?? [],
+              printer,
+              planningStrategy,
+              printer.id === requiredSelection?.printerId ? requiredCopyIds : undefined,
+            ),
+          ] as const
+        }),
       )
       if (generation !== generationRef.current) return
       setPlans(Object.fromEntries(Object.entries(nextPlans).map(([profileId, result]) => [profileId, result.plates])))
+      const constraintIssue = requiredSelection && requiredCopiesReady ? nextPlans[requiredSelection.printerId]?.constraintIssue : undefined
+      if (!requiredCopiesAvailable) setError(requiredSelectionError('required-copies-unavailable'))
+      else if (constraintIssue) setError(requiredSelectionError(constraintIssue))
       setPlateIndex(0)
       generatedFingerprintRef.current = fingerprint
       for (const printer of printers) {
@@ -236,7 +295,7 @@ function PlannerPage() {
     } finally {
       // Generation only packs cached server analyses; background workers own STL analysis.
     }
-  }, [analyses, fingerprint, outstanding, planningStrategy, printers, queuePriorities, workspaceSlug])
+  }, [analyses, fingerprint, outstanding, planningStrategy, printers, queuePriorities, requiredCopyIds, requiredSelection, workspaceSlug])
 
   const downloadPlate = useCallback(async () => {
     if (!placements.length || exportingPlate) return
@@ -406,6 +465,48 @@ function PlannerPage() {
               </CardContent>
             </Card>
 
+            {activeRequiredSelection && (
+              <Card className="min-w-0">
+                <CardHeader>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <CardTitle>Plate brief</CardTitle>
+                      <p className="mt-1 text-xs text-muted-foreground">These copies are locked to the first plate.</p>
+                    </div>
+                    <Link
+                      to="/"
+                      search={{ plateBrief: search.plateBrief, platePrinter: search.platePrinter }}
+                      className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'shrink-0')}
+                    >
+                      Edit
+                    </Link>
+                  </div>
+                </CardHeader>
+                <CardContent className="max-h-[420px] space-y-2.5 overflow-auto p-2.5 pt-0">
+                  {activeRequiredSelection.items.map((item) => {
+                    const request = allData?.requests.find((candidate) => candidate.id === item.requestId)
+                    if (!request) return null
+                    return (
+                      <RequestCard
+                        key={request.id}
+                        request={request}
+                        status="todo"
+                        count={item.count}
+                        canDrag={false}
+                        settling={false}
+                        showPrintType={showPrintTypes}
+                        showPrinter={false}
+                        onOpen={() => {
+                          preloadStlViewer()
+                          setOpenRequestId(request.id)
+                        }}
+                      />
+                    )
+                  })}
+                </CardContent>
+              </Card>
+            )}
+
             <Card className="min-w-0">
               <CardHeader>
                 <CardTitle>Plate contents</CardTitle>
@@ -536,6 +637,17 @@ function PlannerPage() {
                   {waitingCount ? ' for the analyzed backlog so far' : ' to finish the backlog'}.
                 </p>
               )}
+              {activeRequiredSelection &&
+                plateIndex === 0 &&
+                activeRequiredSelection.items.every(
+                  (item) => placements.filter((placement) => placement.requestId === item.requestId).length >= item.count,
+                ) && (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {requiredCopyIds.length} selected {requiredCopyIds.length === 1 ? 'copy is' : 'copies are'} locked to this plate;
+                    remaining space is filled using the{' '}
+                    {PLANNING_OPTIONS.find((option) => option.value === planningStrategy)?.label.toLowerCase()} strategy.
+                  </p>
+                )}
               {plannedPlates.length > 1 && (
                 <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
                   {plannedPlates.map((plate, index) => (
@@ -591,11 +703,13 @@ function plannerFingerprint(
   analyses = new Map<string, import('../core/platePlanner').PlateModelAnalysis>(),
   planningStrategy: PlatePlanningStrategy = 'balanced',
   queuePriorities: Map<string, RequestQueuePriority> = requesterQueuePriorities(requests, 'todo'),
+  requiredSelection?: { items: PlateBriefItem[]; printerId: string },
 ) {
   return JSON.stringify({
     analysisVersion: ORIENTATION_ANALYSIS_VERSION,
     plateLayoutVersion: PLATE_LAYOUT_VERSION,
     planningStrategy,
+    requiredSelection,
     printers,
     requests: requests.map((request) => ({
       id: request.id,
@@ -710,4 +824,10 @@ function orientationJobLabel(status?: import('../core/platePlanner').Orientation
   if (status === 'failed') return `Analysis failed${error ? `: ${error}` : ''}`
   if (status === 'ready') return 'Analysis ready'
   return 'Queued for background analysis…'
+}
+
+function requiredSelectionError(issue: import('../core/platePlanner').PlatePlan['constraintIssue']) {
+  if (issue === 'required-copies-unavailable') return 'One or more selected models are no longer available to plan.'
+  if (issue === 'required-copies-incompatible') return 'The selected models cannot share this printer and resin height band.'
+  return 'The selected models do not fit together on one plate. Remove one or more selections.'
 }

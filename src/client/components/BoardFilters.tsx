@@ -29,6 +29,8 @@ export type BoardSearch = {
   printType?: PrintType
   printer?: string
   sort?: RequestSort
+  plateBrief?: string
+  platePrinter?: string
 }
 
 const SORTS: { value: RequestSort; label: string }[] = [
@@ -99,6 +101,8 @@ export function validateRequestSearch(input: Record<string, unknown>): BoardSear
     printType: input.printType === 'resin' || input.printType === 'filament' ? input.printType : undefined,
     printer: text(input.printer, 100),
     sort: sort && SORT_IDS.has(sort) ? sort : undefined,
+    plateBrief: text(input.plateBrief, 8_000),
+    platePrinter: text(input.platePrinter, 100),
   }
 }
 
