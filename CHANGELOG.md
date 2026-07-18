@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.23.0
+
+### Minor Changes
+
+- 6a178af: Choose between editable DragonFruit VOXL scenes and 3MF plate exports from one export menu.
+
 ## 0.22.0
 
 ### Minor Changes
