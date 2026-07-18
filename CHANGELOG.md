@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.22.0
+
+### Minor Changes
+
+- fb0caa6: Add bulk actions to plan or delete selected queued models.
+
+### Patch Changes
+
+- 2c8f2a9: Expand the build plate planner across the available screen and taller viewports, align board gutters, keep plate height independent from the contents sidebar, and simplify board loading states.
+
 ## 0.21.5
 
 ### Patch Changes
