@@ -96,7 +96,6 @@ function PlannerPage() {
   const [geometryRevision, setGeometryRevision] = useState(0)
   const [error, setError] = useState<string>()
   const [exportingPlate, setExportingPlate] = useState(false)
-  const [exportFormat, setExportFormat] = useState<PlateExportFormat>('voxl')
   const [exportMenuOpen, setExportMenuOpen] = useState(false)
   const [restored, setRestored] = useState(false)
   const [requiredPrinterId, setRequiredPrinterId] = useState<string | null>(null)
@@ -109,7 +108,6 @@ function PlannerPage() {
   })
 
   const activePrinter = printers.find((printer) => printer.id === printerId) ?? printers[0]
-  const selectedExportFormat = activePrinter.printType === 'resin' ? exportFormat : '3mf'
   const plateBrief = useMemo(() => parsePlateBrief(search.next), [search.next])
   const requiredSelection = useMemo(
     () => (requiredPrinterId && plateBrief.length ? { requestIds: plateBrief, printerId: requiredPrinterId } : undefined),
@@ -562,71 +560,52 @@ function PlannerPage() {
                 <CardTitle>{plannedPlates.length ? `Build plate ${plateIndex + 1} of ${plannedPlates.length}` : 'Build plate'}</CardTitle>
                 <div className="flex flex-wrap items-center justify-end gap-1">
                   {placements.length > 0 && (
-                    <div className="flex items-center">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="rounded-r-none"
-                        disabled={exportingPlate}
-                        aria-label={`Export plate as ${selectedExportFormat === 'voxl' ? 'DragonFruit' : '3MF'}`}
-                        onClick={() => void downloadPlate(selectedExportFormat)}
-                      >
-                        {exportingPlate ? <Spinner /> : selectedExportFormat === 'voxl' ? <DragonFruitIcon className="size-4" /> : <Box />}
-                        {exportingPlate ? 'Exporting…' : 'Export'}
-                      </Button>
-                      <Popover open={exportMenuOpen} onOpenChange={setExportMenuOpen}>
-                        <PopoverTrigger
-                          render={
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="icon-sm"
-                              className="-ml-px rounded-l-none"
-                              disabled={exportingPlate}
-                              aria-label="Choose export format"
-                            />
-                          }
+                    <Popover open={exportMenuOpen} onOpenChange={setExportMenuOpen}>
+                      <PopoverTrigger render={<Button type="button" variant="outline" size="sm" disabled={exportingPlate} />}>
+                        {exportingPlate ? (
+                          <>
+                            <Spinner /> Exporting…
+                          </>
+                        ) : (
+                          <>
+                            Export <ChevronDown />
+                          </>
+                        )}
+                      </PopoverTrigger>
+                      <PopoverContent align="end" className="w-56 gap-1 p-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="w-full justify-start"
+                          disabled={activePrinter.printType !== 'resin'}
+                          onClick={() => {
+                            setExportMenuOpen(false)
+                            void downloadPlate('voxl')
+                          }}
                         >
-                          <ChevronDown />
-                        </PopoverTrigger>
-                        <PopoverContent align="end" className="w-56 gap-1 p-1">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            className="w-full justify-start"
-                            disabled={activePrinter.printType !== 'resin'}
-                            onClick={() => {
-                              setExportFormat('voxl')
-                              setExportMenuOpen(false)
-                              void downloadPlate('voxl')
-                            }}
-                          >
-                            <DragonFruitIcon className="size-4" />
-                            <span className="flex flex-1 justify-between gap-3">
-                              <span>DragonFruit</span>
-                              <span className="text-muted-foreground">.voxl</span>
-                            </span>
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            className="w-full justify-start"
-                            onClick={() => {
-                              setExportFormat('3mf')
-                              setExportMenuOpen(false)
-                              void downloadPlate('3mf')
-                            }}
-                          >
-                            <Box />
-                            <span className="flex flex-1 justify-between gap-3">
-                              <span>3MF</span>
-                              <span className="text-muted-foreground">.3mf</span>
-                            </span>
-                          </Button>
-                        </PopoverContent>
-                      </Popover>
-                    </div>
+                          <DragonFruitIcon className="size-4" />
+                          <span className="flex flex-1 justify-between gap-3">
+                            <span>DragonFruit</span>
+                            <span className="text-muted-foreground">.voxl</span>
+                          </span>
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="w-full justify-start"
+                          onClick={() => {
+                            setExportMenuOpen(false)
+                            void downloadPlate('3mf')
+                          }}
+                        >
+                          <Box />
+                          <span className="flex flex-1 justify-between gap-3">
+                            <span>3MF</span>
+                            <span className="text-muted-foreground">.3mf</span>
+                          </span>
+                        </Button>
+                      </PopoverContent>
+                    </Popover>
                   )}
                   {plannedPlates.length > 1 && (
                     <>
