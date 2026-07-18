@@ -9,7 +9,7 @@ Requirements: Node 24.18 and pnpm 11.12+.
 ```sh
 pnpm install
 mkdir -p data-dev prints-dev
-DATA_DIR=./data-dev PRINTS_DIR=./prints-dev pnpm dev
+DATA_DIR=./data-dev PRINTS_DIR=./prints-dev BETTER_AUTH_URL=http://localhost:3000 pnpm dev
 ```
 
 The first visitor to `http://localhost:3000` claims the admin account.

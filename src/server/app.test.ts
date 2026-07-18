@@ -76,6 +76,13 @@ describe('app initialization', () => {
     await expect(app()).rejects.toThrow('BETTER_AUTH_URL is required when PRINTHUB_HOSTED=true')
   })
 
+  it('uses a configured auth URL outside hosted mode', async () => {
+    vi.stubEnv('BETTER_AUTH_URL', 'http://localhost:3000/')
+    const { resolveAuthUrl } = await import('./app')
+
+    expect(resolveAuthUrl()).toBe('http://localhost:3000')
+  })
+
   it('does not initialize workspace storage until the workspace is accessed', async () => {
     temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-app-lazy-'))
     process.env.DATA_DIR = path.join(temporary, 'data')
@@ -163,6 +170,14 @@ describe('app initialization', () => {
     const { resolveTelemetryConfig } = await import('./app')
     const repository = { getSetting: () => undefined }
     expect(resolveTelemetryConfig(repository as never)).toEqual({ enabled: true })
+  })
+
+  it('resolves the default storage folder to an absolute path', async () => {
+    vi.stubEnv('PRINTS_DIR', './local/prints')
+    const { resolveStorageConfig } = await import('./app')
+    const repository = { getSetting: () => undefined }
+
+    expect(resolveStorageConfig(repository as never)).toEqual({ adapter: 'local', root: path.resolve('./local/prints') })
   })
 
   it('inherits storage when creating a workspace', async () => {
