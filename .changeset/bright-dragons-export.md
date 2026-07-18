@@ -2,4 +2,4 @@
 'printhub': minor
 ---
 
-Export resin build plates as editable DragonFruit VOXL scenes for support authoring and CTB slicing.
+Replace 3MF plate exports with editable DragonFruit VOXL scenes for resin support authoring and CTB slicing.

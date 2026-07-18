@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { expect, type Locator, type Page, test } from '@playwright/test'
-import { strFromU8, unzipSync } from 'fflate'
+import { strFromU8 } from 'fflate'
 import { boxStl } from './fixtures/stl'
 
 const email = 'owner@example.com'
@@ -170,11 +170,11 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
   await choose(plannerStrategy, 'Oldest first')
   await expect(page.getByText('Fill plates efficiently while processing the longest-waiting requests first.')).toBeVisible()
   await choose(plannerStrategy, 'Balanced')
-  await expect(page.getByRole('button', { name: 'Export 3MF' })).toBeVisible({ timeout: 30_000 })
-  await expect(page.getByRole('button', { name: 'Export DragonFruit' })).toBeVisible()
+  const dragonFruitExport = page.getByRole('button', { name: 'Export DragonFruit' })
+  await expect(dragonFruitExport).toBeVisible({ timeout: 30_000 })
+  await expect.poll(() => dragonFruitExport.locator('img').evaluate((image) => image.naturalWidth)).toBeGreaterThan(0)
   await expect(page.getByRole('button', { name: 'resin-cube' })).toBeVisible()
   await verifyVoxlDownload(page, 'resin-station-plate-1.voxl')
-  await verify3mfDownload(page, 'resin-station-plate-1.3mf')
   await screenshot(page, 'resin-planner-desktop')
   await mobileScreenshot(page, 'resin-planner-mobile')
 
@@ -391,7 +391,7 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
   await expect(page.getByRole('button', { name: 'filament-block' })).toBeVisible({ timeout: 30_000 })
   await expect(page.getByRole('button', { name: 'resin-cube' })).not.toBeVisible()
   await expect(page.getByRole('button', { name: 'Export DragonFruit' })).toHaveCount(0)
-  await verify3mfDownload(page, 'workshop-filament-plate-1.3mf')
+  await expect(page.getByRole('button', { name: /^Export/ })).toHaveCount(0)
   await screenshot(page, 'filament-planner-desktop')
   await mobileScreenshot(page, 'filament-planner-mobile')
 
@@ -579,17 +579,6 @@ async function moveCard(page: Page, name: string, from: string, to: string) {
   await page.mouse.move(targetBox!.x + targetBox!.width / 2, targetBox!.y + 40, { steps: 12 })
   await page.mouse.up()
   await expect(page.locator(`[data-status="${to}"] .card`).filter({ hasText: name })).toBeVisible()
-}
-
-async function verify3mfDownload(page: Page, expectedName: string) {
-  const downloadPromise = page.waitForEvent('download')
-  await page.getByRole('button', { name: 'Export 3MF' }).click()
-  const download = await downloadPromise
-  expect(download.suggestedFilename()).toBe(expectedName)
-  const file = await download.path()
-  expect(file).toBeTruthy()
-  const archive = unzipSync(new Uint8Array(await fs.readFile(file)))
-  expect(strFromU8(archive['3D/3dmodel.model'])).toContain('<model')
 }
 
 async function verifyVoxlDownload(page: Page, expectedName: string) {
