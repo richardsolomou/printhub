@@ -471,7 +471,7 @@ function PlannerPage() {
                   {placements.length > 0 && activePrinter.printType === 'resin' && (
                     <Button type="button" variant="outline" size="sm" disabled={exportingPlate} onClick={() => void downloadPlate()}>
                       {exportingPlate ? <Spinner /> : <DragonFruitIcon className="size-4" />}
-                      {exportingPlate ? 'Exporting…' : 'Export DragonFruit'}
+                      {exportingPlate ? 'Exporting…' : 'Export for DragonFruit'}
                     </Button>
                   )}
                   {plannedPlates.length > 1 && (

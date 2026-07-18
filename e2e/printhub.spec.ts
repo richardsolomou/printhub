@@ -170,7 +170,7 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
   await choose(plannerStrategy, 'Oldest first')
   await expect(page.getByText('Fill plates efficiently while processing the longest-waiting requests first.')).toBeVisible()
   await choose(plannerStrategy, 'Balanced')
-  const dragonFruitExport = page.getByRole('button', { name: 'Export DragonFruit' })
+  const dragonFruitExport = page.getByRole('button', { name: 'Export for DragonFruit' })
   await expect(dragonFruitExport).toBeVisible({ timeout: 30_000 })
   await expect.poll(() => dragonFruitExport.locator('img').evaluate((image) => image.naturalWidth)).toBeGreaterThan(0)
   await expect(page.getByRole('button', { name: 'resin-cube' })).toBeVisible()
@@ -390,7 +390,7 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
   await expect(page.getByText('Layouts preserve the uploaded orientation')).toBeVisible()
   await expect(page.getByRole('button', { name: 'filament-block' })).toBeVisible({ timeout: 30_000 })
   await expect(page.getByRole('button', { name: 'resin-cube' })).not.toBeVisible()
-  await expect(page.getByRole('button', { name: 'Export DragonFruit' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Export for DragonFruit' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: /^Export/ })).toHaveCount(0)
   await screenshot(page, 'filament-planner-desktop')
   await mobileScreenshot(page, 'filament-planner-mobile')
@@ -583,7 +583,7 @@ async function moveCard(page: Page, name: string, from: string, to: string) {
 
 async function verifyVoxlDownload(page: Page, expectedName: string) {
   const downloadPromise = page.waitForEvent('download')
-  await page.getByRole('button', { name: 'Export DragonFruit' }).click()
+  await page.getByRole('button', { name: 'Export for DragonFruit' }).click()
   const download = await downloadPromise
   expect(download.suggestedFilename()).toBe(expectedName)
   const file = await download.path()
