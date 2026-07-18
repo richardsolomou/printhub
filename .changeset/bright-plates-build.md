@@ -2,4 +2,4 @@
 'printhub': minor
 ---
 
-Add plate briefs for selecting queued copies that must share a build plate.
+Add bulk actions to plan or delete selected queued models.

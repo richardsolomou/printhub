@@ -21,8 +21,8 @@ export function Column({
   showPrintType,
   filtered,
   settlingIds,
-  plateSelection,
-  onTogglePlateSelection,
+  selectedRequestIds,
+  onToggleRequestSelection,
   onOpenRequest,
 }: {
   status: StatusId
@@ -33,8 +33,8 @@ export function Column({
   showPrintType: boolean
   filtered: boolean
   settlingIds: Set<string>
-  plateSelection?: Record<string, number>
-  onTogglePlateSelection?: (request: PublicPrintRequest) => void
+  selectedRequestIds?: Set<string>
+  onToggleRequestSelection?: (request: PublicPrintRequest, selected: boolean) => void
   onOpenRequest: (requestId: string) => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -133,8 +133,8 @@ export function Column({
         <div className="virtual-list relative w-full" style={{ height: virtualizer.getTotalSize() }}>
           {virtualizer.getVirtualItems().map((item) => {
             const { request, count } = entries[item.index]
-            const selectingPlate = plateSelection !== undefined
-            const selected = (plateSelection?.[request.id] ?? 0) > 0
+            const selectable = selectedRequestIds !== undefined
+            const selected = selectedRequestIds?.has(request.id) ?? false
             return (
               <VirtualRow key={request.id} index={item.index} start={item.start} measureElement={virtualizer.measureElement}>
                 <RequestCard
@@ -147,11 +147,9 @@ export function Column({
                   showPrinter={false}
                   showRequester={isAdmin}
                   selected={selected}
-                  selectionMode={selectingPlate}
-                  ariaLabel={
-                    selectingPlate ? `${selected ? 'Remove' : 'Add'} ${request.name} ${selected ? 'from' : 'to'} plate brief` : undefined
-                  }
-                  onOpen={() => (selectingPlate ? onTogglePlateSelection?.(request) : onOpenRequest(request.id))}
+                  selectable={selectable}
+                  onSelectedChange={(nextSelected) => onToggleRequestSelection?.(request, nextSelected)}
+                  onOpen={() => onOpenRequest(request.id)}
                 />
               </VirtualRow>
             )
