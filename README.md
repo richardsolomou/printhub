@@ -44,7 +44,7 @@ PrintHub can run as a single self-hosted appliance or as a multi-tenant hosted s
 
 Self-hosted installations keep the application, database, files, model analysis, planner state, previews, and production history under the operator's control. Hosted deployments manage the application while each workspace can choose local, S3-compatible, or connected cloud storage. Every local folder, cloud folder, or S3 prefix receives an enforced workspace namespace. PrintHub does not provide a public model gallery, marketplace, printer-vendor account, or mandatory hosted file library.
 
-Anonymous usage telemetry is enabled by default, never includes model or request data, and can be disabled at any time.
+Anonymous usage telemetry is enabled by default, never includes model or request data, and can be disabled at any time — the [telemetry page](docs/telemetry.md) lists exactly what is sent.
 
 ## Run it 🚀
 
@@ -76,7 +76,7 @@ Environment variables, reverse proxy setup, health checks, backups, and upgrades
 
 ## Storage and backups 💾
 
-PrintHub supports ordinary local folders, connected Dropbox, Google Drive, and OneDrive accounts, and S3-compatible services including Amazon S3, Backblaze B2, Cloudflare R2, DigitalOcean Spaces, Google Cloud Storage, and MinIO. Settings → Storage guides OAuth setup and migrates referenced files with progress reporting before switching providers.
+PrintHub supports ordinary local folders, connected Dropbox, Google Drive, and OneDrive accounts, and S3-compatible services including Amazon S3, Backblaze B2, Cloudflare R2, DigitalOcean Spaces, Google Cloud Storage, and MinIO. Settings → Storage guides OAuth setup and migrates referenced files with progress reporting before switching providers; the [storage guide](docs/storage.md) covers the provider-console setup.
 
 Back up `/data` and your model storage together before upgrading — the [deployment guide](docs/deployment.md) covers backups, storage secrets, and upgrade behavior.
 

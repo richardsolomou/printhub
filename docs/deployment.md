@@ -22,9 +22,52 @@ Product configuration lives in the app (Workspace Settings and the Admin area). 
 
 ## Reverse proxy
 
-Set `BETTER_AUTH_URL` to the public origin and add it to `BETTER_AUTH_TRUSTED_ORIGINS`. Configure the proxy to preserve the original host and protocol — mutations are origin-checked, so a proxy that rewrites them breaks sign-in and saves.
+Set `BETTER_AUTH_URL` to the public origin and add it to `BETTER_AUTH_TRUSTED_ORIGINS`. Configure the proxy to preserve the original host and protocol (`Host` or `X-Forwarded-Host`, plus `X-Forwarded-Proto`) — mutations are origin-checked, so a proxy that rewrites them breaks sign-in and saves.
 
-Model uploads are resumable tus requests sent in 32 MB chunks. Allow request bodies of at least that size (for nginx, `client_max_body_size 32m;`); the app itself caps a single upload at 1 GB.
+Model uploads are resumable tus requests sent in 32 MB chunks. Allow request bodies of at least that size (for nginx, `client_max_body_size 64m;`); the app itself caps a single upload at 1 GB. Live board updates stream over server-sent events at `/api/events`, so response buffering must be off for that path.
+
+### Sample configurations
+
+nginx:
+
+```nginx
+server {
+  server_name printhub.example.com;
+  client_max_body_size 64m;
+
+  location / {
+    proxy_pass http://127.0.0.1:3010;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
+  location /api/events {
+    proxy_pass http://127.0.0.1:3010;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_buffering off;
+    proxy_read_timeout 1h;
+  }
+}
+```
+
+Caddy sets the forwarded headers, streams responses, and imposes no body limit by default:
+
+```text
+printhub.example.com {
+  reverse_proxy 127.0.0.1:3010
+}
+```
+
+Traefik likewise needs no body-size or buffering overrides; route to the container port:
+
+```yaml
+labels:
+  - traefik.http.routers.printhub.rule=Host(`printhub.example.com`)
+  - traefik.http.services.printhub.loadbalancer.server.port=3000
+```
 
 ## Health checks
 
@@ -39,6 +82,19 @@ Keep `/data` on a local filesystem. SQLite WAL databases should not be placed on
 ## Backups
 
 Back up `/data` and your model storage together before upgrading. Automatic migrations create a SQLite snapshot under `/data/backups`, but that snapshot does not replace a backup of your stored models.
+
+For a consistent backup while the app is running, use the online backup command from a source checkout on the host (the container image does not ship it). It snapshots the live database through SQLite's backup API and copies the integration-secrets key alongside:
+
+```sh
+DATA_DIR=/path/to/appdata pnpm backup --output /path/to/backups/printhub.sqlite
+```
+
+## Restoring
+
+1. Stop the container.
+2. Replace `/data/printhub.sqlite` with the backup, and delete any leftover `printhub.sqlite-wal` and `printhub.sqlite-shm` files so stale write-ahead state is not applied to the restored database.
+3. Restore the matching `integration-secrets.key` if cloud storage or integrations were configured.
+4. Start the container. If the backup predates the current version, migrations run automatically on boot.
 
 ## Upgrading
 
