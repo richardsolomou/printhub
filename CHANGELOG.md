@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.24.0
+
+### Minor Changes
+
+- 786b515: Add a synchronized catalog of predefined resin and filament printers with searchable build dimensions and available model images.
+
 ## 0.23.3
 
 ### Patch Changes
