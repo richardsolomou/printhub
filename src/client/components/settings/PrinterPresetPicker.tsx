@@ -4,11 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import {
-  filterPrinterPresets,
-  type PrinterPreset,
-  type PrinterPresetIllustration as PrinterPresetIllustrationType,
-} from '../../../core/printerPresets'
+import { filterPrinterPresets, type PrinterPreset } from '../../../core/printerPresets'
 
 export function PrinterPresetPicker({
   disabled,
@@ -90,7 +86,7 @@ export function PrinterPresetPicker({
                           aria-label={`Add ${preset.brand} ${preset.model}`}
                           onClick={() => choose(() => onSelect(preset))}
                         >
-                          <PrinterPresetIllustration illustration={preset.illustration} />
+                          <PrinterPresetImage preset={preset} />
                           <span className="min-w-0">
                             <span className="flex min-w-0 items-center gap-2">
                               <span className="truncate font-medium">{preset.model}</span>
@@ -128,10 +124,16 @@ function formatDimension(value: number) {
   return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)))
 }
 
-function PrinterPresetIllustration({ illustration }: { illustration: PrinterPresetIllustrationType }) {
-  const resin = illustration.startsWith('resin')
-  const enclosed = illustration === 'filament-enclosed'
-  const large = illustration === 'resin-large'
+function PrinterPresetImage({ preset }: { preset: PrinterPreset }) {
+  if (preset.image) {
+    return (
+      <span className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted" aria-hidden="true">
+        <img src={preset.image.src} alt="" className="size-full object-contain p-1" loading="lazy" />
+      </span>
+    )
+  }
+  const resin = preset.printType === 'resin'
+  const large = resin && preset.widthMm >= 250
   return (
     <span className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted" aria-hidden="true">
       <svg viewBox="0 0 64 64" className="size-12 text-foreground/75" fill="none" stroke="currentColor" strokeWidth="2">
@@ -140,11 +142,6 @@ function PrinterPresetIllustration({ illustration }: { illustration: PrinterPres
             <path d={large ? 'M14 47h36l-3-30H17l-3 30Z' : 'M17 47h30l-3-30H20l-3 30Z'} fill="currentColor" fillOpacity="0.08" />
             <path d="M20 25h24M22 32h20M15 47h34v5H15z" />
             <path d="M27 12h10l2 5H25l2-5Z" fill="currentColor" fillOpacity="0.16" />
-          </>
-        ) : enclosed ? (
-          <>
-            <rect x="14" y="8" width="36" height="48" rx="3" fill="currentColor" fillOpacity="0.08" />
-            <path d="M20 15h24v33H20zM24 42h16M32 20v17M28 37h8" />
           </>
         ) : (
           <>

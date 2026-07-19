@@ -2,4 +2,4 @@
 'printhub': minor
 ---
 
-Add a searchable catalog of predefined resin and filament printers so that printer setup starts with verified build dimensions.
+Add a synchronized catalog of predefined resin and filament printers with searchable build dimensions and available model images.

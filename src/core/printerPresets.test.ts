@@ -13,15 +13,15 @@ describe('printer presets', () => {
           preset.widthMm > 0 &&
           preset.depthMm > 0 &&
           preset.heightMm > 0 &&
-          preset.sources.length > 0 &&
-          preset.sources.every((source) => source.url.startsWith('https://') && /^\d{4}-\d{2}-\d{2}$/.test(source.checkedAt)),
+          preset.source.url.startsWith('https://') &&
+          (!preset.image || (preset.image.src.startsWith('/printer-presets/') && preset.image.sourceUrl.startsWith('https://'))),
       ),
     ).toBe(true)
   })
 
   it('searches by brand, model, and print type', () => {
-    expect(filterPrinterPresets('mars').map((preset) => preset.id)).toEqual(['elegoo-mars-5-ultra'])
-    expect(filterPrinterPresets('bambu')).toHaveLength(2)
+    expect(filterPrinterPresets('mars 5 ultra').map((preset) => preset.id)).toContain('resin-elegoo-mars-5-ultra')
+    expect(filterPrinterPresets('bambu').length).toBeGreaterThan(2)
     expect(filterPrinterPresets('resin').every((preset) => preset.printType === 'resin')).toBe(true)
   })
 })
