@@ -539,6 +539,22 @@ test('health and protected routes expose security and correlation headers', asyn
   expect((await request.get('/api/events')).status()).toBe(401)
 })
 
+test('production security policy permits compressed preview decoding', async ({ page }) => {
+  await page.goto('/')
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        try {
+          await WebAssembly.compile(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]))
+          return true
+        } catch {
+          return false
+        }
+      }),
+    )
+    .toBe(true)
+})
+
 test('admin routes redirect unauthenticated users', async ({ page }) => {
   await page.goto('/admin/integrations')
   await expect(page).toHaveURL(/\/$/)
