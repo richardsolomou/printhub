@@ -1,9 +1,18 @@
 import { and, count, desc, eq, gt, inArray, isNotNull, isNull, lte, ne, or, sql } from 'drizzle-orm'
 import fs from 'node:fs'
 import path from 'node:path'
-import type { NewPrintRequest, OperationPayload, Repository, RequestFilters, RequestQuery, Role, UploadOperation } from '../core/types'
+import type {
+  NewPrintRequest,
+  OperationPayload,
+  PrinterProfile,
+  Repository,
+  RequestFilters,
+  RequestQuery,
+  Role,
+  UploadOperation,
+} from '../core/types'
 import { initialStatus, workflow } from '../core/workflow'
-import { normalizePrinterProfile, type PlatePlannerDraft, type PrinterProfile } from '../core/platePlanner'
+import { LEGACY_PRINTERS_SETTING, normalizePrinterProfile, PRINTERS_SETTING, storedPrinterProfiles } from '../core/printers'
 import { backupDatabase } from './backup'
 import { closeDatabase, databaseFile, openDatabase, type PrintHubDatabase } from './connection'
 import { migrateDatabase } from './migrations'
@@ -15,15 +24,13 @@ import {
   member,
   operations,
   organization,
-  orientationAnalysisJobs,
-  plateModelAnalysis,
   requests,
   requestStatuses,
   settings,
   uploadSessions,
   user,
 } from './schema'
-import { mapAssetGenerationJob, mapPlateModelAnalysis, mapRequest, type RequestRow } from './repository/mappers'
+import { mapAssetGenerationJob, mapRequest, type RequestRow } from './repository/mappers'
 import { requestConditions, requestOrderBy, requestSelection, type RequestFilterOptions } from './repository/requestQuery'
 
 type DatabaseTransaction = Parameters<Parameters<PrintHubDatabase['transaction']>[0]>[0]
@@ -110,10 +117,6 @@ export class DrizzleRepository implements Repository {
       .select(requestSelection)
       .from(requests)
       .innerJoin(user, eq(user.id, requests.ownerUserId))
-      .leftJoin(
-        plateModelAnalysis,
-        and(eq(plateModelAnalysis.workspaceId, requests.workspaceId), eq(plateModelAnalysis.requestId, requests.id)),
-      )
       .where(eq(requests.workspaceId, workspaceId))
       .orderBy(desc(requests.createdAt))
       .all()
@@ -126,10 +129,6 @@ export class DrizzleRepository implements Repository {
       .select(requestSelection)
       .from(requests)
       .innerJoin(user, eq(user.id, requests.ownerUserId))
-      .leftJoin(
-        plateModelAnalysis,
-        and(eq(plateModelAnalysis.workspaceId, requests.workspaceId), eq(plateModelAnalysis.requestId, requests.id)),
-      )
       .where(this.requestConditions(filters, query))
       .orderBy(...requestOrderBy(filters.sort))
       .all()
@@ -170,10 +169,6 @@ export class DrizzleRepository implements Repository {
       .select(requestSelection)
       .from(requests)
       .innerJoin(user, eq(user.id, requests.ownerUserId))
-      .leftJoin(
-        plateModelAnalysis,
-        and(eq(plateModelAnalysis.workspaceId, requests.workspaceId), eq(plateModelAnalysis.requestId, requests.id)),
-      )
       .where(and(eq(requests.workspaceId, workspaceId), eq(requests.id, id)))
       .get()
     return row ? this.hydrate(database, row) : undefined
@@ -575,115 +570,6 @@ export class DrizzleRepository implements Repository {
       .run()
   }
 
-  requestsNeedingOrientationAnalysis(analysisVersion: number) {
-    const workspaceId = this.workspace()
-    const profiles = this.getSetting<PrinterProfile[]>('plate-planner-profiles') ?? []
-    const resinPrinterIds = profiles.filter((profile) => printerPrintType(profile) === 'resin').map((profile) => profile.id)
-    const resinTarget = or(
-      and(isNull(requests.printerId), eq(requests.printType, 'resin')),
-      resinPrinterIds.length ? inArray(requests.printerId, resinPrinterIds) : undefined,
-    )
-    return this.database
-      .select({ id: requests.id })
-      .from(requests)
-      .leftJoin(
-        orientationAnalysisJobs,
-        and(eq(orientationAnalysisJobs.workspaceId, requests.workspaceId), eq(orientationAnalysisJobs.requestId, requests.id)),
-      )
-      .leftJoin(
-        plateModelAnalysis,
-        and(eq(plateModelAnalysis.workspaceId, requests.workspaceId), eq(plateModelAnalysis.requestId, requests.id)),
-      )
-      .where(
-        and(
-          eq(requests.workspaceId, workspaceId),
-          or(
-            isNull(orientationAnalysisJobs.requestId),
-            ne(orientationAnalysisJobs.analysisVersion, analysisVersion),
-            inArray(orientationAnalysisJobs.status, ['pending', 'running']),
-            and(
-              resinTarget,
-              isNotNull(plateModelAnalysis.requestId),
-              or(isNull(plateModelAnalysis.orientationCandidates), eq(plateModelAnalysis.orientationCandidates, '[]')),
-            ),
-          ),
-        ),
-      )
-      .orderBy(requests.createdAt)
-      .all()
-      .map(({ id }) => id)
-  }
-
-  queueOrientationAnalysis(id: string, analysisVersion: number) {
-    if (!this.getRequest(id)) return
-    const workspaceId = this.workspace()
-    const now = Date.now()
-    this.database
-      .insert(orientationAnalysisJobs)
-      .values({ workspaceId, requestId: id, status: 'pending', analysisVersion, queuedAt: now })
-      .onConflictDoUpdate({
-        target: [orientationAnalysisJobs.workspaceId, orientationAnalysisJobs.requestId],
-        set: { status: 'pending', analysisVersion, error: null, queuedAt: now, startedAt: null, finishedAt: null },
-        where: or(ne(orientationAnalysisJobs.status, 'ready'), ne(orientationAnalysisJobs.analysisVersion, analysisVersion)),
-      })
-      .run()
-  }
-
-  startOrientationAnalysis(id: string, analysisVersion: number) {
-    if (!this.getRequest(id)) return
-    const workspaceId = this.workspace()
-    this.database
-      .update(orientationAnalysisJobs)
-      .set({ status: 'running', startedAt: Date.now(), finishedAt: null, error: null })
-      .where(
-        and(
-          eq(orientationAnalysisJobs.workspaceId, workspaceId),
-          eq(orientationAnalysisJobs.requestId, id),
-          eq(orientationAnalysisJobs.analysisVersion, analysisVersion),
-        ),
-      )
-      .run()
-  }
-
-  failOrientationAnalysis(id: string, analysisVersion: number, error: string) {
-    if (!this.getRequest(id)) return
-    const workspaceId = this.workspace()
-    this.database
-      .update(orientationAnalysisJobs)
-      .set({ status: 'failed', error: error.slice(0, 1_000), finishedAt: Date.now() })
-      .where(
-        and(
-          eq(orientationAnalysisJobs.workspaceId, workspaceId),
-          eq(orientationAnalysisJobs.requestId, id),
-          eq(orientationAnalysisJobs.analysisVersion, analysisVersion),
-        ),
-      )
-      .run()
-  }
-
-  listOrientationAnalysisJobs() {
-    const workspaceId = this.workspace()
-    return this.database
-      .select({ job: orientationAnalysisJobs })
-      .from(orientationAnalysisJobs)
-      .innerJoin(
-        requests,
-        and(eq(requests.workspaceId, orientationAnalysisJobs.workspaceId), eq(requests.id, orientationAnalysisJobs.requestId)),
-      )
-      .where(eq(orientationAnalysisJobs.workspaceId, workspaceId))
-      .orderBy(orientationAnalysisJobs.queuedAt)
-      .all()
-      .map(({ job }) => ({
-        requestId: job.requestId,
-        status: job.status,
-        analysisVersion: job.analysisVersion,
-        error: job.error ?? undefined,
-        queuedAt: job.queuedAt,
-        startedAt: job.startedAt ?? undefined,
-        finishedAt: job.finishedAt ?? undefined,
-      }))
-  }
-
   completeAssetGeneration(id: string, generated: { thumbnailPath?: string; previewPath?: string }) {
     const workspaceId = this.workspace()
     const now = Date.now()
@@ -718,91 +604,6 @@ export class DrizzleRepository implements Repository {
         )
         .run()
     })
-  }
-
-  getPlateModelAnalysis(requestId: string) {
-    const workspaceId = this.workspace()
-    const row = this.database
-      .select({ analysis: plateModelAnalysis })
-      .from(plateModelAnalysis)
-      .innerJoin(requests, and(eq(requests.workspaceId, plateModelAnalysis.workspaceId), eq(requests.id, plateModelAnalysis.requestId)))
-      .where(and(eq(plateModelAnalysis.workspaceId, workspaceId), eq(plateModelAnalysis.requestId, requestId)))
-      .get()?.analysis
-    return row ? mapPlateModelAnalysis(row) : undefined
-  }
-
-  listPlateModelAnalyses() {
-    const workspaceId = this.workspace()
-    return this.database
-      .select({ analysis: plateModelAnalysis })
-      .from(plateModelAnalysis)
-      .innerJoin(requests, and(eq(requests.workspaceId, plateModelAnalysis.workspaceId), eq(requests.id, plateModelAnalysis.requestId)))
-      .where(eq(plateModelAnalysis.workspaceId, workspaceId))
-      .orderBy(plateModelAnalysis.requestId)
-      .all()
-      .map(({ analysis }) => mapPlateModelAnalysis(analysis))
-  }
-
-  upsertPlateModelAnalyses(analyses: import('../core/platePlanner').PlateModelAnalysis[]) {
-    const workspaceId = this.workspace()
-    this.database.transaction((tx) => {
-      const now = Date.now()
-      for (const analysis of analyses) {
-        if (!this.getRequestFrom(tx, analysis.requestId)) continue
-        const values = {
-          workspaceId,
-          requestId: analysis.requestId,
-          widthMm: analysis.widthMm,
-          depthMm: analysis.depthMm,
-          heightMm: analysis.heightMm,
-          orientationQuaternion: analysis.orientationQuaternion ? JSON.stringify(analysis.orientationQuaternion) : null,
-          orientationIslandCount: analysis.orientationIslandCount ?? null,
-          orientationRisk: analysis.orientationRisk ?? null,
-          orientationCandidates: analysis.orientationCandidates ? JSON.stringify(analysis.orientationCandidates) : null,
-          contentHash: analysis.contentHash ?? null,
-          analysisVersion: analysis.analysisVersion ?? 1,
-          estimatedVolumeMm3: analysis.estimatedVolumeMm3 ?? analysis.orientationCandidates?.[0]?.estimatedVolumeMm3 ?? null,
-          analyzedAt: now,
-        }
-        tx.insert(plateModelAnalysis)
-          .values(values)
-          .onConflictDoUpdate({ target: [plateModelAnalysis.workspaceId, plateModelAnalysis.requestId], set: values })
-          .run()
-        tx.insert(orientationAnalysisJobs)
-          .values({
-            workspaceId,
-            requestId: analysis.requestId,
-            status: 'ready',
-            analysisVersion: analysis.analysisVersion ?? 1,
-            queuedAt: now,
-            startedAt: now,
-            finishedAt: now,
-          })
-          .onConflictDoUpdate({
-            target: [orientationAnalysisJobs.workspaceId, orientationAnalysisJobs.requestId],
-            set: { status: 'ready', analysisVersion: analysis.analysisVersion ?? 1, error: null, finishedAt: now },
-          })
-          .run()
-      }
-    })
-  }
-
-  findPlateModelAnalysisByContentHash(contentHash: string, analysisVersion: number) {
-    const workspaceId = this.workspace()
-    const row = this.database
-      .select({ analysis: plateModelAnalysis })
-      .from(plateModelAnalysis)
-      .innerJoin(requests, and(eq(requests.workspaceId, plateModelAnalysis.workspaceId), eq(requests.id, plateModelAnalysis.requestId)))
-      .where(
-        and(
-          eq(plateModelAnalysis.workspaceId, workspaceId),
-          eq(plateModelAnalysis.contentHash, contentHash),
-          eq(plateModelAnalysis.analysisVersion, analysisVersion),
-        ),
-      )
-      .limit(1)
-      .get()?.analysis
-    return row ? mapPlateModelAnalysis(row) : undefined
   }
 
   listPeople() {
@@ -888,32 +689,30 @@ export class DrizzleRepository implements Repository {
   }
 
   replacePrinterProfiles(profiles: PrinterProfile[]) {
-    return this.database.transaction((tx) => {
-      const previous = (this.getSettingFrom<PrinterProfile[]>(tx, 'plate-planner-profiles') ?? []).map(normalizePrinterProfile)
+    this.database.transaction((tx) => {
+      const previous = (
+        this.getSettingFrom<PrinterProfile[]>(tx, PRINTERS_SETTING) ??
+        this.getSettingFrom<PrinterProfile[]>(tx, LEGACY_PRINTERS_SETTING) ??
+        []
+      ).map(normalizePrinterProfile)
       const next = profiles.map(normalizePrinterProfile)
       const nextById = new Map(next.map((profile) => [profile.id, profile]))
-      const changedIds = new Set(
-        previous.filter((profile) => plannerProfileChanged(profile, nextById.get(profile.id))).map((profile) => profile.id),
-      )
 
-      const reanalyzeRequestIds: string[] = []
       const now = Date.now()
       for (const profile of previous) {
         const replacement = nextById.get(profile.id)
         if (!replacement) {
           tx.update(requests)
-            .set({ printerId: null, printType: printerPrintType(profile), updatedAt: now })
+            .set({ printerId: null, printType: profile.printType, updatedAt: now })
             .where(and(eq(requests.workspaceId, this.workspace()), eq(requests.printerId, profile.id)))
             .run()
           continue
         }
-        if (printerPrintType(profile) !== printerPrintType(replacement)) {
-          const assigned = tx
-            .select({ id: requests.id })
-            .from(requests)
+        if (profile.printType !== replacement.printType) {
+          tx.update(requests)
+            .set({ printType: null, updatedAt: now })
             .where(and(eq(requests.workspaceId, this.workspace()), eq(requests.printerId, profile.id)))
-            .all()
-          reanalyzeRequestIds.push(...assigned.map(({ id }) => id))
+            .run()
         }
       }
       tx.update(requests)
@@ -921,18 +720,15 @@ export class DrizzleRepository implements Repository {
         .where(and(eq(requests.workspaceId, this.workspace()), isNotNull(requests.printerId)))
         .run()
 
-      this.setSettingWith(tx, 'plate-planner-profiles', next)
-      const drafts = this.getSettingFrom<Record<string, PlatePlannerDraft>>(tx, 'plate-planner-drafts') ?? {}
-      const legacyDraft = this.getSettingFrom<PlatePlannerDraft>(tx, 'plate-planner-draft')
-      if (legacyDraft && !drafts[legacyDraft.printerId]) drafts[legacyDraft.printerId] = legacyDraft
-      for (const printerId of Object.keys(drafts)) {
-        if (!nextById.has(printerId) || changedIds.has(printerId)) delete drafts[printerId]
-      }
-      this.setSettingWith(tx, 'plate-planner-drafts', drafts)
+      this.setSettingWith(tx, PRINTERS_SETTING, next)
       tx.delete(settings)
-        .where(and(eq(settings.workspaceId, this.workspace()), eq(settings.key, 'plate-planner-draft')))
+        .where(
+          and(
+            eq(settings.workspaceId, this.workspace()),
+            inArray(settings.key, [LEGACY_PRINTERS_SETTING, 'plate-planner-draft', 'plate-planner-drafts']),
+          ),
+        )
         .run()
-      return { reanalyzeRequestIds }
     })
   }
 
@@ -1507,7 +1303,7 @@ export class DrizzleRepository implements Repository {
   }
 
   private requestConditions(filters: RequestFilters, query: RequestQuery, options: RequestFilterOptions = {}) {
-    const profiles = filters.printType ? (this.getSetting<PrinterProfile[]>('plate-planner-profiles') ?? []) : []
+    const profiles = filters.printType ? storedPrinterProfiles(this) : []
     return requestConditions(this.workspace(), filters, query, profiles, options)
   }
   private insertRequest(db: DatabaseExecutor, id: string, request: NewPrintRequest) {
@@ -1696,17 +1492,6 @@ function sqliteErrorCode(error: unknown): string | undefined {
     current = 'cause' in current ? current.cause : undefined
   }
   return undefined
-}
-
-function printerPrintType(printer: PrinterProfile): import('../core/types').PrintType {
-  return normalizePrinterProfile(printer).printType
-}
-
-function plannerProfileChanged(previous: PrinterProfile, next?: PrinterProfile) {
-  if (!next) return true
-  const { enabled: _previousEnabled, ...previousPlanning } = previous
-  const { enabled: _nextEnabled, ...nextPlanning } = next
-  return JSON.stringify(previousPlanning) !== JSON.stringify(nextPlanning)
 }
 
 function workspaceSlug(name: string) {

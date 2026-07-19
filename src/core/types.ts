@@ -29,13 +29,8 @@ export type PrinterSummary = {
   name: string
   printType: PrintType
   enabled: boolean
-  filamentDiameterMm?: number
-  materialDensityGPerCm3?: number
 }
-
-export type FilamentAssumptions = {
-  materialDensityGPerCm3: number
-}
+export type PrinterProfile = PrinterSummary
 
 export type Invite = {
   id: string
@@ -66,7 +61,6 @@ export type PrintRequest = {
   hasThumbnail: boolean
   requestedPrintType?: PrintType
   printerId?: string
-  estimatedVolumeMm3?: number
   createdAt: number
   updatedAt: number
 }
@@ -88,9 +82,6 @@ export type PublicPrintRequest = Omit<
   printType?: PrintType
   requestedPrintType?: PrintType
   printer?: PrinterSummary
-  filamentAssumptions?: FilamentAssumptions
-  compatiblePrinterIds?: string[]
-  fitState?: 'pending' | 'selected_printer' | 'another_compatible_printer' | 'none'
 }
 
 export type AssetGenerationStage = 'thumbnail' | 'preview'
@@ -105,7 +96,7 @@ export type AssetGenerationJob = {
 }
 
 export type RequestSort =
-  | 'board'
+  | 'fair'
   | 'updated-desc'
   | 'updated-asc'
   | 'created-desc'
@@ -151,7 +142,6 @@ export type PublicRequestQueryResult = { requests: PublicPrintRequest[]; facets:
 
 export type BoardConfig = {
   privateRequests: boolean
-  planningStrategy: import('./platePlanner').PlatePlanningStrategy
 }
 
 export type NewPrintRequest = Pick<
@@ -245,16 +235,7 @@ export interface Repository {
   listAssetGenerationJobs(): AssetGenerationJob[]
   assetGenerationJobs(id: string): AssetGenerationJob[]
   requeueInterruptedAssetGeneration(): void
-  requestsNeedingOrientationAnalysis(analysisVersion: number): string[]
-  queueOrientationAnalysis(id: string, analysisVersion: number): void
-  startOrientationAnalysis(id: string, analysisVersion: number): void
-  failOrientationAnalysis(id: string, analysisVersion: number, error: string): void
-  listOrientationAnalysisJobs(): import('./platePlanner').OrientationAnalysisJob[]
-  getPlateModelAnalysis(requestId: string): import('./platePlanner').PlateModelAnalysis | undefined
-  findPlateModelAnalysisByContentHash(contentHash: string, analysisVersion: number): import('./platePlanner').PlateModelAnalysis | undefined
   completeAssetGeneration(id: string, generated: { thumbnailPath?: string; previewPath?: string }): void
-  listPlateModelAnalyses(): import('./platePlanner').PlateModelAnalysis[]
-  upsertPlateModelAnalyses(analyses: import('./platePlanner').PlateModelAnalysis[]): void
   listPeople(): Person[]
   listUsers(): Identity[]
   listDeploymentUsers(): Identity[]
@@ -268,7 +249,7 @@ export interface Repository {
   setSetting(key: string, value: unknown): void
   setSettings(values: Record<string, unknown>): void
   deleteSetting(key: string): void
-  replacePrinterProfiles(profiles: import('./platePlanner').PrinterProfile[]): { reanalyzeRequestIds: string[] }
+  replacePrinterProfiles(profiles: PrinterProfile[]): void
   countUsers(): number
   databaseInfo(): { path: string; sizeBytes: number; integrity: string; lastCheckedAt: number }
   maintain(): { integrity: string; checkedAt: number }

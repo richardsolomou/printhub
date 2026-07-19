@@ -3,42 +3,42 @@ import { combine } from '@atlaskit/pragmatic-drag-and-drop/combine'
 import { draggable, dropTargetForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter'
 import { attachClosestEdge, extractClosestEdge, type Edge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
 import { canDropOnRequest } from '../boardDrag'
+import { printerTargetLabel } from '../fleet'
 import { requesterColor, requesterLabel } from '../requester'
 import type { StatusId } from '../../core/workflow'
-import type { PublicPrintRequest } from '../../core/types'
+import type { PrinterSummary, PublicPrintRequest } from '../../core/types'
 import { LazyThumb } from './LazyThumb'
-import { FitAlertIcon, printTypeLabel } from './PrintType'
+import { printTypeLabel } from './PrintType'
 
 export function RequestCard({
   request,
+  printers,
+  reorderableRequestIds,
   status,
   count,
   canDrag,
+  reorderEnabled,
   settling,
   showPrintType = false,
   showPrinter = false,
   showRequester = false,
-  selected = false,
-  selectable = false,
   annotation,
-  onSelectedChange,
   onOpen,
 }: {
   request: PublicPrintRequest
+  printers: PrinterSummary[]
+  reorderableRequestIds: Set<string>
   status: StatusId
   count: number
   canDrag: boolean
+  reorderEnabled: boolean
   settling: boolean
   showPrintType?: boolean
   showPrinter?: boolean
   showRequester?: boolean
-  selected?: boolean
-  selectable?: boolean
   annotation?: string
-  onSelectedChange?: (selected: boolean) => void
   onOpen: () => void
 }) {
   const ref = useRef<HTMLButtonElement>(null)
@@ -63,7 +63,15 @@ export function RequestCard({
             { input, element: el, allowedEdges: ['top', 'bottom'] },
           ),
         onDrag: ({ self, source }) => {
-          if (canDropOnRequest(source.data, { requesterId: request.requesterId, requestId: request.id })) {
+          const sourceRequestId = source.data.requestId
+          const sourceCanReorder = typeof sourceRequestId === 'string' && reorderableRequestIds.has(sourceRequestId)
+          if (
+            canDropOnRequest(
+              source.data,
+              { requesterId: request.requesterId, requestId: request.id, status },
+              reorderEnabled && sourceCanReorder,
+            )
+          ) {
             setClosestEdge(extractClosestEdge(self.data))
           } else {
             setClosestEdge(null)
@@ -73,10 +81,10 @@ export function RequestCard({
         onDrop: () => setClosestEdge(null),
       }),
     )
-  }, [canDrag, request.id, request.requesterId, status])
+  }, [canDrag, reorderableRequestIds, reorderEnabled, request.id, request.requesterId, status])
 
   return (
-    <div className="relative [&:hover>[data-selection-checkbox]]:opacity-100">
+    <div className="relative">
       <Button
         ref={ref}
         type="button"
@@ -84,7 +92,6 @@ export function RequestCard({
         className={cn(
           'card relative h-auto w-full justify-start gap-2.5 rounded-lg bg-secondary p-2.5 text-left transition-[border-color,transform,opacity,box-shadow] duration-200 hover:bg-secondary hover:text-foreground',
           canDrag && 'cursor-grab touch-manipulation',
-          selected && 'border-primary bg-primary/10 ring-1 ring-primary/30',
           dragging && 'dragging scale-[0.985] opacity-40',
           settling && 'animate-[card-settle_240ms_ease-out]',
         )}
@@ -113,7 +120,6 @@ export function RequestCard({
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-start gap-1.5">
             <div className="min-w-0 flex-1 truncate font-semibold">{request.name}</div>
-            <FitAlertIcon request={request} />
           </div>
           <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
             {showPrintType && request.printType && <span>{printTypeLabel(request.printType)}</span>}
@@ -128,26 +134,13 @@ export function RequestCard({
               </span>
             )}
             {showPrinter && (
-              <span className="basis-full truncate font-mono" title={request.printer?.name ?? 'Any compatible printer'}>
-                {request.printer?.name ?? (request.printType ? `Any ${printTypeLabel(request.printType)} printer` : 'Decide later')}
-                {request.printer && !request.printer.enabled && ' (disabled)'}
+              <span className="basis-full truncate font-mono" title={printerTargetLabel(printers, request.printType, request.printer)}>
+                {printerTargetLabel(printers, request.printType, request.printer)}
               </span>
             )}
           </div>
         </div>
       </Button>
-      {selectable && (
-        <Checkbox
-          data-selection-checkbox
-          checked={selected}
-          aria-label={`${selected ? 'Remove' : 'Add'} ${request.name} ${selected ? 'from' : 'to'} planning selection`}
-          className={cn(
-            'absolute top-2.5 right-2.5 z-2 size-5 bg-background opacity-0 shadow-sm transition-opacity focus-visible:opacity-100 max-[900px]:hidden',
-            selected && 'opacity-100',
-          )}
-          onCheckedChange={(checked) => onSelectedChange?.(checked)}
-        />
-      )}
     </div>
   )
 }

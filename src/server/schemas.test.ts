@@ -57,10 +57,12 @@ describe('server input schemas', () => {
     expect(updateRequestSchema.parse({ id: 'request', requestedPrintType: 'filament', printerId: null })).toEqual({
       id: 'request',
       requestedPrintType: 'filament',
+      printerId: null,
     })
     expect(updateRequestSchema.parse({ id: 'request', requestedPrintType: 'resin', printerId: 'printer' })).toEqual({
       id: 'request',
       requestedPrintType: 'resin',
+      printerId: 'printer',
     })
   })
 
