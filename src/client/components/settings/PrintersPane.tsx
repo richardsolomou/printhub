@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { Link } from '@tanstack/react-router'
-import { Plus, Trash2 } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -18,10 +18,12 @@ import {
   type ResinPrinterProfile,
 } from '../../../core/platePlanner'
 import type { PrintType } from '../../../core/types'
+import type { PrinterPreset } from '../../../core/printerPresets'
 import { savePlatePlannerProfiles } from '../../../server/fns'
 import { platePlannerQuery } from '../../queries'
 import { useWorkspaceSlug } from '../../workspace'
 import { ConfirmDialog } from '../ConfirmDialog'
+import { PrinterPresetPicker } from './PrinterPresetPicker'
 import { SettingsActions, SettingsHeader, SettingsPage, SettingsSection } from './SettingsLayout'
 import { UnsavedChangesGuard } from './UnsavedChangesGuard'
 
@@ -69,7 +71,8 @@ export function PrintersPane({ onboarding = false, onSaved }: { onboarding?: boo
 
   if (!data) return <SettingsHeader title="Printers" description="Loading printer settings…" />
 
-  const addPrinter = () => setProfiles((current) => [...current, defaultPrinterProfile(defaultPrintType(current))])
+  const addCustomPrinter = () => setProfiles((current) => [...current, defaultPrinterProfile(defaultPrintType(current))])
+  const addPresetPrinter = (preset: PrinterPreset) => setProfiles((current) => [...current, profileFromPreset(preset)])
   const removePrinter = (id: string) => {
     setProfiles((current) => current.filter((profile) => profile.id !== id))
     setRemoveId(null)
@@ -115,9 +118,7 @@ export function PrintersPane({ onboarding = false, onSaved }: { onboarding?: boo
               onRemove={() => setRemoveId(profile.id)}
             />
           ))}
-          <Button type="button" variant="outline" className="justify-self-start" onClick={addPrinter} disabled={mutation.isPending}>
-            <Plus /> Add printer
-          </Button>
+          <PrinterPresetPicker disabled={mutation.isPending} onSelect={addPresetPrinter} onCustom={addCustomPrinter} />
         </div>
       </SettingsSection>
 
@@ -437,6 +438,18 @@ function defaultPrinterProfile(
   return printType === 'resin'
     ? { ...base, printType, supportMarginMm: 4, adhesionMarginMm: 2, heightAllowanceMm: 5, maxHeightDifferenceMm: 20 }
     : { ...base, printType, brimMarginMm: 0, filamentDiameterMm: 1.75, materialDensityGPerCm3: 1.24 }
+}
+
+function profileFromPreset(preset: PrinterPreset): PrinterProfile {
+  const profile = defaultPrinterProfile(preset.printType, {
+    name: `${preset.brand} ${preset.model}`,
+    widthMm: preset.widthMm,
+    depthMm: preset.depthMm,
+    heightMm: preset.heightMm,
+  })
+  return profile.printType === 'filament' && preset.filamentDiameterMm
+    ? { ...profile, filamentDiameterMm: preset.filamentDiameterMm }
+    : profile
 }
 
 function profilesValidationError(profiles: PrinterProfile[]) {

@@ -44,6 +44,14 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
   await page.getByRole('button', { name: 'Finish setup' }).click()
   await expect(page.getByRole('heading', { name: 'Add your printers' })).toBeVisible()
   await page.getByRole('button', { name: 'Add printer' }).click()
+  await screenshot(page, 'printer-preset-picker-desktop')
+  await page.getByLabel('Search printers').fill('Mars 5 Ultra')
+  await page.getByRole('button', { name: 'Add Elegoo Mars 5 Ultra' }).click()
+  const presetPrinter = page.getByRole('region', { name: 'Printer 1' })
+  await expect(presetPrinter.getByLabel('Printer name')).toHaveValue('Elegoo Mars 5 Ultra')
+  await expect(presetPrinter.getByLabel('Usable width')).toHaveValue('153.36')
+  await expect(presetPrinter.getByLabel('Usable depth')).toHaveValue('77.76')
+  await expect(presetPrinter.getByLabel('Usable height')).toHaveValue('165')
   await fillPrinter(page.getByRole('region', { name: 'Printer 1' }), {
     name: 'Resin Station',
     printType: 'Resin',
@@ -297,7 +305,7 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
   await screenshot(page, 'admin-diagnostics-desktop')
   await workspaceSettings(page)
   await page.getByRole('link', { name: 'Printers' }).click()
-  await page.getByRole('button', { name: 'Add printer' }).click()
+  await addCustomPrinter(page)
   await fillPrinter(page.getByRole('region', { name: 'Printer 2' }), {
     name: 'Workshop Filament',
     printType: 'Filament',
@@ -309,7 +317,7 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
   await expect(page.getByLabel('Filament diameter')).toHaveValue('1.75')
   await expect(page.getByLabel('Material density (g/cm³)')).toHaveValue('1.24')
   await page.getByLabel('Material density (g/cm³)').fill('1.25')
-  await page.getByRole('button', { name: 'Add printer' }).click()
+  await addCustomPrinter(page)
   await fillPrinter(page.getByRole('region', { name: 'Printer 3' }), {
     name: 'Resin Backup',
     printType: 'Resin',
@@ -474,7 +482,7 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
 
   await workspaceSettings(page)
   await page.getByRole('link', { name: 'Printers' }).click()
-  await page.getByRole('button', { name: 'Add printer' }).click()
+  await addCustomPrinter(page)
   await fillPrinter(page.getByRole('region', { name: 'Printer 2' }), {
     name: 'Resin Station',
     printType: 'Resin',
@@ -572,6 +580,11 @@ async function fillPrinter(
   await printer.getByLabel('Usable width').fill(values.width)
   await printer.getByLabel('Usable depth').fill(values.depth)
   await printer.getByLabel('Usable height').fill(values.height)
+}
+
+async function addCustomPrinter(page: Page) {
+  await page.getByRole('button', { name: 'Add printer' }).click()
+  await page.getByRole('button', { name: 'Custom printer' }).click()
 }
 
 async function removePrinter(page: Page, name: string) {
