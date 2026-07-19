@@ -33,6 +33,24 @@ export type GeneratedPrinterPreset = {
   source: { id: string; url: string }
 }
 
+export type ManufacturerImageSource = {
+  id: string
+  brand: string
+  feedUrl: string
+  storefrontUrl: string
+  productTypes: string[]
+  titleAliases?: Record<string, string>
+}
+
+export type ManufacturerImage = {
+  presetId: string
+  sourceId: string
+  productUrl: string
+  sourceUrl: string
+  src: string
+  checkedAt: string
+}
+
 type OrcaProfile = {
   name?: string
   inherits?: string
@@ -180,6 +198,21 @@ export function printableAreaDimensions(points: string[] | string) {
   return widthMm > 0 && depthMm > 0 ? { widthMm, depthMm } : undefined
 }
 
+export function normalizePrinterModel(value: string, brand = '') {
+  const brandPattern = brand ? new RegExp(`^${escapeRegExp(brand)}\\s+`, 'i') : undefined
+  return value
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/^\[[^\]]+\]\s*/, '')
+    .replace(/\([^)]*limited edition[^)]*\)/gi, '')
+    .replace(brandPattern ?? /$^/, '')
+    .toLocaleLowerCase()
+    .replace(/\b(?:resin|3d|printers?|lcd|msla|sla|monochrome)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ')
+}
+
 function readJsonFiles<T>(root: string, include: (file: string) => boolean) {
   const files: { path: string; value: T }[] = []
   const visit = (directory: string) => {
@@ -230,4 +263,8 @@ function slug(value: string) {
 
 function encodePath(value: string) {
   return value.split('/').map(encodeURIComponent).join('/')
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }

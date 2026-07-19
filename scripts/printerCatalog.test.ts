@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { applyCatalogOverrides, parseIni, printableAreaDimensions, type GeneratedPrinterPreset } from './printerCatalog'
+import {
+  applyCatalogOverrides,
+  normalizePrinterModel,
+  parseIni,
+  printableAreaDimensions,
+  type GeneratedPrinterPreset,
+} from './printerCatalog'
 
 describe('printer catalog synchronization', () => {
   it('parses PrusaSlicer INI values', () => {
@@ -11,6 +17,10 @@ describe('printer catalog synchronization', () => {
 
   it('calculates rectangular dimensions from an offset printable area', () => {
     expect(printableAreaDimensions(['-5x10', '215x10', '215x230', '-5x230'])).toEqual({ widthMm: 220, depthMm: 220 })
+  })
+
+  it('normalizes official storefront printer titles without dropping model details', () => {
+    expect(normalizePrinterModel('Anycubic Photon Mono X 6K (Limited Edition)', 'Anycubic')).toBe('photon mono x 6k')
   })
 
   it('accepts serialized printable areas from Orca profiles', () => {

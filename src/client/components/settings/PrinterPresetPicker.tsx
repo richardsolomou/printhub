@@ -1,10 +1,12 @@
-import { Plus, Search, Settings2 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
+import { ChevronDown, ChevronRight, Plus, Search, Settings2 } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { filterPrinterPresets, type PrinterPreset } from '../../../core/printerPresets'
+import { filterPrinterPresets, PRINTER_PRESETS, type PrinterPreset } from '../../../core/printerPresets'
+import { PrinterPresetImage } from './PrinterPresetImage'
 
 export function PrinterPresetPicker({
   disabled,
@@ -17,11 +19,22 @@ export function PrinterPresetPicker({
 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
-  const groups = useMemo(() => groupPresets(filterPrinterPresets(search)), [search])
+  const [expandedBrand, setExpandedBrand] = useState<string | null>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const results = useMemo(() => filterPrinterPresets(search), [search])
+  const groups = useMemo(() => groupPresets(PRINTER_PRESETS), [])
+  const searching = !!search.trim()
+  const virtualizer = useVirtualizer({
+    count: searching ? results.length : 0,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 76,
+    overscan: 8,
+  })
   const choose = (action: () => void) => {
     action()
     setOpen(false)
     setSearch('')
+    setExpandedBrand(null)
   }
 
   return (
@@ -33,7 +46,10 @@ export function PrinterPresetPicker({
         open={open}
         onOpenChange={(next) => {
           setOpen(next)
-          if (!next) setSearch('')
+          if (!next) {
+            setSearch('')
+            setExpandedBrand(null)
+          }
         }}
       >
         <DialogContent className="max-h-[min(44rem,calc(100dvh-2rem))] grid-rows-[auto_auto_minmax(0,1fr)] sm:max-w-2xl">
@@ -51,66 +67,99 @@ export function PrinterPresetPicker({
               onChange={(event) => setSearch(event.target.value)}
             />
           </div>
-          <div className="min-h-0 overflow-y-auto pr-1">
-            {!search.trim() && (
-              <button
-                type="button"
-                className="mb-4 flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-muted/60 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
-                onClick={() => choose(onCustom)}
-              >
-                <span className="flex size-14 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                  <Settings2 className="size-6" />
-                </span>
-                <span>
-                  <span className="block font-medium">Custom printer</span>
-                  <span className="block text-sm text-muted-foreground">Enter the print type and usable build volume manually.</span>
-                </span>
-              </button>
-            )}
-            {groups.length ? (
-              <div className="grid gap-5">
-                {groups.map(([brand, presets]) => (
-                  <section key={brand} aria-labelledby={`printer-brand-${brand.replaceAll(' ', '-').toLowerCase()}`}>
-                    <h3
-                      id={`printer-brand-${brand.replaceAll(' ', '-').toLowerCase()}`}
-                      className="mb-2 text-xs font-medium text-muted-foreground"
-                    >
-                      {brand}
-                    </h3>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {presets.map((preset) => (
-                        <button
-                          key={preset.id}
-                          type="button"
-                          className="flex min-w-0 items-center gap-3 rounded-lg border p-2.5 text-left transition-colors hover:bg-muted/60 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
-                          aria-label={`Add ${preset.brand} ${preset.model}`}
-                          onClick={() => choose(() => onSelect(preset))}
-                        >
-                          <PrinterPresetImage preset={preset} />
-                          <span className="min-w-0">
-                            <span className="flex min-w-0 items-center gap-2">
-                              <span className="truncate font-medium">{preset.model}</span>
-                              <Badge variant="outline" className="shrink-0 text-[0.65rem]">
-                                {preset.printType === 'resin' ? 'Resin' : 'Filament'}
-                              </Badge>
-                            </span>
-                            <span className="mt-1 block text-xs text-muted-foreground">
-                              {formatDimension(preset.widthMm)} × {formatDimension(preset.depthMm)} × {formatDimension(preset.heightMm)} mm
-                            </span>
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </section>
-                ))}
-              </div>
+          <div ref={scrollRef} className="min-h-0 overflow-y-auto pr-1">
+            {searching ? (
+              results.length ? (
+                <div className="relative" style={{ height: virtualizer.getTotalSize() }}>
+                  {virtualizer.getVirtualItems().map((row) => {
+                    const preset = results[row.index]
+                    return (
+                      <div
+                        key={preset.id}
+                        className="absolute top-0 left-0 w-full py-1"
+                        style={{ height: row.size, transform: `translateY(${row.start}px)` }}
+                      >
+                        <PresetButton preset={preset} onClick={() => choose(() => onSelect(preset))} showBrand />
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className="py-10 text-center text-sm text-muted-foreground">No predefined printers match “{search.trim()}”.</p>
+              )
             ) : (
-              <p className="py-10 text-center text-sm text-muted-foreground">No predefined printers match “{search.trim()}”.</p>
+              <div className="grid gap-3 pb-1">
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-muted/60 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+                  onClick={() => choose(onCustom)}
+                >
+                  <span className="flex size-14 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                    <Settings2 className="size-6" />
+                  </span>
+                  <span>
+                    <span className="block font-medium">Custom printer</span>
+                    <span className="block text-sm text-muted-foreground">Enter the print type and usable build volume manually.</span>
+                  </span>
+                </button>
+                <div className="grid gap-2">
+                  {groups.map(([brand, presets]) => {
+                    const expanded = expandedBrand === brand
+                    return (
+                      <section key={brand} className="overflow-hidden rounded-lg border">
+                        <button
+                          type="button"
+                          className="flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-muted/60 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+                          aria-expanded={expanded}
+                          onClick={() => setExpandedBrand(expanded ? null : brand)}
+                        >
+                          {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+                          <span className="font-medium">{brand}</span>
+                          <Badge variant="secondary" className="ml-auto">
+                            {presets.length}
+                          </Badge>
+                        </button>
+                        {expanded && (
+                          <div className="grid gap-2 border-t bg-muted/15 p-2 sm:grid-cols-2">
+                            {presets.map((preset) => (
+                              <PresetButton key={preset.id} preset={preset} onClick={() => choose(() => onSelect(preset))} />
+                            ))}
+                          </div>
+                        )}
+                      </section>
+                    )
+                  })}
+                </div>
+              </div>
             )}
           </div>
         </DialogContent>
       </Dialog>
     </>
+  )
+}
+
+function PresetButton({ preset, onClick, showBrand = false }: { preset: PrinterPreset; onClick: () => void; showBrand?: boolean }) {
+  return (
+    <button
+      type="button"
+      className="flex h-full min-w-0 items-center gap-3 rounded-lg border bg-background p-2.5 text-left transition-colors hover:bg-muted/60 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+      aria-label={`Add ${preset.brand} ${preset.model}`}
+      onClick={onClick}
+    >
+      <PrinterPresetImage printer={preset} />
+      <span className="min-w-0">
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate font-medium">{showBrand ? `${preset.brand} ${preset.model}` : preset.model}</span>
+          <Badge variant="outline" className="shrink-0 text-[0.65rem]">
+            {preset.printType === 'resin' ? 'Resin' : 'Filament'}
+          </Badge>
+        </span>
+        <span className="mt-1 block text-xs text-muted-foreground">
+          {formatDimension(preset.widthMm)} × {formatDimension(preset.depthMm)} × {formatDimension(preset.heightMm)} mm
+        </span>
+      </span>
+    </button>
   )
 }
 
@@ -122,34 +171,4 @@ function groupPresets(presets: readonly PrinterPreset[]) {
 
 function formatDimension(value: number) {
   return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)))
-}
-
-function PrinterPresetImage({ preset }: { preset: PrinterPreset }) {
-  if (preset.image) {
-    return (
-      <span className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted" aria-hidden="true">
-        <img src={preset.image.src} alt="" className="size-full object-contain p-1" loading="lazy" />
-      </span>
-    )
-  }
-  const resin = preset.printType === 'resin'
-  const large = resin && preset.widthMm >= 250
-  return (
-    <span className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted" aria-hidden="true">
-      <svg viewBox="0 0 64 64" className="size-12 text-foreground/75" fill="none" stroke="currentColor" strokeWidth="2">
-        {resin ? (
-          <>
-            <path d={large ? 'M14 47h36l-3-30H17l-3 30Z' : 'M17 47h30l-3-30H20l-3 30Z'} fill="currentColor" fillOpacity="0.08" />
-            <path d="M20 25h24M22 32h20M15 47h34v5H15z" />
-            <path d="M27 12h10l2 5H25l2-5Z" fill="currentColor" fillOpacity="0.16" />
-          </>
-        ) : (
-          <>
-            <path d="M14 53h36M18 50V14h28v36M18 19h28M32 19v22M27 41h10M22 49h20" />
-            <path d="M25 44h14l3 5H22l3-5Z" fill="currentColor" fillOpacity="0.12" />
-          </>
-        )}
-      </svg>
-    </span>
-  )
 }

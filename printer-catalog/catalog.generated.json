@@ -471,6 +471,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Anycubic%20Photon.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-anycubic-photon.jpg",
+        "sourceId": "anycubic",
+        "sourceUrl": "https://store.anycubic.com/products/anycubic-photon-3d-printer"
       }
     },
     {
@@ -549,6 +554,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Anycubic%20Photon%20Mono.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-anycubic-photon-mono.jpg",
+        "sourceId": "anycubic",
+        "sourceUrl": "https://store.anycubic.com/products/photon-mono-resin-3d-printer"
       }
     },
     {
@@ -575,6 +585,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Anycubic%20Photon%20Mono%204.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-anycubic-photon-mono-4.jpg",
+        "sourceId": "anycubic",
+        "sourceUrl": "https://store.anycubic.com/products/photon-mono-4"
       }
     },
     {
@@ -588,6 +603,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Anycubic%20Photon%20Mono%204%20Ultra.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-anycubic-photon-mono-4-ultra.jpg",
+        "sourceId": "anycubic",
+        "sourceUrl": "https://store.anycubic.com/products/photon-mono-4-ultra"
       }
     },
     {
@@ -640,6 +660,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Anycubic%20Photon%20Mono%20M5s%20Pro.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-anycubic-photon-mono-m5s-pro.jpg",
+        "sourceId": "anycubic",
+        "sourceUrl": "https://store.anycubic.com/products/photon-mono-m5s-pro"
       }
     },
     {
@@ -653,6 +678,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Anycubic%20Photon%20Mono%20M7.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-anycubic-photon-mono-m7.jpg",
+        "sourceId": "anycubic",
+        "sourceUrl": "https://store.anycubic.com/products/photon-mono-m7"
       }
     },
     {
@@ -666,6 +696,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Anycubic%20Photon%20Mono%20M7%20Max.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-anycubic-photon-mono-m7-max.jpg",
+        "sourceId": "anycubic",
+        "sourceUrl": "https://store.anycubic.com/products/photon-mono-m7-max"
       }
     },
     {
@@ -679,6 +714,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Anycubic%20Photon%20Mono%20M7%20Pro.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-anycubic-photon-mono-m7-pro.jpg",
+        "sourceId": "anycubic",
+        "sourceUrl": "https://store.anycubic.com/products/photon-mono-m7-pro"
       }
     },
     {
@@ -731,6 +771,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Anycubic%20Photon%20Mono%20X%206K.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-anycubic-photon-mono-x-6k.png",
+        "sourceId": "anycubic",
+        "sourceUrl": "https://store.anycubic.com/products/limited-edition-photon-mono-x-6k"
       }
     },
     {
@@ -770,6 +815,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Anycubic%20Photon%20P1.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-anycubic-photon-p1.jpg",
+        "sourceId": "anycubic",
+        "sourceUrl": "https://store.anycubic.com/products/photon-p1-resin-3d-printer"
       }
     },
     {
@@ -783,6 +833,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Anycubic%20Photon%20P1%20Max.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-anycubic-photon-p1-max.jpg",
+        "sourceId": "anycubic",
+        "sourceUrl": "https://store.anycubic.com/products/photon-p1-max-best-large-resin-3d-printer"
       }
     },
     {
@@ -2925,6 +2980,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Elegoo%20Jupiter%202.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-elegoo-jupiter-2.jpg",
+        "sourceId": "elegoo",
+        "sourceUrl": "https://www.elegoo.com/products/elegoo-jupiter-2"
       }
     },
     {
@@ -2938,6 +2998,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Elegoo%20Mars.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-elegoo-mars.jpg",
+        "sourceId": "elegoo",
+        "sourceUrl": "https://www.elegoo.com/products/elegoo-mars-lcd-3d-printer"
       }
     },
     {
@@ -2951,6 +3016,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Elegoo%20Mars%202.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-elegoo-mars-2.jpg",
+        "sourceId": "elegoo",
+        "sourceUrl": "https://www.elegoo.com/products/elegoo-mars-2-mono-lcd-3d-printer"
       }
     },
     {
@@ -2964,6 +3034,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Elegoo%20Mars%202%20Pro.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-elegoo-mars-2-pro.jpg",
+        "sourceId": "elegoo",
+        "sourceUrl": "https://www.elegoo.com/products/elegoo-mars-2-pro-mono-lcd-3d-printer"
       }
     },
     {
@@ -2990,6 +3065,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Elegoo%20Mars%204.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-elegoo-mars-4.jpg",
+        "sourceId": "elegoo",
+        "sourceUrl": "https://www.elegoo.com/products/elegoo-mars-4-msla-resin-3d-printer-with-9k-mono-lcd"
       }
     },
     {
@@ -3003,6 +3083,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Elegoo%20Mars%204%20DLP.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-elegoo-mars-4-dlp.jpg",
+        "sourceId": "elegoo",
+        "sourceUrl": "https://www.elegoo.com/products/elegoo-mars-4-dlp-resin-3d-printer"
       }
     },
     {
@@ -3016,6 +3101,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Elegoo%20Mars%204%20Max.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-elegoo-mars-4-max.jpg",
+        "sourceId": "elegoo",
+        "sourceUrl": "https://www.elegoo.com/products/elegoo-mars-4-max-msla-resin-3d-printer-with-6k-mono-lcd"
       }
     },
     {
@@ -3029,6 +3119,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Elegoo%20Mars%204%20Ultra.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-elegoo-mars-4-ultra.jpg",
+        "sourceId": "elegoo",
+        "sourceUrl": "https://www.elegoo.com/products/elegoo-mars-4-ultra-msla-resin-3d-printer-with-9k-mono-lcd"
       }
     },
     {
@@ -3042,6 +3137,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Elegoo%20Mars%205.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-elegoo-mars-5.jpg",
+        "sourceId": "elegoo",
+        "sourceUrl": "https://www.elegoo.com/products/mars-5-4k-6-6inch-monochrome-lcd-resin-3d-printer"
       }
     },
     {
@@ -3055,6 +3155,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Elegoo%20Mars%205%20Ultra.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-elegoo-mars-5-ultra.jpg",
+        "sourceId": "elegoo",
+        "sourceUrl": "https://www.elegoo.com/products/mars-5-ultra-9k-7inch-monochrome-lcd-resin-3d-printer"
       }
     },
     {
@@ -3068,6 +3173,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Elegoo%20Mars%20C.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-elegoo-mars-c.jpg",
+        "sourceId": "elegoo",
+        "sourceUrl": "https://www.elegoo.com/products/elegoo-mars-c-lcd-3d-printer"
       }
     },
     {
@@ -3373,6 +3483,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Elegoo%20Saturn%203.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-elegoo-saturn-3.jpg",
+        "sourceId": "elegoo",
+        "sourceUrl": "https://www.elegoo.com/products/elegoo-saturn-3-resin-3d-printer-12k"
       }
     },
     {
@@ -3386,6 +3501,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Elegoo%20Saturn%203%20Ultra.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-elegoo-saturn-3-ultra.jpg",
+        "sourceId": "elegoo",
+        "sourceUrl": "https://www.elegoo.com/products/elegoo-saturn-3-ultra-resin-3d-printer-12k"
       }
     },
     {
@@ -3399,6 +3519,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Elegoo%20Saturn%204.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-elegoo-saturn-4.jpg",
+        "sourceId": "elegoo",
+        "sourceUrl": "https://www.elegoo.com/products/saturn-4-12k-10inch-monochrome-lcd-resin-3d-printer"
       }
     },
     {
@@ -3425,6 +3550,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Elegoo%20Saturn%204%20Ultra%2016K.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-elegoo-saturn-4-ultra-16k.jpg",
+        "sourceId": "elegoo",
+        "sourceUrl": "https://www.elegoo.com/products/saturn-4-ultra-16k-10inch-monochrome-lcd-resin-3d-printer"
       }
     },
     {
@@ -7750,6 +7880,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/UniFormation%20GKtwo.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-uniformation-gktwo.png",
+        "sourceId": "uniformation",
+        "sourceUrl": "https://uniformation3d.com/products/uniformation-gktwo-10-3-8k-resin-printer"
       }
     },
     {

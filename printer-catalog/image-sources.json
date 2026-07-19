@@ -1,0 +1,28 @@
+{
+  "sources": [
+    {
+      "id": "elegoo",
+      "brand": "Elegoo",
+      "feedUrl": "https://www.elegoo.com/products.json?limit=250",
+      "storefrontUrl": "https://www.elegoo.com",
+      "productTypes": ["LCD 3D Printers", "DLP 3D Printers"]
+    },
+    {
+      "id": "anycubic",
+      "brand": "Anycubic",
+      "feedUrl": "https://store.anycubic.com/products.json?limit=250",
+      "storefrontUrl": "https://store.anycubic.com",
+      "productTypes": ["LCD 3D Printer", "End Of Life", "Refurbished 3D Printers"]
+    },
+    {
+      "id": "uniformation",
+      "brand": "Uniformation",
+      "feedUrl": "https://uniformation3d.com/products.json?limit=250",
+      "storefrontUrl": "https://uniformation3d.com",
+      "productTypes": [""],
+      "titleAliases": {
+        "gktwo 10 3 8k": "GKtwo"
+      }
+    }
+  ]
+}

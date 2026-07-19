@@ -9,18 +9,22 @@ import {
   type CatalogOverrides,
   type CatalogSource,
   type GeneratedPrinterPreset,
+  type ManufacturerImage,
 } from './printerCatalog'
 
 const root = path.resolve(import.meta.dirname, '..')
 const sourcesPath = path.join(root, 'printer-catalog/sources.json')
 const overridesPath = path.join(root, 'printer-catalog/overrides.json')
+const manufacturerImagesPath = path.join(root, 'printer-catalog/manufacturer-images.json')
 const outputPath = path.join(root, 'printer-catalog/catalog.generated.json')
 const imagesRoot = path.join(root, 'public/printer-presets')
+const orcaImagesRoot = path.join(imagesRoot, 'orcaslicer')
 const update = process.argv.includes('--update')
 const check = process.argv.includes('--check')
 
 const manifest = JSON.parse(readFileSync(sourcesPath, 'utf8')) as { sources: CatalogSource[] }
 const overrides = JSON.parse(readFileSync(overridesPath, 'utf8')) as CatalogOverrides
+const manufacturerImages = JSON.parse(readFileSync(manufacturerImagesPath, 'utf8')) as { images: ManufacturerImage[] }
 
 if (check) {
   validateCommittedCatalog(manifest.sources)
@@ -54,11 +58,11 @@ function synchronizeCatalog(sources: CatalogSource[]) {
         revision,
         license,
       })),
-      presets: applyCatalogOverrides(presets, overrides),
+      presets: applyManufacturerImages(applyCatalogOverrides(presets, overrides)),
     }
     validateCatalog(catalog.presets, sources)
     writeFileSync(outputPath, `${JSON.stringify(catalog, null, 2)}\n`)
-    rmSync(imagesRoot, { recursive: true, force: true })
+    rmSync(orcaImagesRoot, { recursive: true, force: true })
     const referencedImages = new Set(catalog.presets.flatMap((preset) => (preset.image ? [preset.image.src] : [])))
     for (const [destination, sourceImage] of images) {
       if (!referencedImages.has(destination)) continue
@@ -71,6 +75,14 @@ function synchronizeCatalog(sources: CatalogSource[]) {
   } finally {
     rmSync(temporaryRoot, { recursive: true, force: true })
   }
+}
+
+function applyManufacturerImages(presets: GeneratedPrinterPreset[]) {
+  const imagesByPreset = new Map(manufacturerImages.images.map((image) => [image.presetId, image]))
+  return presets.map((preset) => {
+    const image = imagesByPreset.get(preset.id)
+    return image ? { ...preset, image: { src: image.src, sourceId: image.sourceId, sourceUrl: image.productUrl } } : preset
+  })
 }
 
 function checkoutSource(temporaryRoot: string, source: CatalogSource) {

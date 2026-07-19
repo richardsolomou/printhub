@@ -1,0 +1,220 @@
+{
+  "images": [
+    {
+      "presetId": "resin-anycubic-photon",
+      "sourceId": "anycubic",
+      "productUrl": "https://store.anycubic.com/products/anycubic-photon-3d-printer",
+      "sourceUrl": "https://cdn.shopify.com/s/files/1/0245/5519/2380/products/Photon_1_1.jpg?v=1769998613",
+      "src": "/printer-presets/manufacturer/resin-anycubic-photon.jpg",
+      "checkedAt": "2026-07-19"
+    },
+    {
+      "presetId": "resin-anycubic-photon-mono",
+      "sourceId": "anycubic",
+      "productUrl": "https://store.anycubic.com/products/photon-mono-resin-3d-printer",
+      "sourceUrl": "https://cdn.shopify.com/s/files/1/0245/5519/2380/products/PhotonMono_1.jpg?v=1638072875",
+      "src": "/printer-presets/manufacturer/resin-anycubic-photon-mono.jpg",
+      "checkedAt": "2026-07-19"
+    },
+    {
+      "presetId": "resin-anycubic-photon-mono-4",
+      "sourceId": "anycubic",
+      "productUrl": "https://store.anycubic.com/products/photon-mono-4",
+      "sourceUrl": "https://cdn.shopify.com/s/files/1/0245/5519/2380/files/Mono4_348b0a8e-7d73-4abf-9a19-133373ad5778.jpg?v=1764933494",
+      "src": "/printer-presets/manufacturer/resin-anycubic-photon-mono-4.jpg",
+      "checkedAt": "2026-07-19"
+    },
+    {
+      "presetId": "resin-anycubic-photon-mono-4-ultra",
+      "sourceId": "anycubic",
+      "productUrl": "https://store.anycubic.com/products/photon-mono-4-ultra",
+      "sourceUrl": "https://cdn.shopify.com/s/files/1/0245/5519/2380/files/PhotonMono4Ultra_2.jpg?v=1764930898",
+      "src": "/printer-presets/manufacturer/resin-anycubic-photon-mono-4-ultra.jpg",
+      "checkedAt": "2026-07-19"
+    },
+    {
+      "presetId": "resin-anycubic-photon-mono-m5s-pro",
+      "sourceId": "anycubic",
+      "productUrl": "https://store.anycubic.com/products/photon-mono-m5s-pro",
+      "sourceUrl": "https://cdn.shopify.com/s/files/1/0245/5519/2380/files/M5sPro_1.jpg?v=1770001454",
+      "src": "/printer-presets/manufacturer/resin-anycubic-photon-mono-m5s-pro.jpg",
+      "checkedAt": "2026-07-19"
+    },
+    {
+      "presetId": "resin-anycubic-photon-mono-m7",
+      "sourceId": "anycubic",
+      "productUrl": "https://store.anycubic.com/products/photon-mono-m7",
+      "sourceUrl": "https://cdn.shopify.com/s/files/1/0245/5519/2380/files/PhotonMonoM7_8.jpg?v=1760525699",
+      "src": "/printer-presets/manufacturer/resin-anycubic-photon-mono-m7.jpg",
+      "checkedAt": "2026-07-19"
+    },
+    {
+      "presetId": "resin-anycubic-photon-mono-m7-max",
+      "sourceId": "anycubic",
+      "productUrl": "https://store.anycubic.com/products/photon-mono-m7-max",
+      "sourceUrl": "https://cdn.shopify.com/s/files/1/0245/5519/2380/files/M7M_7553d0a9-9db9-4e40-8aae-b426df918a96.jpg?v=1764933627",
+      "src": "/printer-presets/manufacturer/resin-anycubic-photon-mono-m7-max.jpg",
+      "checkedAt": "2026-07-19"
+    },
+    {
+      "presetId": "resin-anycubic-photon-mono-m7-pro",
+      "sourceId": "anycubic",
+      "productUrl": "https://store.anycubic.com/products/photon-mono-m7-pro",
+      "sourceUrl": "https://cdn.shopify.com/s/files/1/0245/5519/2380/files/PhotonMonoM7Pro_4.jpg?v=1761208755",
+      "src": "/printer-presets/manufacturer/resin-anycubic-photon-mono-m7-pro.jpg",
+      "checkedAt": "2026-07-19"
+    },
+    {
+      "presetId": "resin-anycubic-photon-mono-x-6k",
+      "sourceId": "anycubic",
+      "productUrl": "https://store.anycubic.com/products/limited-edition-photon-mono-x-6k",
+      "sourceUrl": "https://cdn.shopify.com/s/files/1/0245/5519/2380/products/1.png?v=1640685152",
+      "src": "/printer-presets/manufacturer/resin-anycubic-photon-mono-x-6k.png",
+      "checkedAt": "2026-07-19"
+    },
+    {
+      "presetId": "resin-anycubic-photon-p1",
+      "sourceId": "anycubic",
+      "productUrl": "https://store.anycubic.com/products/photon-p1-resin-3d-printer",
+      "sourceUrl": "https://cdn.shopify.com/s/files/1/0245/5519/2380/files/74b96dbb2d19db9758ba306fc55ad040.jpg?v=1780452377",
+      "src": "/printer-presets/manufacturer/resin-anycubic-photon-p1.jpg",
+      "checkedAt": "2026-07-19"
+    },
+    {
+      "presetId": "resin-anycubic-photon-p1-max",
+      "sourceId": "anycubic",
+      "productUrl": "https://store.anycubic.com/products/photon-p1-max-best-large-resin-3d-printer",
+      "sourceUrl": "https://cdn.shopify.com/s/files/1/0245/5519/2380/files/6391ace427ade714b70fb966024ae804_cfdff6be-e36d-4699-8bc1-d302ed580387.jpg?v=1783787372",
+      "src": "/printer-presets/manufacturer/resin-anycubic-photon-p1-max.jpg",
+      "checkedAt": "2026-07-19"
+    },
+    {
+      "presetId": "resin-elegoo-jupiter-2",
+      "sourceId": "elegoo",
+      "productUrl": "https://www.elegoo.com/products/elegoo-jupiter-2",
+      "sourceUrl": "https://cdn.shopify.com/s/files/1/0296/9026/5648/files/JPT2.jpg?v=1775530749",
+      "src": "/printer-presets/manufacturer/resin-elegoo-jupiter-2.jpg",
+      "checkedAt": "2026-07-19"
+    },
+    {
+      "presetId": "resin-elegoo-mars",
+      "sourceId": "elegoo",
+      "productUrl": "https://www.elegoo.com/products/elegoo-mars-lcd-3d-printer",
+      "sourceUrl": "https://cdn.shopify.com/s/files/1/0296/9026/5648/files/elegoo-mars-resin-3d-printer-1.jpg?v=1706524003",
+      "src": "/printer-presets/manufacturer/resin-elegoo-mars.jpg",
+      "checkedAt": "2026-07-19"
+    },
+    {
+      "presetId": "resin-elegoo-mars-2",
+      "sourceId": "elegoo",
+      "productUrl": "https://www.elegoo.com/products/elegoo-mars-2-mono-lcd-3d-printer",
+      "sourceUrl": "https://cdn.shopify.com/s/files/1/0296/9026/5648/files/elegoo-mars-2-resin-3d-printer-1.jpg?v=1706524317",
+      "src": "/printer-presets/manufacturer/resin-elegoo-mars-2.jpg",
+      "checkedAt": "2026-07-19"
+    },
+    {
+      "presetId": "resin-elegoo-mars-2-pro",
+      "sourceId": "elegoo",
+      "productUrl": "https://www.elegoo.com/products/elegoo-mars-2-pro-mono-lcd-3d-printer",
+      "sourceUrl": "https://cdn.shopify.com/s/files/1/0296/9026/5648/files/elegoo-mars-2-pro-resin-3d-printer-1.jpg?v=1706524471",
+      "src": "/printer-presets/manufacturer/resin-elegoo-mars-2-pro.jpg",
+      "checkedAt": "2026-07-19"
+    },
+    {
+      "presetId": "resin-elegoo-mars-4",
+      "sourceId": "elegoo",
+      "productUrl": "https://www.elegoo.com/products/elegoo-mars-4-msla-resin-3d-printer-with-9k-mono-lcd",
+      "sourceUrl": "https://cdn.shopify.com/s/files/1/0296/9026/5648/files/elegoo-mars-4-resin-3d-printer-2.jpg?v=1706525289",
+      "src": "/printer-presets/manufacturer/resin-elegoo-mars-4.jpg",
+      "checkedAt": "2026-07-19"
+    },
+    {
+      "presetId": "resin-elegoo-mars-4-dlp",
+      "sourceId": "elegoo",
+      "productUrl": "https://www.elegoo.com/products/elegoo-mars-4-dlp-resin-3d-printer",
+      "sourceUrl": "https://cdn.shopify.com/s/files/1/0296/9026/5648/files/elegoo-mars-4-dlp-3d-printer-1.jpg?v=1706525174",
+      "src": "/printer-presets/manufacturer/resin-elegoo-mars-4-dlp.jpg",
+      "checkedAt": "2026-07-19"
+    },
+    {
+      "presetId": "resin-elegoo-mars-4-max",
+      "sourceId": "elegoo",
+      "productUrl": "https://www.elegoo.com/products/elegoo-mars-4-max-msla-resin-3d-printer-with-6k-mono-lcd",
+      "sourceUrl": "https://cdn.shopify.com/s/files/1/0296/9026/5648/files/elegoo-mars-4-max-resin-3d-printer-1.jpg?v=1706525058",
+      "src": "/printer-presets/manufacturer/resin-elegoo-mars-4-max.jpg",
+      "checkedAt": "2026-07-19"
+    },
+    {
+      "presetId": "resin-elegoo-mars-4-ultra",
+      "sourceId": "elegoo",
+      "productUrl": "https://www.elegoo.com/products/elegoo-mars-4-ultra-msla-resin-3d-printer-with-9k-mono-lcd",
+      "sourceUrl": "https://cdn.shopify.com/s/files/1/0296/9026/5648/files/elegoo-mars-4-ultra-3d-printer-2.jpg?v=1706525456",
+      "src": "/printer-presets/manufacturer/resin-elegoo-mars-4-ultra.jpg",
+      "checkedAt": "2026-07-19"
+    },
+    {
+      "presetId": "resin-elegoo-mars-5",
+      "sourceId": "elegoo",
+      "productUrl": "https://www.elegoo.com/products/mars-5-4k-6-6inch-monochrome-lcd-resin-3d-printer",
+      "sourceUrl": "https://cdn.shopify.com/s/files/1/0296/9026/5648/files/Mars_5.jpg?v=1743670551",
+      "src": "/printer-presets/manufacturer/resin-elegoo-mars-5.jpg",
+      "checkedAt": "2026-07-19"
+    },
+    {
+      "presetId": "resin-elegoo-mars-5-ultra",
+      "sourceId": "elegoo",
+      "productUrl": "https://www.elegoo.com/products/mars-5-ultra-9k-7inch-monochrome-lcd-resin-3d-printer",
+      "sourceUrl": "https://cdn.shopify.com/s/files/1/0296/9026/5648/files/f91c887f39b07095c6453b328b4b84cd_89b6a8ea-eb64-49b7-a161-96c53389bb6d.jpg?v=1748253800",
+      "src": "/printer-presets/manufacturer/resin-elegoo-mars-5-ultra.jpg",
+      "checkedAt": "2026-07-19"
+    },
+    {
+      "presetId": "resin-elegoo-mars-c",
+      "sourceId": "elegoo",
+      "productUrl": "https://www.elegoo.com/products/elegoo-mars-c-lcd-3d-printer",
+      "sourceUrl": "https://cdn.shopify.com/s/files/1/0296/9026/5648/files/elegoo-mars-c-resin-3d-printer-1.jpg?v=1706524119",
+      "src": "/printer-presets/manufacturer/resin-elegoo-mars-c.jpg",
+      "checkedAt": "2026-07-19"
+    },
+    {
+      "presetId": "resin-elegoo-saturn-3",
+      "sourceId": "elegoo",
+      "productUrl": "https://www.elegoo.com/products/elegoo-saturn-3-resin-3d-printer-12k",
+      "sourceUrl": "https://cdn.shopify.com/s/files/1/0296/9026/5648/files/Saturn_3_37cf127f-ef29-4159-b4d7-836f17188222.jpg?v=1730716287",
+      "src": "/printer-presets/manufacturer/resin-elegoo-saturn-3.jpg",
+      "checkedAt": "2026-07-19"
+    },
+    {
+      "presetId": "resin-elegoo-saturn-3-ultra",
+      "sourceId": "elegoo",
+      "productUrl": "https://www.elegoo.com/products/elegoo-saturn-3-ultra-resin-3d-printer-12k",
+      "sourceUrl": "https://cdn.shopify.com/s/files/1/0296/9026/5648/files/S3U.jpg?v=1744684455",
+      "src": "/printer-presets/manufacturer/resin-elegoo-saturn-3-ultra.jpg",
+      "checkedAt": "2026-07-19"
+    },
+    {
+      "presetId": "resin-elegoo-saturn-4",
+      "sourceId": "elegoo",
+      "productUrl": "https://www.elegoo.com/products/saturn-4-12k-10inch-monochrome-lcd-resin-3d-printer",
+      "sourceUrl": "https://cdn.shopify.com/s/files/1/0296/9026/5648/files/Saturn4frontview.jpg?v=1712902173",
+      "src": "/printer-presets/manufacturer/resin-elegoo-saturn-4.jpg",
+      "checkedAt": "2026-07-19"
+    },
+    {
+      "presetId": "resin-elegoo-saturn-4-ultra-16k",
+      "sourceId": "elegoo",
+      "productUrl": "https://www.elegoo.com/products/saturn-4-ultra-16k-10inch-monochrome-lcd-resin-3d-printer",
+      "sourceUrl": "https://cdn.shopify.com/s/files/1/0296/9026/5648/files/S4U-16K.jpg?v=1743670697",
+      "src": "/printer-presets/manufacturer/resin-elegoo-saturn-4-ultra-16k.jpg",
+      "checkedAt": "2026-07-19"
+    },
+    {
+      "presetId": "resin-uniformation-gktwo",
+      "sourceId": "uniformation",
+      "productUrl": "https://uniformation3d.com/products/uniformation-gktwo-10-3-8k-resin-printer",
+      "sourceUrl": "https://cdn.shopify.com/s/files/1/0644/1949/6153/files/uniformation_GK2_3d_printer.png?v=1753539422",
+      "src": "/printer-presets/manufacturer/resin-uniformation-gktwo.png",
+      "checkedAt": "2026-07-19"
+    }
+  ]
+}

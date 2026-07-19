@@ -18,12 +18,13 @@ import {
   type ResinPrinterProfile,
 } from '../../../core/platePlanner'
 import type { PrintType } from '../../../core/types'
-import type { PrinterPreset } from '../../../core/printerPresets'
+import { getPrinterPreset, type PrinterPreset } from '../../../core/printerPresets'
 import { savePlatePlannerProfiles } from '../../../server/fns'
 import { platePlannerQuery } from '../../queries'
 import { useWorkspaceSlug } from '../../workspace'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { PrinterPresetPicker } from './PrinterPresetPicker'
+import { PrinterPresetImage } from './PrinterPresetImage'
 import { SettingsActions, SettingsHeader, SettingsPage, SettingsSection } from './SettingsLayout'
 import { UnsavedChangesGuard } from './UnsavedChangesGuard'
 
@@ -172,6 +173,7 @@ function PrinterEditor({
   onChange: (profile: PrinterProfile) => void
   onRemove: () => void
 }) {
+  const preset = getPrinterPreset(profile.presetId)
   const updateCommon = (patch: Partial<Pick<PrinterProfile, 'name' | 'enabled' | 'widthMm' | 'depthMm' | 'heightMm' | 'spacingMm'>>) =>
     onChange({ ...profile, ...patch })
   const setPrintType = (printType: PrintType) =>
@@ -187,82 +189,101 @@ function PrinterEditor({
     )
 
   return (
-    <section className="rounded-lg border bg-card/40 p-4" aria-label={`Printer ${index + 1}`}>
-      <div className="flex items-start gap-3">
-        <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-[minmax(0,1fr)_9rem_auto]">
-          <Field>
-            <FieldLabel htmlFor={`${profile.id}-name`}>Printer name</FieldLabel>
-            <Input
-              id={`${profile.id}-name`}
-              value={profile.name}
-              placeholder={profile.printType === 'resin' ? 'Resin printer' : 'Filament printer'}
-              maxLength={100}
-              onChange={(event) => updateCommon({ name: event.target.value })}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor={`${profile.id}-print-type`}>Print type</FieldLabel>
-            <Select items={PRINT_TYPES} value={profile.printType} onValueChange={(value) => value && setPrintType(value)}>
-              <SelectTrigger
-                id={`${profile.id}-print-type`}
-                className="w-full"
-                aria-label={`Print type for ${profile.name || `printer ${index + 1}`}`}
+    <section className="overflow-hidden rounded-xl border bg-card/40" aria-label={`Printer ${index + 1}`}>
+      <div className="grid gap-4 p-4 md:grid-cols-[8rem_minmax(0,1fr)]">
+        <PrinterPresetImage
+          printer={preset ?? profile}
+          className="size-full min-h-32 rounded-lg border bg-muted/40 md:aspect-square md:min-h-0"
+        />
+        <div className="min-w-0">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <Badge variant={profile.printType === 'resin' ? 'secondary' : 'outline'}>
+              {profile.printType === 'resin' ? 'Resin' : 'Filament'}
+            </Badge>
+            {preset && <span className="text-xs text-muted-foreground">Predefined profile</span>}
+            <div className="ml-auto flex items-center gap-2">
+              <Field className="flex-row items-center gap-2">
+                <FieldLabel htmlFor={`${profile.id}-enabled`} className="text-xs text-muted-foreground">
+                  Enabled
+                </FieldLabel>
+                <Switch
+                  id={`${profile.id}-enabled`}
+                  checked={profile.enabled}
+                  onCheckedChange={(enabled) => updateCommon({ enabled })}
+                  aria-label={`Enable ${profile.name || `printer ${index + 1}`}`}
+                />
+              </Field>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="text-muted-foreground hover:text-destructive"
+                aria-label={`Remove ${profile.name || `printer ${index + 1}`}`}
+                onClick={onRemove}
               >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PRINT_TYPES.map((printType) => (
-                  <SelectItem key={printType.value} value={printType.value}>
-                    {printType.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field className="sm:justify-items-center">
-            <FieldLabel htmlFor={`${profile.id}-enabled`}>Enabled</FieldLabel>
-            <Switch
-              id={`${profile.id}-enabled`}
-              checked={profile.enabled}
-              onCheckedChange={(enabled) => updateCommon({ enabled })}
-              aria-label={`Enable ${profile.name || `printer ${index + 1}`}`}
+                <Trash2 />
+              </Button>
+            </div>
+          </div>
+          <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_9rem]">
+            <Field>
+              <FieldLabel htmlFor={`${profile.id}-name`}>Printer name</FieldLabel>
+              <Input
+                id={`${profile.id}-name`}
+                value={profile.name}
+                placeholder={profile.printType === 'resin' ? 'Resin printer' : 'Filament printer'}
+                maxLength={100}
+                onChange={(event) => updateCommon({ name: event.target.value })}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor={`${profile.id}-print-type`}>Print type</FieldLabel>
+              <Select
+                items={PRINT_TYPES}
+                value={profile.printType}
+                onValueChange={(value) => value && value !== profile.printType && setPrintType(value)}
+              >
+                <SelectTrigger
+                  id={`${profile.id}-print-type`}
+                  className="w-full"
+                  aria-label={`Print type for ${profile.name || `printer ${index + 1}`}`}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRINT_TYPES.map((printType) => (
+                    <SelectItem key={printType.value} value={printType.value}>
+                      {printType.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
+          <div className="mt-3 grid gap-3 rounded-lg bg-muted/25 p-3 sm:grid-cols-3">
+            <NumberField
+              id={`${profile.id}-width`}
+              label="Usable width"
+              value={profile.widthMm}
+              onChange={(widthMm) => updateCommon({ widthMm })}
             />
-          </Field>
+            <NumberField
+              id={`${profile.id}-depth`}
+              label="Usable depth"
+              value={profile.depthMm}
+              onChange={(depthMm) => updateCommon({ depthMm })}
+            />
+            <NumberField
+              id={`${profile.id}-height`}
+              label="Usable height"
+              value={profile.heightMm}
+              onChange={(heightMm) => updateCommon({ heightMm })}
+            />
+          </div>
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="mt-6 shrink-0 text-muted-foreground hover:text-destructive"
-          aria-label={`Remove ${profile.name || `printer ${index + 1}`}`}
-          onClick={onRemove}
-        >
-          <Trash2 />
-        </Button>
       </div>
 
-      <div className="mt-3 grid gap-3 sm:grid-cols-3">
-        <NumberField
-          id={`${profile.id}-width`}
-          label="Usable width"
-          value={profile.widthMm}
-          onChange={(widthMm) => updateCommon({ widthMm })}
-        />
-        <NumberField
-          id={`${profile.id}-depth`}
-          label="Usable depth"
-          value={profile.depthMm}
-          onChange={(depthMm) => updateCommon({ depthMm })}
-        />
-        <NumberField
-          id={`${profile.id}-height`}
-          label="Usable height"
-          value={profile.heightMm}
-          onChange={(heightMm) => updateCommon({ heightMm })}
-        />
-      </div>
-
-      <details className="mt-4 rounded-md border bg-muted/20 p-3">
+      <details className="border-t bg-muted/15 p-4">
         <summary className="cursor-pointer font-medium" aria-label="Planning and material assumptions">
           <span className="inline-flex max-w-full flex-wrap items-center gap-2">
             <span>Planning and material assumptions</span>
@@ -448,8 +469,8 @@ function profileFromPreset(preset: PrinterPreset): PrinterProfile {
     heightMm: preset.heightMm,
   })
   return profile.printType === 'filament' && preset.filamentDiameterMm
-    ? { ...profile, filamentDiameterMm: preset.filamentDiameterMm }
-    : profile
+    ? { ...profile, presetId: preset.id, filamentDiameterMm: preset.filamentDiameterMm }
+    : { ...profile, presetId: preset.id }
 }
 
 function profilesValidationError(profiles: PrinterProfile[]) {

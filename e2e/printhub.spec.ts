@@ -45,13 +45,20 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
   await expect(page.getByRole('heading', { name: 'Add your printers' })).toBeVisible()
   await page.getByRole('button', { name: 'Add printer' }).click()
   await screenshot(page, 'printer-preset-picker-desktop')
-  await page.getByLabel('Search printers').fill('Mars 5 Ultra')
-  await page.getByRole('button', { name: 'Add Elegoo Mars 5 Ultra' }).click()
+  await page.getByLabel('Search printers').fill('resin')
+  await expect.poll(() => page.getByRole('button', { name: /^Add / }).count()).toBeLessThan(30)
+  await page.getByLabel('Search printers').fill('')
+  await page.getByRole('button', { name: /^Elegoo/ }).click()
+  await expect(page.getByRole('button', { name: 'Add Elegoo Mars 2', exact: true })).toBeVisible()
+  await page.getByLabel('Search printers').fill('Elegoo Mars 2')
+  await screenshot(page, 'printer-preset-search-desktop')
+  await page.getByRole('button', { name: 'Add Elegoo Mars 2', exact: true }).click()
   const presetPrinter = page.getByRole('region', { name: 'Printer 1' })
-  await expect(presetPrinter.getByLabel('Printer name')).toHaveValue('Elegoo Mars 5 Ultra')
-  await expect(presetPrinter.getByLabel('Usable width')).toHaveValue('153.36')
-  await expect(presetPrinter.getByLabel('Usable depth')).toHaveValue('77.76')
-  await expect(presetPrinter.getByLabel('Usable height')).toHaveValue('165')
+  await expect(presetPrinter.getByLabel('Printer name')).toHaveValue('Elegoo Mars 2')
+  await expect(presetPrinter.getByLabel('Usable width')).toHaveValue('82.62')
+  await expect(presetPrinter.getByLabel('Usable depth')).toHaveValue('130.56')
+  await expect(presetPrinter.getByLabel('Usable height')).toHaveValue('150')
+  await expect.poll(() => presetPrinter.locator('img').evaluate((image) => image.naturalWidth)).toBeGreaterThan(0)
   await fillPrinter(page.getByRole('region', { name: 'Printer 1' }), {
     name: 'Resin Station',
     printType: 'Resin',
@@ -342,6 +349,7 @@ test('complete resin, filament, fleet-adaptive, settings, and invite journey', a
   }
   await page.setViewportSize({ width: 1280, height: 800 })
   await resinAssumptions.getByLabel('Planning and material assumptions').click()
+  await expect(page.getByRole('region', { name: 'Printer 1' }).locator('img')).toHaveCount(1)
   await screenshot(page, 'mixed-printers-desktop')
   await mobileScreenshot(page, 'mixed-printers-mobile')
 
