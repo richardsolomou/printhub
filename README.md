@@ -42,7 +42,7 @@ Along the way, PrintHub provides:
 
 PrintHub can run as a single self-hosted appliance or as a multi-tenant hosted service. Every account gets a private workspace with its own board, printers, members, settings, and storage configuration, and users can also join other workspaces by invitation.
 
-Self-hosted installations keep the application, database, files, previews, and production history under the operator's control. Hosted customer workspaces must choose S3-compatible or connected cloud storage so tenants cannot persist models on the application host, while workspaces owned by a deployment administrator may still use local folders. Every local folder, cloud folder, or S3 prefix receives an enforced workspace namespace. PrintHub does not provide slicing, printer control, a public model gallery, marketplace, printer-vendor account, or mandatory hosted file library.
+Self-hosted installations keep the application, database, files, previews, and production history under the operator's control. Hosted customer workspaces must choose S3-compatible or connected cloud storage so tenants cannot persist models on the application host, while workspaces created by a super admin may still use local folders. Every local folder, cloud folder, or S3 prefix receives an enforced workspace namespace. PrintHub does not provide slicing, printer control, a public model gallery, marketplace, printer-vendor account, or mandatory hosted file library.
 
 Anonymous usage telemetry is enabled by default, never includes model or request data, and can be disabled at any time — the [telemetry page](docs/telemetry.md) lists exactly what is sent.
 

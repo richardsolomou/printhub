@@ -691,7 +691,7 @@ export class DrizzleRepository implements Repository {
         name: row.name,
         image: row.image ?? undefined,
         role: row.role === 'admin' ? ('admin' as const) : ('requester' as const),
-        deploymentAdmin: row.role === 'admin',
+        superAdmin: row.role === 'admin',
       }))
   }
 
@@ -699,7 +699,7 @@ export class DrizzleRepository implements Repository {
     return Boolean(this.database.select({ id: user.id }).from(user).where(eq(user.email, email.toLowerCase())).get())
   }
 
-  ownedByDeploymentAdmin() {
+  isSuperAdminWorkspace() {
     return Boolean(
       this.database
         .select({ id: user.id })

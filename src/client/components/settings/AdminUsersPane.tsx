@@ -24,7 +24,7 @@ import { SettingsActions, SettingsHeader, SettingsPage, SettingsSection } from '
 
 const ROLE_OPTIONS = [
   { value: 'requester', label: 'User' },
-  { value: 'admin', label: 'Deployment admin' },
+  { value: 'admin', label: 'Super admin' },
 ] as const
 
 const columnHelper = createColumnHelper<Identity>()
@@ -57,7 +57,7 @@ export function AdminUsersPane() {
 
   return (
     <SettingsPage>
-      <SettingsHeader title="Users" description="Manage every account and deployment administrator." />
+      <SettingsHeader title="Users" description="Manage every account and super admin." />
       <SettingsSection className="p-0 max-sm:[&_td]:px-1.5 max-sm:[&_td:nth-child(2)]:hidden max-sm:[&_th]:px-1.5 max-sm:[&_th:nth-child(2)]:hidden">
         <DataTable
           columns={userColumns({
@@ -86,7 +86,7 @@ export function AdminUsersPane() {
         />
       </SettingsSection>
       {dialog?.action === 'impersonate' && <ImpersonateUserDialog user={dialog.user} onDone={() => setDialog(null)} />}
-      {dialog?.action === 'role' && <ChangeDeploymentRoleDialog user={dialog.user} onDone={() => setDialog(null)} />}
+      {dialog?.action === 'role' && <ChangeServerRoleDialog user={dialog.user} onDone={() => setDialog(null)} />}
       {dialog?.action === 'password' && <SetPasswordDialog user={dialog.user} onDone={() => setDialog(null)} />}
       {adding && <CreateUserDialog passwordEnabled={passwordEnabled} onDone={() => setAdding(false)} />}
       <SettingsActions>
@@ -121,7 +121,7 @@ function userColumns({
       ),
     }),
     columnHelper.accessor('email', { header: 'Email' }),
-    columnHelper.accessor('role', { header: 'Role', cell: DeploymentRoleCell }),
+    columnHelper.accessor('role', { header: 'Role', cell: ServerRoleCell }),
     columnHelper.display({
       id: 'actions',
       header: 'Actions',
@@ -161,7 +161,7 @@ function UserActions({
         </Button>
         <Button type="button" variant="ghost" className="w-full justify-start" onClick={() => choose('role')}>
           <ShieldCheck />
-          Change deployment role
+          Change server role
         </Button>
         {passwordEnabled && (
           <Button type="button" variant="ghost" className="w-full justify-start" onClick={() => choose('password')}>
@@ -174,8 +174,8 @@ function UserActions({
   )
 }
 
-function DeploymentRoleCell({ getValue }: { getValue: () => Identity['role'] }) {
-  return <Badge variant="secondary">{getValue() === 'admin' ? 'Deployment admin' : 'User'}</Badge>
+function ServerRoleCell({ getValue }: { getValue: () => Identity['role'] }) {
+  return <Badge variant="secondary">{getValue() === 'admin' ? 'Super admin' : 'User'}</Badge>
 }
 
 function UserSummary({ user }: { user: Identity }) {
@@ -187,7 +187,7 @@ function UserSummary({ user }: { user: Identity }) {
         <p className="truncate text-sm text-muted-foreground">{user.email}</p>
       </div>
       <Badge variant="secondary" className="ml-auto">
-        {user.role === 'admin' ? 'Deployment admin' : 'User'}
+        {user.role === 'admin' ? 'Super admin' : 'User'}
       </Badge>
     </div>
   )
@@ -222,28 +222,28 @@ function ImpersonateUserDialog({ user, onDone }: { user: Identity; onDone: () =>
   )
 }
 
-function ChangeDeploymentRoleDialog({ user, onDone }: { user: Identity; onDone: () => void }) {
+function ChangeServerRoleDialog({ user, onDone }: { user: Identity; onDone: () => void }) {
   const queryClient = useQueryClient()
   const [role, setRole] = useState<Role>(user.role)
   const mutation = useMutation({
     mutationFn: async (nextRole: Role) => {
       const { error } = await authClient.admin.setRole({ userId: user.id, role: nextRole })
-      if (error) throw new Error('Could not change this deployment role.')
+      if (error) throw new Error('Could not change this server role.')
     },
     onSuccess: async (_, nextRole) => {
       await queryClient.invalidateQueries({ queryKey: ['deployment-users'] })
-      toast.success(`${user.name} is now ${nextRole === 'admin' ? 'a deployment admin' : 'a user'}.`)
+      toast.success(`${user.name} is now ${nextRole === 'admin' ? 'a super admin' : 'a user'}.`)
       onDone()
     },
   })
 
   return (
-    <DialogShell title="Change deployment role" onClose={onDone} preventClose={mutation.isPending}>
+    <DialogShell title="Change server role" onClose={onDone} preventClose={mutation.isPending}>
       <UserSummary user={user} />
       <Field>
-        <FieldLabel htmlFor={`deployment-role-${user.id}`}>Role</FieldLabel>
+        <FieldLabel htmlFor={`server-role-${user.id}`}>Role</FieldLabel>
         <Select items={ROLE_OPTIONS} value={role} onValueChange={(value) => setRole(value as Role)}>
-          <SelectTrigger className="w-full" id={`deployment-role-${user.id}`} aria-label={`Deployment role for ${user.name}`}>
+          <SelectTrigger className="w-full" id={`server-role-${user.id}`} aria-label={`Server role for ${user.name}`}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -254,7 +254,7 @@ function ChangeDeploymentRoleDialog({ user, onDone }: { user: Identity; onDone: 
             ))}
           </SelectContent>
         </Select>
-        <FieldDescription>Deployment admins can manage all accounts, authentication, telemetry, and diagnostics.</FieldDescription>
+        <FieldDescription>Super admins can manage all accounts, authentication, telemetry, and diagnostics.</FieldDescription>
         <FieldError>{mutation.error?.message}</FieldError>
       </Field>
       <div className="flex flex-wrap justify-end gap-2">

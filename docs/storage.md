@@ -4,7 +4,7 @@ PrintHub stores model files in a local folder, an S3-compatible bucket, or a con
 
 Every provider receives an enforced workspace namespace below the configured root. OAuth client secrets and refresh tokens are encrypted at rest with `/data/integration-secrets.key` (or `INTEGRATIONS_ENCRYPTION_KEY`).
 
-When `PRINTHUB_HOSTED=true`, local folders and the server folder browser are available only to workspaces owned by a deployment administrator. Existing local files in other workspaces remain readable so an administrator can migrate them, but uploads stay blocked until the workspace uses S3-compatible or connected cloud storage.
+When `PRINTHUB_HOSTED=true`, local folders and the server folder browser are available only to workspaces created by a super admin. Existing local files in other workspaces remain readable so an admin can migrate them, but uploads stay blocked until the workspace uses S3-compatible or connected cloud storage.
 
 ## Redirect URIs
 

@@ -34,14 +34,14 @@ describe('DrizzleRepository contract', () => {
   afterEach(() => repository.close())
 
   it('does not trust workspaces owned by ordinary users with local storage', () => {
-    expect(repository.ownedByDeploymentAdmin()).toBe(false)
+    expect(repository.isSuperAdminWorkspace()).toBe(false)
   })
 
-  it('trusts workspaces owned by deployment administrators with local storage', () => {
+  it('trusts workspaces owned by super admins with local storage', () => {
     repository.database.update(user).set({ role: 'admin' }).where(eq(user.id, 'owner')).run()
     repository.database.update(member).set({ role: 'owner' }).where(eq(member.userId, 'owner')).run()
 
-    expect(repository.ownedByDeploymentAdmin()).toBe(true)
+    expect(repository.isSuperAdminWorkspace()).toBe(true)
   })
 
   it('persists requests and tracks copy quantities transactionally', () => {
@@ -422,7 +422,7 @@ describe('DrizzleRepository contract', () => {
         name: 'Deployment Admin',
         image: undefined,
         role: 'admin',
-        deploymentAdmin: true,
+        superAdmin: true,
       },
       {
         id: 'member',
@@ -430,7 +430,7 @@ describe('DrizzleRepository contract', () => {
         name: 'Workspace Member',
         image: undefined,
         role: 'requester',
-        deploymentAdmin: false,
+        superAdmin: false,
       },
     ])
     expect(repository.deploymentUserExists('ADMIN@EXAMPLE.COM')).toBe(true)

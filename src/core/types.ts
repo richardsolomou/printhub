@@ -20,7 +20,7 @@ export type Identity = {
   workspaceSlug?: string
   twoFactorEnabled?: boolean
   impersonatedBy?: string
-  deploymentAdmin?: boolean
+  superAdmin?: boolean
 }
 
 export type Person = { id: string; name: string; color?: string }
@@ -259,7 +259,7 @@ export interface Repository {
   listUsers(): Identity[]
   listDeploymentUsers(): Identity[]
   deploymentUserExists(email: string): boolean
-  ownedByDeploymentAdmin(): boolean
+  isSuperAdminWorkspace(): boolean
   createInvite(invite: { id: string; tokenHash: string; role: Role; label?: string; recipientEmail?: string; expiresAt: number }): void
   listInvites(): Invite[]
   findInvite(tokenHash: string): Invite | undefined

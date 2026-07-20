@@ -25,7 +25,7 @@ export function AdminPanes({ section }: { section: AdminSection }) {
     <div className="grid items-start gap-6 sm:grid-cols-[210px_1fr]">
       <nav
         className="sticky top-6 flex flex-col gap-0.5 border-r pr-3 max-sm:static max-sm:grid max-sm:grid-cols-4 max-sm:border-r-0 max-sm:border-b max-sm:pb-2.5 max-sm:pr-0"
-        aria-label="Deployment administration sections"
+        aria-label="Super admin sections"
       >
         {panes.map((item) => (
           <Link

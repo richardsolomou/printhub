@@ -23,12 +23,7 @@ function AccountSettingsPage() {
   if (!identity) return null
   return (
     <div className="min-h-dvh">
-      <AppHeader
-        active="account"
-        isAdmin={identity.role === 'admin'}
-        isDeploymentAdmin={identity.deploymentAdmin}
-        navigationEnabled={hydrated}
-      />
+      <AppHeader active="account" isAdmin={identity.role === 'admin'} isSuperAdmin={identity.superAdmin} navigationEnabled={hydrated} />
       <main className="mx-auto w-full max-w-4xl px-5 pt-7 pb-12">
         <AccountPane me={identity} />
       </main>

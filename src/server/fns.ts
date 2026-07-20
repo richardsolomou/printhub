@@ -596,12 +596,12 @@ export const acceptWorkspaceInvite = createServerFn({ method: 'POST' })
     }),
   )
 
-function maskStorage(config: StorageConfig, repository?: Pick<Repository, 'ownedByDeploymentAdmin'>) {
+function maskStorage(config: StorageConfig, repository?: Pick<Repository, 'isSuperAdminWorkspace'>) {
   if (repository && hostedStorageRequiresRemote(config, repository)) return { ...config, root: '' }
   return config.adapter === 's3' ? { ...config, secretAccessKey: '' } : config
 }
 
-function maskStorageMigration(migration: StorageMigration | undefined, repository?: Pick<Repository, 'ownedByDeploymentAdmin'>) {
+function maskStorageMigration(migration: StorageMigration | undefined, repository?: Pick<Repository, 'isSuperAdminWorkspace'>) {
   return migration
     ? { ...migration, source: maskStorage(migration.source, repository), destination: maskStorage(migration.destination, repository) }
     : undefined
@@ -710,7 +710,7 @@ export const getDiagnostics = createServerFn({ method: 'GET' })
 export const getSystemDiagnostics = createServerFn({ method: 'GET' }).handler(async () =>
   rpc(async () => {
     const instance = await app()
-    if (!(await me(instance)).deploymentAdmin) throw new Response('forbidden', { status: 403 })
+    if (!(await me(instance)).superAdmin) throw new Response('forbidden', { status: 403 })
     return {
       version: __APP_VERSION__,
       authentication: {
@@ -758,7 +758,7 @@ export const listStorageDirectories = createServerFn({ method: 'POST' })
       const instance = await app()
       const context = await workspaceAdmin(instance, data.workspaceSlug)
       if (!localStorageAllowed(context.repository))
-        throw new Response('server folders are limited to workspaces owned by a deployment administrator', { status: 403 })
+        throw new Response('server folders are limited to super admin workspaces', { status: 403 })
       if (!path.isAbsolute(data.path)) throw new Response('folder path must be absolute', { status: 400 })
       const directory = path.resolve(data.path)
       let directories: Awaited<ReturnType<typeof storageDirectories>>
@@ -793,7 +793,7 @@ export const getCloudConnections = createServerFn({ method: 'GET' }).handler(asy
       'google-drive': publicGoogleDriveConnection(deploymentSettings(instance.repository), origin),
       onedrive: publicOneDriveConnection(deploymentSettings(instance.repository), origin),
     }
-    if (identity.deploymentAdmin) return connections
+    if (identity.superAdmin) return connections
     return Object.fromEntries(
       Object.entries(connections).map(([provider, connection]) => [
         provider,

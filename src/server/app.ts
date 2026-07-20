@@ -161,7 +161,7 @@ async function createApp() {
         name: user.name,
         image: userImage(user.email, user.image),
         role: user.role === 'admin' ? 'admin' : 'requester',
-        deploymentAdmin: user.role === 'admin',
+        superAdmin: user.role === 'admin',
         twoFactorEnabled: user.twoFactorEnabled ?? false,
         impersonatedBy: session.session.impersonatedBy ?? undefined,
       }
@@ -265,7 +265,7 @@ async function createApp() {
 
     const deleteWorkspace = async (headers: Headers, workspaceSlug: string, confirmation: string) => {
       const { baseIdentity, membership } = await workspaceMembership(headers, workspaceSlug)
-      if (membership.role !== 'owner') throw new Response('only the workspace owner can delete it', { status: 403 })
+      if (membership.role !== 'owner') throw new Response('you cannot delete this workspace', { status: 403 })
       if (confirmation !== membership.name) throw new Response('workspace name does not match', { status: 400 })
       const workspaces = repository!.listWorkspacesForUser(baseIdentity.id)
       if (workspaces.length <= 1) throw new Response('you cannot delete your only workspace', { status: 409 })

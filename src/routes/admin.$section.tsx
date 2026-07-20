@@ -25,7 +25,7 @@ function AdminPage() {
   useEscape(() => navigate({ to: '/' }))
   const identity = session.identity
   const validSection = isAdminSection(section) ? section : undefined
-  const authorized = Boolean(identity?.deploymentAdmin && validSection)
+  const authorized = Boolean(identity?.superAdmin && validSection)
   useEffect(() => {
     setHydrated(true)
   }, [])
@@ -35,7 +35,7 @@ function AdminPage() {
   if (!authorized) return null
   return (
     <div className="min-h-dvh">
-      <AppHeader active="admin" isAdmin={identity!.role === 'admin'} isDeploymentAdmin navigationEnabled={hydrated} />
+      <AppHeader active="admin" isAdmin={identity!.role === 'admin'} isSuperAdmin navigationEnabled={hydrated} />
       <main className="mx-auto w-full max-w-5xl px-5 pt-7 pb-12">
         <AdminPanes section={validSection!} />
       </main>

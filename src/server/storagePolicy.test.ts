@@ -7,13 +7,13 @@ describe('hosted storage policy', () => {
   it('requires remote storage for hosted deployments', () => {
     vi.stubEnv('PRINTHUB_HOSTED', 'true')
 
-    expect(hostedStorageRequiresRemote({ adapter: 'local', root: '/prints' }, { ownedByDeploymentAdmin: () => false })).toBe(true)
+    expect(hostedStorageRequiresRemote({ adapter: 'local', root: '/prints' }, { isSuperAdminWorkspace: () => false })).toBe(true)
   })
 
-  it('allows local storage for deployment administrator workspaces', () => {
+  it('allows local storage for super admin workspaces', () => {
     vi.stubEnv('PRINTHUB_HOSTED', 'true')
 
-    expect(localStorageAllowed({ ownedByDeploymentAdmin: () => true })).toBe(true)
+    expect(localStorageAllowed({ isSuperAdminWorkspace: () => true })).toBe(true)
   })
 
   it('allows S3-compatible storage for hosted deployments', () => {
@@ -30,7 +30,7 @@ describe('hosted storage policy', () => {
           secretAccessKey: 'secret',
           forcePathStyle: false,
         },
-        { ownedByDeploymentAdmin: () => false },
+        { isSuperAdminWorkspace: () => false },
       ),
     ).not.toThrow()
   })
@@ -40,7 +40,7 @@ describe('hosted storage policy', () => {
     let rejection: unknown
 
     try {
-      assertStorageAllowed({ adapter: 'local', root: '/prints' }, { ownedByDeploymentAdmin: () => false })
+      assertStorageAllowed({ adapter: 'local', root: '/prints' }, { isSuperAdminWorkspace: () => false })
     } catch (error) {
       rejection = error
     }

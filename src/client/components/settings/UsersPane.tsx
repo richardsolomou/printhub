@@ -71,15 +71,15 @@ export function UsersPane({ me }: { me: Identity }) {
           search={{ label: 'Search members', placeholder: 'Search members…' }}
           filters={[
             {
-              columnId: 'workspaceRole',
+              columnId: 'workspaceAccess',
               label: 'Filter members by role',
               allOption: { value: 'all', label: 'All roles' },
-              options: [{ value: 'owner', label: 'Owner' }, ...MEMBER_ROLE_OPTIONS],
+              options: MEMBER_ROLE_OPTIONS,
               className: 'w-36',
             },
           ]}
           initialSorting={[
-            { id: 'workspaceRole', desc: false },
+            { id: 'workspaceAccess', desc: false },
             { id: 'name', desc: false },
           ]}
           emptyMessage="No members match these filters."
@@ -102,6 +102,7 @@ export function UsersPane({ me }: { me: Identity }) {
 
 const columnHelper = createColumnHelper<Identity>()
 type UserAction = 'role' | 'remove'
+type WorkspaceAccess = 'admin' | 'member'
 
 function userColumns({ me, onAction }: { me: Identity; onAction: (action: UserAction, user: Identity) => void }): ColumnDef<Identity>[] {
   return [
@@ -118,7 +119,14 @@ function userColumns({ me, onAction }: { me: Identity; onAction: (action: UserAc
       ),
     }),
     columnHelper.accessor('email', { header: 'Email' }),
-    columnHelper.accessor('workspaceRole', { header: 'Role', cell: RoleCell }),
+    columnHelper.accessor((user): WorkspaceAccess => (user.workspaceRole === 'member' ? 'member' : 'admin'), {
+      id: 'workspaceAccess',
+      header: 'Role',
+      cell: ({ getValue }) => {
+        const role = getValue()
+        return <Badge variant="secondary">{role[0].toUpperCase() + role.slice(1)}</Badge>
+      },
+    }),
     columnHelper.display({
       id: 'actions',
       header: 'Actions',
@@ -159,11 +167,6 @@ function UserActions({ user, onAction }: { user: Identity; onAction: (action: Us
       </PopoverContent>
     </Popover>
   )
-}
-
-function RoleCell({ getValue }: { getValue: () => Identity['workspaceRole'] }) {
-  const role = getValue() ?? 'member'
-  return <Badge variant="secondary">{role[0].toUpperCase() + role.slice(1)}</Badge>
 }
 
 function InviteDialog({ smtpConfigured, onDone }: { smtpConfigured: boolean; onDone: () => void }) {

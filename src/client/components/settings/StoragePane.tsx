@@ -127,7 +127,7 @@ export function StoragePane({ onboarding = false, onSaved }: { onboarding?: bool
       current={current}
       migration={migration}
       cloudConnections={cloudConnections}
-      deploymentAdmin={Boolean(session.identity?.deploymentAdmin)}
+      superAdmin={Boolean(session.identity?.superAdmin)}
       localStorageAllowed={session.localStorageAllowed}
       onboarding={onboarding}
       onSaved={onSaved}
@@ -139,7 +139,7 @@ function StorageForm({
   current,
   migration,
   cloudConnections,
-  deploymentAdmin,
+  superAdmin,
   localStorageAllowed,
   onboarding,
   onSaved,
@@ -147,7 +147,7 @@ function StorageForm({
   current: StorageConfig
   migration?: PublicStorageMigration | null
   cloudConnections: CloudConnections
-  deploymentAdmin: boolean
+  superAdmin: boolean
   localStorageAllowed: boolean
   onboarding: boolean
   onSaved?: () => void
