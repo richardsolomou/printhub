@@ -23,15 +23,21 @@ export function PeopleCombobox({
   placeholder?: string
   emptyLabel?: string
 }) {
+  const selectedOption = options.find((option) => option.value === value)
+
   return (
-    <Combobox value={value ?? null} onValueChange={(next) => next && onChange(next)} items={options}>
+    <Combobox
+      value={selectedOption ?? null}
+      onValueChange={(next: { value: string; label: string } | null) => next && onChange(next.value)}
+      items={options}
+    >
       <ComboboxInput id={id} className="w-full" placeholder={placeholder} showClear={false} />
       <ComboboxContent>
         <ComboboxEmpty>{emptyLabel}</ComboboxEmpty>
         <ComboboxList>
           <ComboboxCollection>
             {(option: { value: string; label: string }) => (
-              <ComboboxItem key={option.value} value={option.value}>
+              <ComboboxItem key={option.value} value={option}>
                 {option.label}
               </ComboboxItem>
             )}
