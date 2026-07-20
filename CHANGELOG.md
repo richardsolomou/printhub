@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.28.1
+
+### Patch Changes
+
+- 27d294f: Preserve requester priority when moving prints between production stages so that drop position never changes queue order.
+- f5904b9: Generate preview assets for model files up to 1 GiB and prioritize smaller queued models so that they receive thumbnails and dimensions sooner.
+
 ## 0.28.0
 
 ### Minor Changes
