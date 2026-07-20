@@ -37,13 +37,6 @@ const SORT_GROUPS: { label: string; options: { value: BoardSort; label: string; 
     ],
   },
   {
-    label: 'Order size',
-    options: [
-      { value: 'quantity-desc', label: 'Largest orders first', description: 'Prioritize requests with the most copies.' },
-      { value: 'quantity-asc', label: 'Smallest orders first', description: 'Prioritize requests with the fewest copies.' },
-    ],
-  },
-  {
     label: 'Request details',
     options: [
       { value: 'name-asc', label: 'Name A–Z', description: 'Sort alphabetically by request name.' },
@@ -217,9 +210,15 @@ export function BoardFilters({
               <span>Sort</span>
               <span className="truncate text-muted-foreground">{activeSort.label}</span>
             </PopoverTrigger>
-            <PopoverContent align="end" sideOffset={8} className="w-80 gap-0 p-1" role="menu" aria-label="Sort requests">
+            <PopoverContent
+              align="end"
+              sideOffset={8}
+              className="max-h-[min(24rem,var(--available-height))] w-72 gap-0 overflow-y-auto overscroll-contain p-1"
+              role="menu"
+              aria-label="Sort requests"
+            >
               {sortGroups.map((group) => (
-                <div key={group.label} className="p-1">
+                <div key={group.label} className="p-0.5">
                   <div className="px-2 py-1 text-xs text-muted-foreground">{group.label}</div>
                   {group.options.map((sort) => {
                     const selected = sort.value === activeSort.value
@@ -232,17 +231,15 @@ export function BoardFilters({
                         tabIndex={0}
                         aria-checked={selected}
                         aria-label={sort.label}
-                        className="h-auto w-full items-start justify-start gap-2 px-2 py-2 text-left"
+                        className="h-8 w-full justify-start gap-2 px-2 text-left"
+                        title={sort.description}
                         onClick={() => {
                           onChange({ sort: sort.value === defaultSort ? undefined : sort.value })
                           setSortOpen(false)
                         }}
                       >
-                        <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5 whitespace-normal">
-                          <span>{sort.label}</span>
-                          <span className="text-xs font-normal text-muted-foreground">{sort.description}</span>
-                        </span>
-                        <Check className={cn('mt-0.5', !selected && 'invisible')} />
+                        <span className="min-w-0 flex-1 truncate">{sort.label}</span>
+                        <Check className={cn(!selected && 'invisible')} />
                       </Button>
                     )
                   })}
@@ -260,8 +257,12 @@ export function BoardFilters({
               <span className="rounded-full bg-primary px-1.5 font-mono text-[10px] text-primary-foreground">{advanced}</span>
             )}
           </PopoverTrigger>
-          <PopoverContent align="end" sideOffset={8} className="w-[min(680px,calc(100vw-40px))] gap-0 p-0">
-            <header className="flex items-start justify-between border-b p-4">
+          <PopoverContent
+            align="end"
+            sideOffset={8}
+            className="max-h-[var(--available-height)] w-[min(680px,calc(100vw-24px))] gap-0 overflow-hidden p-0"
+          >
+            <header className="flex shrink-0 items-start justify-between border-b p-3">
               <PopoverHeader>
                 <PopoverTitle>More filters</PopoverTitle>
                 <PopoverDescription>{description}</PopoverDescription>
@@ -277,7 +278,7 @@ export function BoardFilters({
                 <TooltipContent>Close filters</TooltipContent>
               </Tooltip>
             </header>
-            <div className="grid grid-cols-2 gap-4 p-4 max-[900px]:grid-cols-1">
+            <div className="grid min-h-0 grid-cols-2 gap-3 overflow-y-auto overscroll-contain p-3 max-[640px]:grid-cols-1">
               {showPrintType && (
                 <section className="grid content-start gap-2">
                   <h3 className="font-heading text-xs font-semibold tracking-wide uppercase text-muted-foreground">Print type</h3>
@@ -352,7 +353,7 @@ export function BoardFilters({
                   <DatePicker label="Before" value={search.updatedBefore} onChange={(updatedBefore) => onChange({ updatedBefore })} />
                 </div>
               </section>
-              <section className="col-span-2 grid grid-cols-4 gap-2 max-[900px]:col-span-1 max-[900px]:grid-cols-2">
+              <section className="col-span-2 grid grid-cols-4 gap-2 max-[640px]:col-span-1 max-[640px]:grid-cols-2">
                 <h3 className="col-span-full font-heading text-xs font-semibold tracking-wide uppercase text-muted-foreground">Metadata</h3>
                 {METADATA.map(([key, label]) => (
                   <label className="grid gap-1 text-xs text-muted-foreground" key={key}>
@@ -377,7 +378,7 @@ export function BoardFilters({
                 ))}
               </section>
             </div>
-            <footer className="flex justify-end gap-2 border-t bg-muted/30 p-3">
+            <footer className="flex shrink-0 justify-end gap-2 border-t bg-muted/30 p-2">
               <Button type="button" variant="ghost" size="sm" onClick={clear}>
                 Reset all filters
               </Button>
