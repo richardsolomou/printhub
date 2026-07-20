@@ -9,6 +9,7 @@ import { DrizzleRepository } from '../../db/repository'
 import { user } from '../../db/schema'
 import type { AppEvent, Telemetry } from '../../core/types'
 import { exportBinaryStl } from '../../core/mesh/stl'
+import { MAX_UPLOAD_BYTES } from '../../core/uploadLimits'
 import { AssetGenerationQueue } from './queue'
 
 const telemetry: Telemetry = { capture: async () => undefined, exception: async () => undefined }
@@ -200,9 +201,9 @@ describe('asset generation queue', () => {
     ])
   })
 
-  it('generates assets for sources within the default memory budget', async () => {
+  it('generates assets at the default source size limit', async () => {
     const id = await requestWithFile()
-    vi.spyOn(assets, 'stat').mockResolvedValue({ size: 113_222_984 })
+    vi.spyOn(assets, 'stat').mockResolvedValue({ size: MAX_UPLOAD_BYTES / 4 })
 
     queue.enqueue(id)
     await queue.idle()

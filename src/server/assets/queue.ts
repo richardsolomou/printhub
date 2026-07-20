@@ -6,12 +6,13 @@ import PQueue from 'p-queue'
 import type { AssetStore, EventBus, Repository, Telemetry } from '../../core/types'
 import { storedPrinterProfiles } from '../../core/printers'
 import { thumbnailKey } from '../../core/assetKeys'
+import { MAX_UPLOAD_BYTES } from '../../core/uploadLimits'
 import { generateVisualAssets, type GeneratedAssets } from './pipeline'
 import { logger } from '../logger'
 
 type WorkerConfig = { path: string; execArgv?: string[] }
 
-const DEFAULT_SOURCE_BYTE_BUDGET = 512 * 1024 * 1024
+const DEFAULT_SOURCE_BYTE_BUDGET = MAX_UPLOAD_BYTES
 const SOURCE_MEMORY_MULTIPLIER = 4
 
 class ByteBudget {

@@ -60,7 +60,7 @@ Dropbox, Google Drive, and OneDrive requests retry provider throttling and tempo
 
 ## Generated assets
 
-Thumbnail, preview, and dimension generation uses a 512 MiB memory budget with a conservative four-times source-size estimate. Models larger than 128 MiB remain available for download and queue management, but generated assets are marked failed instead of risking an out-of-memory restart.
+Thumbnail, preview, and dimension generation uses the same 1 GiB memory budget as uploads with a conservative four-times source-size estimate. Models larger than 256 MiB remain available for download and queue management, but generated assets are marked failed instead of risking an out-of-memory restart.
 
 ## Switching providers
 
