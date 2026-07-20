@@ -48,7 +48,7 @@ export function BoardPane({ me, workspaceName, workspaceCount }: { me: Identity;
     mutationFn: callDelete,
     onSuccess: reloadAfterWorkspaceChange,
   })
-  const owner = me.workspaceRole === 'owner'
+  const canDeleteWorkspace = me.workspaceRole === 'owner'
   const onlyWorkspace = workspaceCount <= 1
   if (!current) {
     return (
@@ -95,26 +95,24 @@ export function BoardPane({ me, workspaceName, workspaceCount }: { me: Identity;
         </Field>
         <FieldError>{mutation.error?.message || (mutation.error ? 'Could not save board settings.' : '')}</FieldError>
       </SettingsSection>
-      <SettingsSection
-        title="Danger zone"
-        description="Permanently remove this workspace, its requests, settings, members, and locally stored workspace files. Connected cloud storage may retain files."
-      >
-        <div className="flex items-center justify-between gap-4 rounded-lg border border-destructive/30 bg-destructive/5 p-4 max-sm:items-start max-sm:flex-col">
-          <div>
-            <h3 className="font-medium">Delete {workspaceName}</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {!owner
-                ? 'Only the workspace owner can delete this workspace.'
-                : onlyWorkspace
-                  ? 'Create another workspace before deleting this one.'
-                  : 'This cannot be undone.'}
-            </p>
+      {canDeleteWorkspace && (
+        <SettingsSection
+          title="Danger zone"
+          description="Permanently remove this workspace, its requests, settings, members, and locally stored workspace files. Connected cloud storage may retain files."
+        >
+          <div className="flex items-center justify-between gap-4 rounded-lg border border-destructive/30 bg-destructive/5 p-4 max-sm:items-start max-sm:flex-col">
+            <div>
+              <h3 className="font-medium">Delete {workspaceName}</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {onlyWorkspace ? 'Create another workspace before deleting this one.' : 'This cannot be undone.'}
+              </p>
+            </div>
+            <Button type="button" variant="destructive" disabled={onlyWorkspace} onClick={() => setDeleteOpen(true)}>
+              Delete workspace
+            </Button>
           </div>
-          <Button type="button" variant="destructive" disabled={!owner || onlyWorkspace} onClick={() => setDeleteOpen(true)}>
-            Delete workspace
-          </Button>
-        </div>
-      </SettingsSection>
+        </SettingsSection>
+      )}
       <AlertDialog
         open={deleteOpen}
         onOpenChange={(open) => {

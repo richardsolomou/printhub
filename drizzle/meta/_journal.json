@@ -57,6 +57,13 @@
       "when": 1784566737434,
       "tag": "0007_conscious_whizzer",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1784575787194,
+      "tag": "0008_rename_super_admin_role",
+      "breakpoints": true
     }
   ]
 }

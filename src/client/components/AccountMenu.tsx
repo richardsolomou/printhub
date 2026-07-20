@@ -15,7 +15,7 @@ import { sessionQuery } from '../queries'
 import { reloadAfterWorkspaceChange, useWorkspaceSlug, WORKSPACE_CHANGED_KEY } from '../workspace'
 import { UserAvatar } from './UserAvatar'
 
-export function AccountMenu({ isDeploymentAdmin = false }: { isDeploymentAdmin?: boolean }) {
+export function AccountMenu({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
   const workspaceSlug = useWorkspaceSlug()
   const { data } = useSuspenseQuery(sessionQuery(workspaceSlug))
   const identity = data.identity
@@ -109,7 +109,7 @@ export function AccountMenu({ isDeploymentAdmin = false }: { isDeploymentAdmin?:
               <Info />
               About
             </Link>
-            {isDeploymentAdmin && (
+            {isSuperAdmin && (
               <Link
                 to="/admin/$section"
                 params={{ section: 'users' }}
@@ -117,7 +117,7 @@ export function AccountMenu({ isDeploymentAdmin = false }: { isDeploymentAdmin?:
                 onClick={() => setMenuOpen(false)}
               >
                 <ShieldCheck />
-                Admin
+                Super admin
               </Link>
             )}
             <Button

@@ -13,7 +13,7 @@ export const Route = createFileRoute('/api/storage/google-drive/callback')({
           try {
             const instance = await app()
             const identity = await instance.requireIdentity(request.headers)
-            if (identity.role !== 'admin') throw new Response('forbidden', { status: 403 })
+            if (!identity.superAdmin) throw new Response('forbidden', { status: 403 })
             returnTo = await completeGoogleDriveAuthorization(deploymentSettings(instance.repository), request, identity.id)
             outcome = 'connected'
           } catch (error) {

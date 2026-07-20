@@ -1,4 +1,5 @@
 export type Role = 'admin' | 'requester'
+export type AccountRole = 'super_admin' | 'requester'
 export type WorkspaceRole = 'owner' | 'admin' | 'member'
 export type PrintType = 'resin' | 'filament'
 
@@ -20,8 +21,10 @@ export type Identity = {
   workspaceSlug?: string
   twoFactorEnabled?: boolean
   impersonatedBy?: string
-  deploymentAdmin?: boolean
+  superAdmin?: boolean
 }
+
+export type Account = Pick<Identity, 'id' | 'email' | 'name' | 'image'> & { role: AccountRole }
 
 export type Person = { id: string; name: string; color?: string }
 export type PrinterSummary = {
@@ -257,8 +260,9 @@ export interface Repository {
   completeAssetGeneration(id: string, generated: { thumbnailPath?: string; previewPath?: string }): void
   listPeople(): Person[]
   listUsers(): Identity[]
-  listDeploymentUsers(): Identity[]
-  deploymentUserExists(email: string): boolean
+  listAccounts(): Account[]
+  accountExists(email: string): boolean
+  isSuperAdminWorkspace(): boolean
   createInvite(invite: { id: string; tokenHash: string; role: Role; label?: string; recipientEmail?: string; expiresAt: number }): void
   listInvites(): Invite[]
   findInvite(tokenHash: string): Invite | undefined
@@ -329,6 +333,7 @@ export type TelemetryConfig = { enabled: boolean }
 
 export type StorageConfig =
   | { adapter: 'local'; root: string }
+  | { adapter: 'webdav'; endpoint: string; root: string; username: string; password: string }
   | { adapter: 'dropbox'; root: string }
   | { adapter: 'google-drive'; root: string }
   | { adapter: 'onedrive'; root: string }

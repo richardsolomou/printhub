@@ -2,7 +2,7 @@ import { DiagnosticsPane } from './DiagnosticsPane'
 import { SettingsHeader, SettingsPage } from './SettingsLayout'
 import { SystemDiagnosticsPane } from './SystemDiagnosticsPane'
 
-export function AdminDiagnosticsPane() {
+export function SuperAdminDiagnosticsPane() {
   return (
     <SettingsPage>
       <SettingsHeader

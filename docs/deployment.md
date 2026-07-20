@@ -4,22 +4,22 @@ Operational reference for self-hosting PrintHub. For a quick start, see the [REA
 
 ## Environment variables
 
-Product configuration lives in the app (Workspace Settings and the Admin area). Environment variables cover filesystem paths, deployment controls, managed overrides, and recovery. When an authentication provider or SMTP is configured in both places, the environment configuration takes precedence and the Admin area reports it as environment-managed.
+Product configuration lives in the app (Workspace Settings and the Super Admin area). Environment variables cover filesystem paths, deployment controls, managed overrides, and recovery. When an authentication provider or SMTP is configured in both places, the environment configuration takes precedence and the Super Admin area reports it as environment-managed.
 
 | Variable                                                              | Default   | Purpose                                                                                                                         |
 | --------------------------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `DATA_DIR`                                                            | `/data`   | Database, pre-migration database snapshots, upload staging, and the generated integration encryption key.                       |
 | `PRINTS_DIR`                                                          | `/prints` | Default local model-storage root used until a workspace storage setting is saved.                                               |
-| `PRINTHUB_HOSTED`                                                     | `false`   | Enables hosted signup semantics without assigning the first account deployment-wide admin.                                      |
+| `PRINTHUB_HOSTED`                                                     | `false`   | Enables hosted signup semantics, restricts tenant storage, and does not assign a super admin.                                   |
 | `BETTER_AUTH_URL`                                                     | —         | Public HTTP or HTTPS origin. Required when `PRINTHUB_HOSTED=true` and recommended behind any reverse proxy or custom domain.    |
 | `BETTER_AUTH_TRUSTED_ORIGINS`                                         | —         | Additional trusted origins, comma-separated.                                                                                    |
-| `AUTH_PASSWORD_ENABLED`                                               | stored    | Overrides the Admin setting for password sign-in. Defaults to enabled when neither source has a value.                          |
+| `AUTH_PASSWORD_ENABLED`                                               | stored    | Overrides the Super Admin setting for password sign-in. Defaults to enabled when neither source has a value.                    |
 | `AUTH_PASSWORD_RECOVERY`                                              | `false`   | Forces password sign-in on regardless of stored settings or `AUTH_PASSWORD_ENABLED`; see [Account recovery](#account-recovery). |
 | `AUTH_GOOGLE_CLIENT_ID`, `AUTH_GOOGLE_CLIENT_SECRET`                  | —         | Google OAuth credentials. Both variables must be set together; an environment pair replaces the stored Google configuration.    |
 | `AUTH_GOOGLE_ENABLED`                                                 | `true`    | Enables an environment-configured Google provider. False values are `0`, `false`, `no`, or `off`, case-insensitively.           |
 | `AUTH_DISCORD_CLIENT_ID`, `AUTH_DISCORD_CLIENT_SECRET`                | —         | Discord OAuth credentials. Both variables must be set together; an environment pair replaces the stored Discord configuration.  |
 | `AUTH_DISCORD_ENABLED`                                                | `true`    | Enables an environment-configured Discord provider. False values are `0`, `false`, `no`, or `off`, case-insensitively.          |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD` | —         | Setting `SMTP_HOST` replaces the Admin SMTP configuration; the port defaults to 587.                                            |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD` | —         | Setting `SMTP_HOST` replaces the Super Admin SMTP configuration; the port defaults to 587.                                      |
 | `EMAIL_FROM`                                                          | —         | Sender address; required when `SMTP_HOST` is set.                                                                               |
 | `INTEGRATIONS_ENCRYPTION_KEY`                                         | —         | Base64url-encoded 32-byte key used instead of the generated `/data/integration-secrets.key` file.                               |
 | `LOG_LEVEL`                                                           | `info`    | Pino log level.                                                                                                                 |
@@ -113,4 +113,4 @@ Pull the new image and recreate the container. Database migrations run automatic
 
 ## Account recovery
 
-If sign-in breaks — for example a misconfigured social provider — set `AUTH_PASSWORD_RECOVERY=true` and restart to force password sign-in on, fix the provider configuration in the Admin area, then remove the variable.
+If sign-in breaks — for example a misconfigured social provider — set `AUTH_PASSWORD_RECOVERY=true` and restart to force password sign-in on, fix the provider configuration in the Super Admin area, then remove the variable.

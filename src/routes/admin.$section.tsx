@@ -1,31 +1,31 @@
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
-import { AdminPanes, isAdminSection } from '../client/components/AdminPanes'
+import { isSuperAdminSection, SuperAdminPanes } from '../client/components/SuperAdminPanes'
 import { AppHeader } from '../client/components/AppHeader'
 import { sessionQuery } from '../client/queries'
 import { useEscape } from '../client/useEscape'
 
 export const Route = createFileRoute('/admin/$section')({
   beforeLoad: ({ params }) => {
-    if (!isAdminSection(params.section))
+    if (!isSuperAdminSection(params.section))
       throw redirect({
         to: '/admin/$section',
         params: { section: 'users' },
       })
   },
-  component: AdminPage,
+  component: SuperAdminPage,
 })
 
-function AdminPage() {
+function SuperAdminPage() {
   const { section } = Route.useParams()
   const { data: session } = useSuspenseQuery(sessionQuery())
   const [hydrated, setHydrated] = useState(false)
   const navigate = useNavigate()
   useEscape(() => navigate({ to: '/' }))
   const identity = session.identity
-  const validSection = isAdminSection(section) ? section : undefined
-  const authorized = Boolean(identity?.deploymentAdmin && validSection)
+  const validSection = isSuperAdminSection(section) ? section : undefined
+  const authorized = Boolean(identity?.superAdmin && validSection)
   useEffect(() => {
     setHydrated(true)
   }, [])
@@ -35,9 +35,9 @@ function AdminPage() {
   if (!authorized) return null
   return (
     <div className="min-h-dvh">
-      <AppHeader active="admin" isAdmin={identity!.role === 'admin'} isDeploymentAdmin navigationEnabled={hydrated} />
+      <AppHeader active="admin" isAdmin={identity!.role === 'admin'} isSuperAdmin navigationEnabled={hydrated} />
       <main className="mx-auto w-full max-w-5xl px-5 pt-7 pb-12">
-        <AdminPanes section={validSection!} />
+        <SuperAdminPanes section={validSection!} />
       </main>
     </div>
   )

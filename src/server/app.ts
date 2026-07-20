@@ -4,6 +4,7 @@ import path from 'node:path'
 import { DrizzleRepository } from '../db/repository'
 import { LocalAssetStore } from '../adapters/filesystem'
 import { S3AssetStore } from '../adapters/s3'
+import { WebDAVAssetStore } from '../adapters/webdav'
 import { DropboxAssetStore } from '../adapters/dropbox'
 import { GoogleDriveAssetStore } from '../adapters/googleDrive'
 import { OneDriveAssetStore } from '../adapters/oneDrive'
@@ -70,6 +71,7 @@ export function workspaceStorageConfig(config: StorageConfig, workspaceId?: stri
 export function buildAssetStore(config: StorageConfig, repository?: Repository, workspaceId?: string) {
   const workspaceConfig = workspaceStorageConfig(config, workspaceId)
   if (workspaceConfig.adapter === 's3') return new S3AssetStore(workspaceConfig)
+  if (workspaceConfig.adapter === 'webdav') return new WebDAVAssetStore(workspaceConfig)
   const settings = repository instanceof DrizzleRepository ? deploymentSettings(repository) : repository
   if (workspaceConfig.adapter === 'dropbox') {
     if (!repository) throw new Error('Dropbox storage requires a repository')
@@ -160,8 +162,8 @@ async function createApp() {
         email: user.email,
         name: user.name,
         image: userImage(user.email, user.image),
-        role: user.role === 'admin' ? 'admin' : 'requester',
-        deploymentAdmin: user.role === 'admin',
+        role: 'requester',
+        superAdmin: user.role === 'super_admin',
         twoFactorEnabled: user.twoFactorEnabled ?? false,
         impersonatedBy: session.session.impersonatedBy ?? undefined,
       }
@@ -265,7 +267,7 @@ async function createApp() {
 
     const deleteWorkspace = async (headers: Headers, workspaceSlug: string, confirmation: string) => {
       const { baseIdentity, membership } = await workspaceMembership(headers, workspaceSlug)
-      if (membership.role !== 'owner') throw new Response('only the workspace owner can delete it', { status: 403 })
+      if (membership.role !== 'owner') throw new Response('you cannot delete this workspace', { status: 403 })
       if (confirmation !== membership.name) throw new Response('workspace name does not match', { status: 400 })
       const workspaces = repository!.listWorkspacesForUser(baseIdentity.id)
       if (workspaces.length <= 1) throw new Response('you cannot delete your only workspace', { status: 409 })

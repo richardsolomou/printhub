@@ -14,7 +14,7 @@ export const user = sqliteTable('user', {
   image: text(),
   createdAt: isoDate().notNull(),
   updatedAt: isoDate().notNull(),
-  role: text({ enum: ['admin', 'requester'] }),
+  role: text({ enum: ['super_admin', 'requester'] }),
   banned: integer({ mode: 'boolean' }),
   banReason: text(),
   banExpires: isoDate(),

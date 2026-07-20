@@ -33,14 +33,14 @@ function Home() {
   if (session.identity.role === 'admin' && (!session.storageConfigured || !session.storageReady || !session.printersConfigured)) {
     return (
       <div className="min-h-dvh">
-        <AppHeader active="board" isAdmin isDeploymentAdmin={session.identity.deploymentAdmin} navigationEnabled={false} />
+        <AppHeader active="board" isAdmin isSuperAdmin={session.identity.superAdmin} navigationEnabled={false} />
         <main className="grid min-h-[calc(100dvh-60px)] place-items-center p-6">
           <Card className="w-full max-w-[680px]">
             <CardHeader className="gap-4">
               <Brand />
               <OnboardingProgress
                 step={!session.storageConfigured || !session.storageReady ? 3 : 4}
-                accountLabel={session.hosted ? 'Account' : 'Admin'}
+                accountLabel={session.hosted ? 'Account' : 'Super admin'}
               />
             </CardHeader>
             <CardContent>
@@ -134,7 +134,7 @@ function AuthenticatedHome() {
   const me = identity
   return (
     <div className="relative flex h-dvh flex-col">
-      <AppHeader active="board" isAdmin={isAdmin} isDeploymentAdmin={me.deploymentAdmin} />
+      <AppHeader active="board" isAdmin={isAdmin} isSuperAdmin={me.superAdmin} />
       {result ? (
         <>
           <BoardFilters

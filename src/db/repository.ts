@@ -679,24 +679,34 @@ export class DrizzleRepository implements Repository {
       }))
   }
 
-  listDeploymentUsers() {
+  listAccounts() {
     return this.database
       .select({ id: user.id, email: user.email, name: user.name, image: user.image, role: user.role })
       .from(user)
-      .orderBy(sql`CASE ${user.role} WHEN 'admin' THEN 0 ELSE 1 END`, sql`${user.name} COLLATE NOCASE`)
+      .orderBy(sql`CASE ${user.role} WHEN 'super_admin' THEN 0 ELSE 1 END`, sql`${user.name} COLLATE NOCASE`)
       .all()
       .map((row) => ({
         id: row.id,
         email: row.email,
         name: row.name,
         image: row.image ?? undefined,
-        role: row.role === 'admin' ? ('admin' as const) : ('requester' as const),
-        deploymentAdmin: row.role === 'admin',
+        role: row.role === 'super_admin' ? ('super_admin' as const) : ('requester' as const),
       }))
   }
 
-  deploymentUserExists(email: string) {
+  accountExists(email: string) {
     return Boolean(this.database.select({ id: user.id }).from(user).where(eq(user.email, email.toLowerCase())).get())
+  }
+
+  isSuperAdminWorkspace() {
+    return Boolean(
+      this.database
+        .select({ id: user.id })
+        .from(member)
+        .innerJoin(user, eq(user.id, member.userId))
+        .where(and(eq(member.organizationId, this.workspace()), eq(member.role, 'owner'), eq(user.role, 'super_admin')))
+        .get(),
+    )
   }
 
   getDeploymentSetting<T>(key: string): T | undefined {

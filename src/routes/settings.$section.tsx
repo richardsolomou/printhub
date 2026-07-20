@@ -42,12 +42,7 @@ function SettingsPage() {
   if (!authorized) return null
   return (
     <div className="min-h-dvh">
-      <AppHeader
-        active="settings"
-        isAdmin={identity!.role === 'admin'}
-        isDeploymentAdmin={identity!.deploymentAdmin}
-        navigationEnabled={hydrated}
-      />
+      <AppHeader active="settings" isAdmin={identity!.role === 'admin'} isSuperAdmin={identity!.superAdmin} navigationEnabled={hydrated} />
       <main className="mx-auto w-full max-w-5xl px-5 pt-7 pb-12">
         <SettingsPanes
           me={identity!}

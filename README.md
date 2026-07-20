@@ -42,7 +42,7 @@ Along the way, PrintHub provides:
 
 PrintHub can run as a single self-hosted appliance or as a multi-tenant hosted service. Every account gets a private workspace with its own board, printers, members, settings, and storage configuration, and users can also join other workspaces by invitation.
 
-Self-hosted installations keep the application, database, files, previews, and production history under the operator's control. Hosted deployments manage the application while each workspace can choose local, S3-compatible, or connected cloud storage. Every local folder, cloud folder, or S3 prefix receives an enforced workspace namespace. PrintHub does not provide slicing, printer control, a public model gallery, marketplace, printer-vendor account, or mandatory hosted file library.
+Self-hosted installations keep the application, database, files, previews, and production history under the operator's control. Hosted customer workspaces must choose S3-compatible or connected cloud storage so tenants cannot persist models on the application host, while workspaces created by a super admin may still use local folders. Every local folder, cloud folder, or S3 prefix receives an enforced workspace namespace. PrintHub does not provide slicing, printer control, a public model gallery, marketplace, printer-vendor account, or mandatory hosted file library.
 
 Anonymous usage telemetry is enabled by default, never includes model or request data, and can be disabled at any time — the [telemetry page](docs/telemetry.md) lists exactly what is sent.
 
@@ -70,13 +70,13 @@ Open `http://localhost:3010`. The first account created becomes the admin.
 
 ## Configuration ⚙️
 
-Workspace Settings manage printers, members, board behavior, workspace deletion, and workspace storage. The separate deployment Admin area manages all user accounts, authentication providers, SMTP delivery, telemetry, and diagnostics.
+Workspace Settings manage printers, members, board behavior, workspace deletion, and workspace storage. The separate Super Admin area manages all user accounts, authentication providers, SMTP delivery, telemetry, and diagnostics.
 
 Environment variables, reverse proxy setup, health checks, backups, and upgrades are covered in the [deployment guide](docs/deployment.md).
 
 ## Storage and backups 💾
 
-PrintHub supports ordinary local folders, connected Dropbox, Google Drive, and OneDrive accounts, and S3-compatible services including Amazon S3, Backblaze B2, Cloudflare R2, DigitalOcean Spaces, Google Cloud Storage, and MinIO. Settings → Storage guides OAuth setup and migrates referenced files with progress reporting before switching providers; the [storage guide](docs/storage.md) covers the provider-console setup.
+PrintHub supports ordinary local folders, remote WebDAV folders, connected Dropbox, Google Drive, and OneDrive accounts, and S3-compatible services including Amazon S3, Backblaze B2, Cloudflare R2, DigitalOcean Spaces, Google Cloud Storage, and MinIO. Hosted users can expose a folder on their own machine or NAS through Cloudflare Tunnel or Tailscale Funnel, keeping model files and previews as ordinary files on hardware they control. Settings → Storage guides setup and migrates referenced files with progress reporting before switching providers; the [storage guide](docs/storage.md) covers provider and tunnel setup.
 
 Back up `/data` and the active local or cloud model store together before upgrading — the [deployment guide](docs/deployment.md) covers consistent backups, encryption keys, restores, and upgrade behavior.
 

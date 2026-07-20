@@ -11,12 +11,12 @@ type AppView = 'board' | 'settings' | 'account' | 'admin'
 export function AppHeader({
   active,
   isAdmin,
-  isDeploymentAdmin = false,
+  isSuperAdmin = false,
   navigationEnabled = true,
 }: {
   active: AppView
   isAdmin: boolean
-  isDeploymentAdmin?: boolean
+  isSuperAdmin?: boolean
   navigationEnabled?: boolean
 }) {
   return (
@@ -49,7 +49,7 @@ export function AppHeader({
         )}
       </nav>
       <span className="flex-1" />
-      <AccountMenu isDeploymentAdmin={isDeploymentAdmin} />
+      <AccountMenu isSuperAdmin={isSuperAdmin} />
     </header>
   )
 }

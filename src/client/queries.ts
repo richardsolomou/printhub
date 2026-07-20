@@ -10,7 +10,7 @@ import {
   getCloudConnections,
   getTelemetrySettings,
   listInvites,
-  listDeploymentUsers,
+  listAccounts,
   listRequests,
   listPeople,
   listUsers,
@@ -39,7 +39,7 @@ export const peopleQuery = (workspaceSlug: string) =>
   queryOptions({ queryKey: ['people', workspaceSlug], queryFn: () => listPeople({ data: { workspaceSlug } }) })
 export const usersQuery = (workspaceSlug: string) =>
   queryOptions({ queryKey: ['users', workspaceSlug], queryFn: () => listUsers({ data: { workspaceSlug } }) })
-export const deploymentUsersQuery = () => queryOptions({ queryKey: ['deployment-users'], queryFn: () => listDeploymentUsers() })
+export const accountsQuery = () => queryOptions({ queryKey: ['accounts'], queryFn: () => listAccounts() })
 export const invitesQuery = (workspaceSlug: string) =>
   queryOptions({ queryKey: ['invites', workspaceSlug], queryFn: () => listInvites({ data: { workspaceSlug } }) })
 export const storageQuery = (workspaceSlug: string) =>

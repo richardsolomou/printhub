@@ -22,12 +22,49 @@ describe('tus upload transport', () => {
 
   afterEach(async () => {
     delete process.env.DATA_DIR
+    delete process.env.PRINTHUB_HOSTED
+    delete process.env.BETTER_AUTH_URL
     const singleton = globalThis as typeof globalThis & { __printhub?: Promise<{ repository: { close(): void } }> }
     const running = singleton.__printhub
     delete singleton.__printhub
     if (running) (await running.catch(() => undefined))?.repository.close()
     vi.resetModules()
     if (temporary) await fs.promises.rm(temporary, { recursive: true, force: true })
+  })
+
+  it('rejects uploads to fallback local storage in hosted mode', async () => {
+    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-tus-hosted-'))
+    process.env.DATA_DIR = path.join(temporary, 'data')
+    process.env.PRINTHUB_HOSTED = 'true'
+    process.env.BETTER_AUTH_URL = 'http://print.test'
+
+    const { app } = await import('./app')
+    const instance = await app()
+    const signup = await instance.auth.api.signUpEmail({
+      body: { email: 'owner@example.com', password: 'password1234', name: 'Owner' },
+      returnHeaders: true,
+    })
+    const { handleUpload } = await import('./uploads')
+    const response = await handleUpload(
+      new Request('http://print.test/api/upload', {
+        method: 'POST',
+        headers: {
+          cookie: cookies(signup.headers),
+          origin: 'http://print.test',
+          'sec-fetch-site': 'same-origin',
+          'tus-resumable': '1.0.0',
+          'upload-length': '100',
+          'upload-metadata': metadata({
+            filename: 'probe.stl',
+            name: 'Probe',
+            quantity: '1',
+            requestedPrintType: 'resin',
+          }),
+        },
+      }),
+    )
+
+    expect(response.status).toBe(503)
   })
 
   it('creates, completes, and safely resumes an authenticated upload', async () => {

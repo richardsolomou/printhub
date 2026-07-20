@@ -24,6 +24,12 @@ test('manages a fair print queue and assigns work to printers', async ({ page })
   await page.getByLabel('Password').press('Enter')
 
   await expect(page.getByRole('heading', { name: 'Choose storage' })).toBeVisible()
+  await choose(page.getByLabel('Adapter'), 'Remote folder (WebDAV)')
+  await expect(page.getByText('A normal folder on hardware you control')).toBeVisible()
+  await expect(page.getByLabel('WebDAV endpoint')).toHaveAttribute('placeholder', 'https://storage.example.com/dav')
+  await expect(page.getByLabel('Folder')).toHaveValue('printhub')
+  await screenshot(page, 'remote-folder-storage')
+  await choose(page.getByLabel('Adapter'), 'Local folder')
   await page.getByRole('button', { name: 'Finish setup' }).click()
   await expect(page.getByRole('heading', { name: 'Add your printers' })).toBeVisible()
   await page.getByRole('button', { name: 'Add printer' }).click()
@@ -179,7 +185,7 @@ test('health and protected routes expose security and correlation headers', asyn
   expect((await request.get('/api/events')).status()).toBe(401)
 })
 
-test('admin routes redirect unauthenticated users', async ({ page }) => {
+test('super admin routes redirect unauthenticated users', async ({ page }) => {
   await page.goto('/admin/integrations')
   await expect(page).toHaveURL(/\/$/)
   await expect(page.getByRole('button', { name: /^(Set up PrintHub|Sign in)$/ })).toBeVisible()
