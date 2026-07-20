@@ -26,8 +26,6 @@ export function Column({
   onOpenRequest,
   onStartSelection,
   onSelectRequest,
-  onMoveRequest,
-  onReorderRequest,
 }: {
   status: StatusId
   definition: WorkflowStatus
@@ -42,8 +40,6 @@ export function Column({
   onOpenRequest: (requestId: string) => void
   onStartSelection: (status: StatusId, requestId?: string) => void
   onSelectRequest: (status: StatusId, requestId: string, orderedIds: string[], options: { range: boolean; toggle: boolean }) => void
-  onMoveRequest: (request: PublicPrintRequest, status: StatusId) => void
-  onReorderRequest: (request: PublicPrintRequest, status: StatusId, direction: 'earlier' | 'later') => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -80,18 +76,6 @@ export function Column({
     () => new Set(entries.filter(({ request }) => request.mine).map(({ request }) => request.id)),
     [entries],
   )
-  const requesterPositions = useMemo(() => {
-    const totals = new Map<string, number>()
-    const positions = new Map<string, { index: number; total: number }>()
-    for (const { request } of entries) totals.set(request.requesterId, (totals.get(request.requesterId) ?? 0) + 1)
-    const seen = new Map<string, number>()
-    for (const { request } of entries) {
-      const index = seen.get(request.requesterId) ?? 0
-      positions.set(request.id, { index, total: totals.get(request.requesterId) ?? 1 })
-      seen.set(request.requesterId, index + 1)
-    }
-    return positions
-  }, [entries])
   const virtualizer = useVirtualizer({
     count: entries.length,
     getScrollElement: () => bodyRef.current,
@@ -140,7 +124,6 @@ export function Column({
         <div className="virtual-list relative w-full" style={{ height: virtualizer.getTotalSize() }}>
           {virtualizer.getVirtualItems().map((item) => {
             const { request, count } = entries[item.index]
-            const requesterPosition = requesterPositions.get(request.id)
             return (
               <VirtualRow key={request.id} index={item.index} start={item.start} measureElement={virtualizer.measureElement}>
                 <RequestCard
@@ -165,17 +148,6 @@ export function Column({
                       entries.map((entry) => entry.request.id),
                       options,
                     )
-                  }
-                  onMove={isAdmin ? () => onMoveRequest(request, status) : undefined}
-                  onMoveEarlier={
-                    reorderEnabled && request.mine && requesterPosition && requesterPosition.index > 0
-                      ? () => onReorderRequest(request, status, 'earlier')
-                      : undefined
-                  }
-                  onMoveLater={
-                    reorderEnabled && request.mine && requesterPosition && requesterPosition.index < requesterPosition.total - 1
-                      ? () => onReorderRequest(request, status, 'later')
-                      : undefined
                   }
                 />
               </VirtualRow>

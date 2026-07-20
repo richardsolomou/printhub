@@ -190,35 +190,6 @@ export function Board({
     [compare, countsOf, requests],
   )
 
-  const performStepReorder = useCallback(
-    (request: PublicPrintRequest, status: StatusId, direction: 'earlier' | 'later') => {
-      if (sort !== 'fair' || !request.mine || status !== priorityStatus) return
-      const list = columnForRequester(request, status)
-      const index = list.findIndex((candidate) => candidate.id === request.id)
-      const targetIndex = direction === 'earlier' ? index - 1 : index + 1
-      const target = list[targetIndex]
-      if (index < 0 || !target) return
-
-      const outside = list[direction === 'earlier' ? targetIndex - 1 : targetIndex + 1]
-      const order = outside
-        ? (sortKey(target, status) + sortKey(outside, status)) / 2
-        : sortKey(target, status) + (direction === 'earlier' ? -1 : 1)
-      performReorder(request.id, status, order)
-    },
-    [columnForRequester, performReorder, priorityStatus, sort, sortKey],
-  )
-
-  const openMoveDialog = useCallback(
-    (request: PublicPrintRequest, from: StatusId) => {
-      const destinations = workflow.statuses
-        .filter((status) => canDropOnColumn(from, status.id))
-        .map((status) => ({ id: status.id, label: status.label }))
-      const max = countsOf(request)[from]
-      if (max > 0 && destinations.length > 0) setPendingMove({ requestId: request.id, from, destinations, max })
-    },
-    [countsOf, workflow.statuses],
-  )
-
   const selectedEntries = useMemo(() => {
     if (!selection) return []
     return requests
@@ -362,8 +333,6 @@ export function Board({
             onSelectRequest={(columnStatus, requestId, orderedIds, options) =>
               setSelection((current) => selectBoardRequest(current, columnStatus, orderedIds, requestId, options))
             }
-            onMoveRequest={openMoveDialog}
-            onReorderRequest={performStepReorder}
           />
         )
       })}
