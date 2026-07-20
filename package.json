@@ -1,6 +1,6 @@
 {
   "name": "printhub",
-  "version": "0.25.0",
+  "version": "0.25.1",
   "private": true,
   "description": "Private, self-hosted resin and filament request queue with fair ordering, printer assignment, and completion tracking.",
   "homepage": "https://github.com/richardsolomou/printhub",
@@ -30,7 +30,7 @@
     "check:cli": "node --import tsx scripts/backup.ts --help",
     "catalog:check": "tsx scripts/syncPrinterCatalog.ts --check",
     "catalog:sync": "tsx scripts/syncPrinterCatalog.ts",
-    "catalog:update": "tsx scripts/syncPrinterCatalog.ts --update && tsx scripts/updatePrinterImages.ts && tsx scripts/syncPrinterCatalog.ts",
+    "catalog:update": "tsx scripts/syncPrinterCatalog.ts --update && tsx scripts/updatePrinterImages.ts --update && tsx scripts/syncPrinterCatalog.ts",
     "catalog:update-images": "tsx scripts/updatePrinterImages.ts && tsx scripts/syncPrinterCatalog.ts",
     "changeset": "changeset",
     "version-packages": "changeset version && tsx scripts/syncReleaseVersion.ts",

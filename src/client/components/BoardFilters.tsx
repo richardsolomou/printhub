@@ -185,6 +185,7 @@ export function BoardFilters({
   const printTypes = availablePrintTypes()
   const showPrintType = true
   const activeSort = SORTS.find((sort) => sort.value === (search.sort ?? defaultSort)) ?? SORTS[0]
+  const selectedRequester = facets.requesters.find((requester) => requester.value === search.requester)
 
   useEffect(() => setQuery(search.q ?? ''), [search.q])
   useEffect(() => setHydrated(true), [])
@@ -211,7 +212,7 @@ export function BoardFilters({
 
   const active = [
     showPrintType && search.printType && { key: 'printType', label: printTypeLabel(search.printType) },
-    search.requester && { key: 'requester', label: search.requester },
+    search.requester && { key: 'requester', label: selectedRequester?.label ?? search.requester },
     search.minQuantity !== undefined && { key: 'minQuantity', label: `Qty ≥ ${search.minQuantity}` },
     search.maxQuantity !== undefined && { key: 'maxQuantity', label: `Qty ≤ ${search.maxQuantity}` },
     search.createdAfter && { key: 'createdAfter', label: `Created after ${search.createdAfter}` },

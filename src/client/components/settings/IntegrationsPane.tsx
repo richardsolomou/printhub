@@ -374,7 +374,14 @@ function SmtpDialog({ current, onDone }: { current: PublicIntegrationConfig; onD
         </Field>
         <Field>
           <FieldLabel htmlFor="smtp-security">Security</FieldLabel>
-          <Select value={values.secure ? 'tls' : 'starttls'} onValueChange={(value) => set('secure', value === 'tls')}>
+          <Select
+            items={[
+              { value: 'starttls', label: 'STARTTLS' },
+              { value: 'tls', label: 'Implicit TLS' },
+            ]}
+            value={values.secure ? 'tls' : 'starttls'}
+            onValueChange={(value) => set('secure', value === 'tls')}
+          >
             <SelectTrigger id="smtp-security">
               <SelectValue />
             </SelectTrigger>
