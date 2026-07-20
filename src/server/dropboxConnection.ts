@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
 import type { DropboxConnectionConfig, PublicDropboxConnection } from '../core/auth'
+import { cloudFetch } from '../adapters/cloudFetch'
 import { connectionIntegrationConfig, connectionStateMatches, createConnectionState, hashesMatch } from './cloudConnectionState'
 import { getStoredIntegrationConfig, setStoredIntegrationConfig, type SettingStore } from './integrations'
 
@@ -87,7 +88,7 @@ export async function completeDropboxAuthorization(repository: SettingStore, req
   if (!connectionStateMatches(pending, state, adminId)) {
     throw new Response('Dropbox connection request expired or did not match', { status: 400 })
   }
-  const tokenResponse = await fetch(TOKEN_URL, {
+  const tokenResponse = await cloudFetch(TOKEN_URL, {
     method: 'POST',
     headers: {
       authorization: `Basic ${Buffer.from(`${pending.clientId}:${pending.clientSecret}`).toString('base64')}`,
@@ -98,7 +99,7 @@ export async function completeDropboxAuthorization(repository: SettingStore, req
   if (!tokenResponse.ok) throw new Response(`Dropbox token exchange failed: ${await tokenResponse.text()}`, { status: 502 })
   const tokens = (await tokenResponse.json()) as { access_token: string; refresh_token?: string; account_id?: string }
   if (!tokens.refresh_token) throw new Response('Dropbox did not return an offline refresh token', { status: 502 })
-  const accountResponse = await fetch(ACCOUNT_URL, {
+  const accountResponse = await cloudFetch(ACCOUNT_URL, {
     method: 'POST',
     headers: { authorization: `Bearer ${tokens.access_token}`, 'content-type': 'application/json' },
     body: 'null',
@@ -178,7 +179,7 @@ async function validateDropboxCapabilities(accessToken: string, returnTo: string
 }
 
 function dropboxRpc(accessToken: string, route: string, body: unknown) {
-  return fetch(`${API_URL}${route}`, {
+  return cloudFetch(`${API_URL}${route}`, {
     method: 'POST',
     headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' },
     body: JSON.stringify(body),
@@ -186,7 +187,7 @@ function dropboxRpc(accessToken: string, route: string, body: unknown) {
 }
 
 function dropboxContent(accessToken: string, route: string, argument: unknown, body?: string) {
-  return fetch(`${CONTENT_URL}${route}`, {
+  return cloudFetch(`${CONTENT_URL}${route}`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${accessToken}`,

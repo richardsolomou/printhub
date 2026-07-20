@@ -1,4 +1,5 @@
 import { GoogleDriveAssetStore } from '../adapters/googleDrive'
+import { cloudFetch } from '../adapters/cloudFetch'
 import type { GoogleDriveConnectionConfig, PublicCloudConnection } from '../core/auth'
 import { connectionIntegrationConfig, connectionStateMatches, createConnectionState, hashesMatch } from './cloudConnectionState'
 import { getStoredIntegrationConfig, setStoredIntegrationConfig, type SettingStore } from './integrations'
@@ -82,7 +83,7 @@ export async function completeGoogleDriveAuthorization(repository: SettingStore,
   if (!connectionStateMatches(pending, state, adminId)) {
     throw new Response('Google Drive connection request expired or did not match', { status: 400 })
   }
-  const tokenResponse = await fetch(TOKEN_URL, {
+  const tokenResponse = await cloudFetch(TOKEN_URL, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -97,7 +98,7 @@ export async function completeGoogleDriveAuthorization(repository: SettingStore,
   const tokens = (await tokenResponse.json()) as { access_token: string; refresh_token?: string }
   const refreshToken = tokens.refresh_token ?? connection.refreshToken
   if (!refreshToken) throw new Response('Google did not return an offline refresh token', { status: 502 })
-  const accountResponse = await fetch(USER_INFO_URL, { headers: { authorization: `Bearer ${tokens.access_token}` } })
+  const accountResponse = await cloudFetch(USER_INFO_URL, { headers: { authorization: `Bearer ${tokens.access_token}` } })
   if (!accountResponse.ok) throw new Response(`Google account lookup failed: ${await accountResponse.text()}`, { status: 502 })
   const account = (await accountResponse.json()) as { sub: string; email?: string; name?: string }
   const next: GoogleDriveConnectionConfig = {

@@ -1,4 +1,5 @@
 import { OneDriveAssetStore } from '../adapters/oneDrive'
+import { cloudFetch } from '../adapters/cloudFetch'
 import type { OneDriveConnectionConfig, PublicCloudConnection } from '../core/auth'
 import { connectionIntegrationConfig, connectionStateMatches, createConnectionState, hashesMatch } from './cloudConnectionState'
 import { getStoredIntegrationConfig, setStoredIntegrationConfig, type SettingStore } from './integrations'
@@ -80,7 +81,7 @@ export async function completeOneDriveAuthorization(repository: SettingStore, re
   if (!connectionStateMatches(pending, state, adminId)) {
     throw new Response('OneDrive connection request expired or did not match', { status: 400 })
   }
-  const tokenResponse = await fetch(TOKEN_URL, {
+  const tokenResponse = await cloudFetch(TOKEN_URL, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -96,7 +97,7 @@ export async function completeOneDriveAuthorization(repository: SettingStore, re
   const tokens = (await tokenResponse.json()) as { access_token: string; refresh_token?: string }
   const refreshToken = tokens.refresh_token ?? connection.refreshToken
   if (!refreshToken) throw new Response('Microsoft did not return an offline refresh token', { status: 502 })
-  const accountResponse = await fetch(PROFILE_URL, { headers: { authorization: `Bearer ${tokens.access_token}` } })
+  const accountResponse = await cloudFetch(PROFILE_URL, { headers: { authorization: `Bearer ${tokens.access_token}` } })
   if (!accountResponse.ok) throw new Response(`Microsoft account lookup failed: ${await accountResponse.text()}`, { status: 502 })
   const account = (await accountResponse.json()) as { id: string; displayName?: string; mail?: string; userPrincipalName?: string }
   const next: OneDriveConnectionConfig = {

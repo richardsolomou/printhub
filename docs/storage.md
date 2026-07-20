@@ -36,6 +36,10 @@ Presets cover Amazon S3, Backblaze B2, Cloudflare R2, DigitalOcean Spaces, and G
 
 Folder paths are inside the PrintHub server or container, not the host — mount a host directory first (for example `-v /path/to/prints:/prints`), then pick it in the folder browser. PrintHub adds a private workspace directory below the selected folder.
 
+## Cloud request recovery
+
+Dropbox, Google Drive, and OneDrive requests retry provider throttling and temporary server failures. Each network attempt stops after two minutes so a stalled provider cannot hold an upload, download, storage migration, or connection check open indefinitely.
+
 ## Switching providers
 
 Changing storage starts a guided migration: PrintHub copies and verifies every referenced file into the new location while file changes are paused, then switches. The migration can be cancelled or retried, and the original files stay in place as a fallback — clean them up manually once you trust the new location.

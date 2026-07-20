@@ -5,6 +5,7 @@ import type { OneDriveConnectionConfig } from '../core/auth'
 import { createAssetKey, destinationKey, previewKey, trashKey } from '../core/assetKeys'
 import type { AssetStore } from '../core/types'
 import { workflow } from '../core/workflow'
+import { cloudFetch } from './cloudFetch'
 import { streamChunks } from './streamChunks'
 
 const GRAPH = 'https://graph.microsoft.com/v1.0'
@@ -243,7 +244,7 @@ export class OneDriveAssetStore implements AssetStore {
     const token = await this.token()
     const body = typeof init.body === 'string' ? init.body : init.body ? new Uint8Array(init.body) : undefined
     for (let attempt = 0; ; attempt++) {
-      const response = await fetch(url, { method: init.method, headers: { ...init.headers, authorization: `Bearer ${token}` }, body })
+      const response = await cloudFetch(url, { method: init.method, headers: { ...init.headers, authorization: `Bearer ${token}` }, body })
       if (response.ok) return response
       const error = await oneDriveError(response)
       if (!error.retryable || attempt === 5) throw error
@@ -262,7 +263,7 @@ export class OneDriveAssetStore implements AssetStore {
   private async refreshToken() {
     if (!this.connection.clientId || !this.connection.clientSecret || !this.connection.refreshToken)
       throw new Error('OneDrive is not connected')
-    const response = await fetch(TOKEN, {
+    const response = await cloudFetch(TOKEN, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -301,7 +302,7 @@ function encodePath(path: string) {
 
 async function requestUploadSession(url: string, chunk: Uint8Array, start: number, end: number, total: number) {
   for (let attempt = 0; ; attempt++) {
-    const response = await fetch(url, {
+    const response = await cloudFetch(url, {
       method: 'PUT',
       headers: { 'content-length': String(chunk.byteLength), 'content-range': `bytes ${start}-${end}/${total}` },
       body: new Uint8Array(chunk),
