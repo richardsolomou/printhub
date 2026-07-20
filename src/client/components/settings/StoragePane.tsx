@@ -47,7 +47,7 @@ import { UnsavedChangesGuard } from './UnsavedChangesGuard'
 
 const STORAGE_OPTIONS = [
   { value: 'local', label: 'Local folder' },
-  { value: 's3', label: 'S3-compatible object storage' },
+  { value: 's3', label: 'S3-compatible or own server' },
   { value: 'cloud', label: 'Cloud storage' },
 ] as const
 
@@ -179,9 +179,20 @@ function StorageForm({
   )
   const s3 = current.adapter === 's3' ? current : undefined
   const currentProvider = s3 ? inferS3Provider(s3.endpoint) : 'backblaze'
+  const cloudProviders = superAdmin
+    ? CLOUD_PROVIDERS
+    : CLOUD_PROVIDERS.filter((provider) => cloudConnections[provider.value].connected || current.adapter === provider.value)
+  const storageOptions = STORAGE_OPTIONS.filter(
+    (option) => (option.value !== 'local' || localStorageAllowed) && (option.value !== 'cloud' || cloudProviders.length > 0),
+  )
+  const storageChoices = localStorageAllowed
+    ? 'a local folder, S3-compatible or user-owned storage, or connected cloud storage'
+    : cloudProviders.length
+      ? 'S3-compatible, user-owned, or connected cloud storage'
+      : 'S3-compatible or user-owned storage'
   const form = useForm({
     defaultValues: {
-      adapter: current.adapter,
+      adapter: !localStorageAllowed && current.adapter === 'local' ? 's3' : current.adapter,
       root: current.adapter === 's3' ? '/prints' : current.root,
       endpoint: s3?.endpoint ?? '',
       provider: currentProvider,
@@ -308,8 +319,7 @@ function StorageForm({
         <>
           <h3 className="font-heading text-xl font-semibold">Choose storage</h3>
           <p className="text-sm leading-relaxed text-muted-foreground">
-            PrintHub needs a writable destination before the board is ready. Choose a local folder, S3-compatible storage, or connected
-            cloud storage.
+            PrintHub needs a writable destination before the board is ready. Choose {storageChoices}.
           </p>
         </>
       )}
@@ -358,7 +368,7 @@ function StorageForm({
         <form.Field name="adapter">
           {(field) => (
             <Select
-              items={STORAGE_OPTIONS}
+              items={storageOptions}
               value={isCloudAdapter(field.state.value) ? 'cloud' : field.state.value}
               onValueChange={(value) => {
                 const adapter =
@@ -372,14 +382,14 @@ function StorageForm({
                   <StorageAdapterIcon adapter={isCloudAdapter(field.state.value) ? 'cloud' : field.state.value} />
                   <span>
                     {
-                      STORAGE_OPTIONS.find((option) => option.value === (isCloudAdapter(field.state.value) ? 'cloud' : field.state.value))!
+                      storageOptions.find((option) => option.value === (isCloudAdapter(field.state.value) ? 'cloud' : field.state.value))!
                         .label
                     }
                   </span>
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {STORAGE_OPTIONS.map((option) => (
+                {storageOptions.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
                     <StorageAdapterIcon adapter={option.value} />
                     <span>{option.label}</span>
@@ -427,7 +437,7 @@ function StorageForm({
               <Field>
                 <FieldLabel htmlFor="cloud-provider">Cloud provider</FieldLabel>
                 <Select
-                  items={CLOUD_PROVIDERS}
+                  items={cloudProviders}
                   value={adapter}
                   onValueChange={(value) => {
                     const provider = value as CloudProvider
@@ -442,7 +452,7 @@ function StorageForm({
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {CLOUD_PROVIDERS.map((provider) => (
+                    {cloudProviders.map((provider) => (
                       <SelectItem key={provider.value} value={provider.value}>
                         <CloudProviderIcon provider={provider.value} />
                         <span>{provider.label}</span>
@@ -594,6 +604,7 @@ function StorageForm({
                         if (next === 'cloudflare') form.setFieldValue('region', 'auto')
                         if (next === 'digitalocean' && form.getFieldValue('region') === 'auto') form.setFieldValue('region', 'nyc3')
                         if (next === 'aws' && form.getFieldValue('region') === 'auto') form.setFieldValue('region', 'us-east-1')
+                        if (next === 'custom' && form.getFieldValue('region') === 'us-west-004') form.setFieldValue('region', 'us-east-1')
                       }}
                     >
                       <SelectTrigger className="w-full" id="storage-provider">
@@ -646,21 +657,33 @@ function StorageForm({
                       )}
                     </form.Field>
                   ) : provider === 'custom' ? (
-                    <form.Field name="endpoint">
-                      {(field) => (
-                        <Field>
-                          <FieldLabel htmlFor="storage-endpoint">S3 endpoint</FieldLabel>
-                          <Input
-                            id="storage-endpoint"
-                            type="url"
-                            value={field.state.value}
-                            onChange={(event) => field.handleChange(event.target.value)}
-                            placeholder="https://minio.local:9000"
-                            required
-                          />
-                        </Field>
-                      )}
-                    </form.Field>
+                    <div className="flex flex-col gap-3">
+                      <Alert>
+                        <AlertTitle>Using storage on your own machine?</AlertTitle>
+                        <AlertDescription>
+                          Run an S3-compatible service such as MinIO, then expose only its API through a stable HTTPS endpoint. An outbound
+                          tunnel can avoid opening inbound ports. Use bucket-scoped credentials and do not expose the admin console.
+                        </AlertDescription>
+                      </Alert>
+                      <form.Field name="endpoint">
+                        {(field) => (
+                          <Field>
+                            <FieldLabel htmlFor="storage-endpoint">S3 endpoint</FieldLabel>
+                            <Input
+                              id="storage-endpoint"
+                              type="url"
+                              value={field.state.value}
+                              onChange={(event) => field.handleChange(event.target.value)}
+                              placeholder="https://storage.example.com"
+                              required
+                            />
+                            <FieldDescription>
+                              Hosted PrintHub must be able to reach this address; LAN-only and .local hostnames will not work.
+                            </FieldDescription>
+                          </Field>
+                        )}
+                      </form.Field>
+                    </div>
                   ) : null
                 }
               </form.Subscribe>
@@ -806,7 +829,7 @@ function StorageForm({
     <SettingsPage>
       <SettingsHeader
         title="Storage"
-        description="Move finished print files between local folders, S3-compatible providers, and connected cloud storage. PrintHub copies and verifies every file before switching, and leaves the source untouched as a fallback."
+        description={`Move finished print files between ${storageChoices}. PrintHub copies and verifies every file before switching, and leaves the source untouched as a fallback.`}
       />
       <SettingsSection>{formContent}</SettingsSection>
       <ConfirmDialog
@@ -922,7 +945,7 @@ export function fileName(path: string) {
 function storageLabel(config: StorageConfig) {
   if (config.adapter === 'dropbox' || config.adapter === 'google-drive' || config.adapter === 'onedrive')
     return `${cloudProviderLabel(config.adapter)}${config.root ? `/${config.root}` : ''}`
-  if (config.adapter === 'local') return config.root
+  if (config.adapter === 'local') return config.root || 'Local storage'
   return `${config.endpoint}/${config.bucket}${config.prefix ? `/${config.prefix}` : ''}`
 }
 

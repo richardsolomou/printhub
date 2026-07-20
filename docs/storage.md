@@ -1,6 +1,6 @@
 # Storage providers
 
-PrintHub stores model files in a local folder, an S3-compatible bucket, or a connected Dropbox, Google Drive, or OneDrive account. Settings → Storage walks through each connection and displays the exact OAuth redirect URI to copy, so this page covers only what the in-app guidance cannot: the provider-console setup, its gotchas, and how switching providers works.
+PrintHub stores model files in a local folder, an S3-compatible bucket, storage on your own machine or NAS, or a connected Dropbox, Google Drive, or OneDrive account. Settings → Storage walks through each connection and displays the exact OAuth redirect URI to copy, so this page covers only what the in-app guidance cannot: the provider-console setup, its gotchas, and how switching providers works.
 
 Every provider receives an enforced workspace namespace below the configured root. OAuth client secrets and refresh tokens are encrypted at rest with `/data/integration-secrets.key` (or `INTEGRATIONS_ENCRYPTION_KEY`).
 
@@ -32,7 +32,17 @@ Register a web application in Microsoft Entra and create a client secret. PrintH
 
 ## S3-compatible services
 
-Presets cover Amazon S3, Backblaze B2, Cloudflare R2, DigitalOcean Spaces, and Google Cloud Storage (via HMAC keys); endpoints are derived from the region or account ID, and presets always use virtual-hosted-style addressing. The **Custom** provider accepts any S3-compatible endpoint (MinIO, Wasabi, NAS gateways) and defaults to path-style requests, which most self-hosted endpoints require — the path-style toggle exists only there.
+Presets cover Amazon S3, Backblaze B2, Cloudflare R2, DigitalOcean Spaces, and Google Cloud Storage (via HMAC keys); endpoints are derived from the region or account ID, and presets always use virtual-hosted-style addressing. The **Own server, NAS, or custom S3** provider accepts any S3-compatible endpoint (MinIO, Wasabi, NAS gateways) and defaults to path-style requests, which most self-hosted endpoints require — the path-style toggle exists only there.
+
+### Storage on your own machine or NAS
+
+Hosted workspaces can keep model files and previews on hardware they control without giving PrintHub access to an arbitrary filesystem. Run an S3-compatible service such as MinIO or a NAS object-storage gateway, create a dedicated bucket with read/write credentials limited to that bucket, and expose only the S3 API at a stable HTTPS URL that the PrintHub server can reach.
+
+An outbound tunnel such as Cloudflare Tunnel or Tailscale Funnel can publish that HTTPS endpoint without forwarding a router port. The endpoint is internet-reachable, so rely on a valid TLS certificate and dedicated S3 credentials, keep the management console private, and rotate the credentials if they are exposed. Interactive access gateways are not compatible because PrintHub must authenticate directly with S3 credentials.
+
+In Settings → Storage, choose **S3-compatible or own server**, then **Own server, NAS, or custom S3**. Enter the tunnel hostname as the endpoint, select the bucket, use the region configured by the S3 service (often `us-east-1`), and leave path-style requests enabled for MinIO and most NAS gateways.
+
+The machine and tunnel must remain online whenever PrintHub reads or writes a model. Model files and generated previews are stored in the bucket, while workspace metadata remains in PrintHub's SQLite database and in-progress upload chunks temporarily use the hosted server's `DATA_DIR` until the upload is finalized.
 
 ## Local folders
 
