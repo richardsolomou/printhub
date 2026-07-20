@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.28.0
+
+### Minor Changes
+
+- 2581399: Notify everyone when PrintHub needs a browser refresh and alert super admins when a newer release is available.
+
 ## 0.27.3
 
 ### Patch Changes
