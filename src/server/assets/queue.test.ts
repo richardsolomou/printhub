@@ -200,6 +200,16 @@ describe('asset generation queue', () => {
     ])
   })
 
+  it('generates assets for sources within the default memory budget', async () => {
+    const id = await requestWithFile()
+    vi.spyOn(assets, 'stat').mockResolvedValue({ size: 113_222_984 })
+
+    queue.enqueue(id)
+    await queue.idle()
+
+    expect(repository.getRequest(id)!.hasThumbnail).toBe(true)
+  })
+
   it('preserves a completed thumbnail when preview work is interrupted', async () => {
     const id = await requestWithFile()
     repository.startAssetGeneration(id, ['thumbnail', 'preview'])

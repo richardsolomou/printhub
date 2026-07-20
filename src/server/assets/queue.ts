@@ -11,7 +11,7 @@ import { logger } from '../logger'
 
 type WorkerConfig = { path: string; execArgv?: string[] }
 
-const DEFAULT_SOURCE_BYTE_BUDGET = 256 * 1024 * 1024
+const DEFAULT_SOURCE_BYTE_BUDGET = 512 * 1024 * 1024
 const SOURCE_MEMORY_MULTIPLIER = 4
 
 class ByteBudget {
