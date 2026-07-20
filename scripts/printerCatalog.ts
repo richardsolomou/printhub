@@ -376,5 +376,5 @@ function roundDimension(value: number) {
 }
 
 function decodeHtml(value: string) {
-  return value.replaceAll('&amp;', '&').replaceAll('&#x2F;', '/').replaceAll('&#47;', '/')
+  return value.replace(/&(?:amp|#x2F|#47);/g, (entity) => (entity === '&amp;' ? '&' : '/'))
 }
