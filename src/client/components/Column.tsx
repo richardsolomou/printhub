@@ -118,7 +118,7 @@ export function Column({
             type="button"
             variant="ghost"
             size="xs"
-            className="ml-auto normal-case tracking-normal"
+            className="ml-auto normal-case tracking-normal min-[901px]:hidden"
             onClick={() => onStartSelection(status)}
           >
             Select
