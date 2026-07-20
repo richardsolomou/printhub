@@ -1,6 +1,6 @@
 # Telemetry
 
-PrintHub sends anonymous usage telemetry by default to help improve the app. This page lists exactly what is sent so you can decide whether to keep it enabled. Telemetry is deployment-wide and can be turned off at any time in the Admin area's Telemetry tab — the toggle applies immediately without a restart, and while disabled the browser analytics library is never loaded at all.
+PrintHub sends anonymous usage telemetry by default to help improve the app. This page lists exactly what is sent so you can decide whether to keep it enabled. Telemetry is deployment-wide and can be turned off at any time in the Super Admin area's Telemetry tab — the toggle applies immediately without a restart, and while disabled the browser analytics library is never loaded at all.
 
 ## What is sent
 
@@ -31,4 +31,4 @@ Model files and geometry, request names and notes, file names, email addresses, 
 
 ## Disabling telemetry
 
-Open the Admin area's Telemetry tab and turn off "Share anonymous usage data". The setting is stored deployment-wide and gates both server and browser events.
+Open the Super Admin area's Telemetry tab and turn off "Share anonymous usage data". The setting is stored deployment-wide and gates both server and browser events.

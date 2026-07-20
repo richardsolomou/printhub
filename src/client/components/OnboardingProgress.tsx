@@ -1,4 +1,4 @@
-export function OnboardingProgress({ step, accountLabel = 'Admin' }: { step: number; accountLabel?: 'Admin' | 'Account' }) {
+export function OnboardingProgress({ step, accountLabel = 'Super admin' }: { step: number; accountLabel?: 'Super admin' | 'Account' }) {
   const steps = ['About', accountLabel, 'Storage', 'Printers']
   return (
     <div className="space-y-2" aria-label={`Setup step ${step} of ${steps.length}: ${steps[step - 1]}`}>

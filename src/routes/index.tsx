@@ -40,7 +40,7 @@ function Home() {
               <Brand />
               <OnboardingProgress
                 step={!session.storageConfigured || !session.storageReady ? 3 : 4}
-                accountLabel={session.hosted ? 'Account' : 'Admin'}
+                accountLabel={session.hosted ? 'Account' : 'Super admin'}
               />
             </CardHeader>
             <CardContent>

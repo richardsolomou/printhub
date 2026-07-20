@@ -43,7 +43,7 @@ export function AdminUsersPane() {
   if (!users || !session) {
     return (
       <SettingsPage>
-        <SettingsHeader title="Users" description="Manage every account and deployment administrator." />
+        <SettingsHeader title="Users" description="Manage every account and super admin." />
         <QueryState
           loading={usersResult.isPending || sessionResult.isPending}
           error={usersResult.error ?? sessionResult.error}

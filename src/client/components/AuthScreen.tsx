@@ -60,7 +60,7 @@ export function AuthScreen({ setupRequired, hosted, auth }: { setupRequired: boo
       <main className="grid min-h-dvh place-items-center p-6">
         <div className="flex w-full max-w-[720px] flex-col gap-5">
           <AuthBrand />
-          <OnboardingProgress step={1} accountLabel={hosted ? 'Account' : 'Admin'} />
+          <OnboardingProgress step={1} accountLabel={hosted ? 'Account' : 'Super admin'} />
           <Card className="shadow-xl shadow-black/10">
             <CardHeader>
               <CardTitle>Your private 3D-print production queue</CardTitle>
@@ -80,8 +80,8 @@ export function AuthScreen({ setupRequired, hosted, auth }: { setupRequired: boo
               </div>
               <div className="rounded-lg border bg-muted/30 p-3.5 text-sm text-muted-foreground">
                 <p>
-                  Next: {initialAdmin ? 'create the admin' : 'create your account'}, choose private storage, and add your resin or filament
-                  printers.
+                  Next: {initialAdmin ? 'create the super admin' : 'create your account'}, choose private storage, and add your resin or
+                  filament printers.
                 </p>
                 <p className="mt-1">Anonymous usage telemetry is enabled by default and can be disabled in Settings.</p>
               </div>
@@ -99,7 +99,7 @@ export function AuthScreen({ setupRequired, hosted, auth }: { setupRequired: boo
     <main className="grid min-h-dvh place-items-center p-6">
       <div className="flex w-full max-w-[440px] flex-col gap-8">
         <AuthBrand />
-        {setupRequired && <OnboardingProgress step={2} accountLabel={hosted ? 'Account' : 'Admin'} />}
+        {setupRequired && <OnboardingProgress step={2} accountLabel={hosted ? 'Account' : 'Super admin'} />}
         <Card className="w-full shadow-xl shadow-black/10">
           <CardHeader>
             <CardTitle>{initialAdmin ? 'Welcome' : signingUp ? 'Create account' : 'Sign in'}</CardTitle>
@@ -196,7 +196,7 @@ export function AuthScreen({ setupRequired, hosted, auth }: { setupRequired: boo
                 )}
                 <Button type="submit" disabled={busy}>
                   {busy && <Spinner />}
-                  {busy ? 'Working…' : initialAdmin ? 'Create admin' : signingUp ? 'Create account' : 'Sign in'}
+                  {busy ? 'Working…' : initialAdmin ? 'Create super admin' : signingUp ? 'Create account' : 'Sign in'}
                 </Button>
                 {!signingUp && auth.passwordReset && (
                   <Button

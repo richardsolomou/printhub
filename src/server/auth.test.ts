@@ -230,7 +230,7 @@ describe('better-auth integration', () => {
     expect(repository.countUsers()).toBe(2)
   })
 
-  it('assigns exactly one deployment admin across concurrent first sign-ups', async () => {
+  it('assigns exactly one super admin across concurrent first sign-ups', async () => {
     const { repository, auth } = build()
     cleanup = () => repository.close()
 
