@@ -2,7 +2,7 @@ import argon2 from 'argon2'
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { APIError, createAuthMiddleware } from 'better-auth/api'
-import { admin, organization, twoFactor } from 'better-auth/plugins'
+import { admin as superAdminPlugin, organization, twoFactor } from 'better-auth/plugins'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { sql } from 'drizzle-orm'
 import type { PrintHubDatabase } from '../db'
@@ -45,12 +45,12 @@ export function createAuth(
     ...(providerOptions('google') ? { google: providerOptions('google')! } : {}),
     ...(providerOptions('discord') ? { discord: providerOptions('discord')! } : {}),
   }
-  const claimInitialAdmin = () => {
+  const claimInitialSuperAdmin = () => {
     database.run(sql`
       UPDATE ${userTable}
-      SET role = 'admin'
+      SET role = 'super_admin'
       WHERE id = (SELECT id FROM ${userTable} ORDER BY ${userTable.createdAt}, ${userTable.id} LIMIT 1)
-        AND NOT EXISTS (SELECT 1 FROM ${userTable} WHERE role = 'admin')
+        AND NOT EXISTS (SELECT 1 FROM ${userTable} WHERE role = 'super_admin')
     `)
   }
   return betterAuth({
@@ -110,7 +110,7 @@ export function createAuth(
             return { data: { ...user, role: 'requester' } }
           },
           after: async (user) => {
-            if (process.env.PRINTHUB_HOSTED !== 'true') claimInitialAdmin()
+            if (process.env.PRINTHUB_HOSTED !== 'true') claimInitialSuperAdmin()
             const invite = claimedAuthInvite()
             if (invite) options?.completeInvite?.(invite.id, user.id)
             options?.onUserCreated?.()
@@ -138,10 +138,10 @@ export function createAuth(
       }),
     },
     plugins: [
-      admin({
+      superAdminPlugin({
         ac: accessControl,
         roles: accessRoles,
-        adminRoles: ['admin'],
+        adminRoles: ['super_admin'],
         defaultRole: 'requester',
         allowImpersonatingAdmins: true,
         impersonationSessionDuration: 60 * 60,

@@ -6,19 +6,19 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { DrizzleRepository } from './repository'
 import { createDatabase } from './connection'
-import type { PrinterProfile } from '../core/types'
+import type { AccountRole, PrinterProfile, WorkspaceRole } from '../core/types'
 import { member, requests, requestStatuses, uploadSessions, user } from './schema'
 
 function insertUser(
   repository: DrizzleRepository,
-  values: { id: string; name: string; email: string; role?: 'admin' | 'requester'; color?: string },
+  values: { id: string; name: string; email: string; accountRole?: AccountRole; workspaceRole?: WorkspaceRole; color?: string },
 ) {
   const now = new Date()
   repository.database
     .insert(user)
-    .values({ ...values, role: values.role ?? 'requester', emailVerified: true, createdAt: now, updatedAt: now })
+    .values({ ...values, role: values.accountRole ?? 'requester', emailVerified: true, createdAt: now, updatedAt: now })
     .run()
-  repository.addWorkspaceMember(values.id, values.role === 'admin' ? 'admin' : 'member')
+  repository.addWorkspaceMember(values.id, values.workspaceRole ?? 'member')
 }
 
 describe('DrizzleRepository contract', () => {
@@ -38,7 +38,7 @@ describe('DrizzleRepository contract', () => {
   })
 
   it('trusts workspaces owned by super admins with local storage', () => {
-    repository.database.update(user).set({ role: 'admin' }).where(eq(user.id, 'owner')).run()
+    repository.database.update(user).set({ role: 'super_admin' }).where(eq(user.id, 'owner')).run()
     repository.database.update(member).set({ role: 'owner' }).where(eq(member.userId, 'owner')).run()
 
     expect(repository.isSuperAdminWorkspace()).toBe(true)
@@ -385,7 +385,7 @@ describe('DrizzleRepository contract', () => {
   it('reads users and people from the better-auth user table', () => {
     repository.database.delete(user).run()
     insertUser(repository, { id: 'u1', name: 'Maker', email: 'maker@example.com', color: '#fa0' })
-    insertUser(repository, { id: 'u2', name: 'Zed', email: 'zed@example.com', role: 'admin' })
+    insertUser(repository, { id: 'u2', name: 'Zed', email: 'zed@example.com', workspaceRole: 'admin' })
     expect(repository.listUsers()).toEqual([
       { id: 'u2', email: 'zed@example.com', name: 'Zed', image: undefined, role: 'admin', workspaceRole: 'admin' },
       { id: 'u1', email: 'maker@example.com', name: 'Maker', image: undefined, role: 'requester', workspaceRole: 'member' },
@@ -397,7 +397,7 @@ describe('DrizzleRepository contract', () => {
     expect(repository.countUsers()).toBe(2)
   })
 
-  it('lists deployment users independently of workspace membership', () => {
+  it('lists accounts independently of workspace membership', () => {
     repository.database.delete(user).run()
     insertUser(repository, { id: 'member', name: 'Workspace Member', email: 'member@example.com' })
     const now = new Date()
@@ -410,19 +410,18 @@ describe('DrizzleRepository contract', () => {
         emailVerified: true,
         createdAt: now,
         updatedAt: now,
-        role: 'admin',
+        role: 'super_admin',
       })
       .run()
 
     expect(repository.listUsers()).toEqual([expect.objectContaining({ id: 'member', workspaceRole: 'member' })])
-    expect(repository.listDeploymentUsers()).toEqual([
+    expect(repository.listAccounts()).toEqual([
       {
         id: 'super-admin',
         email: 'admin@example.com',
         name: 'Super Admin',
         image: undefined,
-        role: 'admin',
-        superAdmin: true,
+        role: 'super_admin',
       },
       {
         id: 'member',
@@ -430,11 +429,10 @@ describe('DrizzleRepository contract', () => {
         name: 'Workspace Member',
         image: undefined,
         role: 'requester',
-        superAdmin: false,
       },
     ])
-    expect(repository.deploymentUserExists('ADMIN@EXAMPLE.COM')).toBe(true)
-    expect(repository.deploymentUserExists('missing@example.com')).toBe(false)
+    expect(repository.accountExists('ADMIN@EXAMPLE.COM')).toBe(true)
+    expect(repository.accountExists('missing@example.com')).toBe(false)
   })
 
   it('isolates workspace requests, printers, invites, uploads, and members', () => {
@@ -657,8 +655,28 @@ describe('DrizzleRepository contract', () => {
     const database = new Database(':memory:')
     const migrated = new DrizzleRepository(createDatabase(database))
 
-    expect(database.prepare('SELECT count(*) count FROM __drizzle_migrations').get()).toEqual({ count: 8 })
+    expect(database.prepare('SELECT count(*) count FROM __drizzle_migrations').get()).toEqual({ count: 9 })
     migrated.close()
+  })
+
+  it('renames the legacy global admin role without changing workspace roles', () => {
+    const database = new Database(':memory:')
+    database.exec(`
+      CREATE TABLE user (id text PRIMARY KEY NOT NULL, role text);
+      CREATE TABLE member (id text PRIMARY KEY NOT NULL, role text NOT NULL);
+      INSERT INTO user VALUES ('operator', 'admin'), ('requester', 'requester');
+      INSERT INTO member VALUES ('workspace-admin', 'admin');
+    `)
+    const migration = fs.readFileSync(path.resolve('drizzle/0008_rename_super_admin_role.sql'), 'utf8')
+
+    database.exec(migration)
+
+    expect(database.prepare('SELECT id, role FROM user ORDER BY id').all()).toEqual([
+      { id: 'operator', role: 'super_admin' },
+      { id: 'requester', role: 'requester' },
+    ])
+    expect(database.prepare('SELECT role FROM member').get()).toEqual({ role: 'admin' })
+    database.close()
   })
 
   it('clears legacy upload completions that cross workspace boundaries', () => {

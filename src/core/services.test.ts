@@ -56,7 +56,7 @@ describe('PrintHubService crash recovery', () => {
           emailVerified: true,
           createdAt: now,
           updatedAt: now,
-          role: identity.role,
+          role: 'requester',
         })
         .run()
     }

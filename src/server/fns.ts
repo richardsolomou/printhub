@@ -68,9 +68,9 @@ async function rpc<T>(work: () => Promise<T> | T): Promise<T> {
 }
 
 const me = async (instance: Awaited<ReturnType<typeof app>>) => instance.requireIdentity(getRequest().headers)
-const admin = async (instance: Awaited<ReturnType<typeof app>>) => {
+const superAdmin = async (instance: Awaited<ReturnType<typeof app>>) => {
   const identity = await me(instance)
-  if (identity.role !== 'admin') throw new Response('forbidden', { status: 403 })
+  if (!identity.superAdmin) throw new Response('forbidden', { status: 403 })
   return identity
 }
 
@@ -210,7 +210,7 @@ export const setOwnPassword = createServerFn({ method: 'POST' })
 export const getIntegrationSettings = createServerFn({ method: 'GET' }).handler(async () =>
   rpc(async () => {
     const instance = await app()
-    await admin(instance)
+    await superAdmin(instance)
     const stored = getStoredIntegrationConfig(deploymentSettings(instance.repository))
     const settings = publicIntegrationConfig(stored, resolveAuthAdapterConfig(stored), resolveSmtpConfig(stored))
     const accounts = await instance.auth.api.listUserAccounts({ headers: getRequest().headers })
@@ -227,7 +227,7 @@ export const updatePasswordAuth = createServerFn({ method: 'POST' })
     rpc(async () => {
       const instance = await app()
       requireMutationOrigin()
-      await admin(instance)
+      await superAdmin(instance)
       if (process.env.AUTH_PASSWORD_ENABLED !== undefined || process.env.AUTH_PASSWORD_RECOVERY !== undefined) {
         throw new Response('password authentication is controlled by the deployment environment', { status: 409 })
       }
@@ -253,7 +253,7 @@ export const saveSocialProvider = createServerFn({ method: 'POST' })
     rpc(async () => {
       const instance = await app()
       requireMutationOrigin()
-      await admin(instance)
+      await superAdmin(instance)
       const prefix = `AUTH_${data.provider.toUpperCase()}`
       if (process.env[`${prefix}_CLIENT_ID`] || process.env[`${prefix}_CLIENT_SECRET`]) {
         throw new Response(`${data.provider} is controlled by the deployment environment`, { status: 409 })
@@ -281,7 +281,7 @@ export const updateSocialProviderEnabled = createServerFn({ method: 'POST' })
     rpc(async () => {
       const instance = await app()
       requireMutationOrigin()
-      await admin(instance)
+      await superAdmin(instance)
       const prefix = `AUTH_${data.provider.toUpperCase()}`
       if (process.env[`${prefix}_CLIENT_ID`] || process.env[`${prefix}_CLIENT_SECRET`]) {
         throw new Response(`${data.provider} is controlled by the deployment environment`, { status: 409 })
@@ -313,7 +313,7 @@ export const saveSmtpSettings = createServerFn({ method: 'POST' })
     rpc(async () => {
       const instance = await app()
       requireMutationOrigin()
-      const identity = await admin(instance)
+      const identity = await superAdmin(instance)
       if (process.env.SMTP_HOST) {
         throw new Response('SMTP is controlled by the deployment environment', { status: 409 })
       }
@@ -348,7 +348,7 @@ export const removeSmtpSettings = createServerFn({ method: 'POST' }).handler(asy
   rpc(async () => {
     const instance = await app()
     requireMutationOrigin()
-    await admin(instance)
+    await superAdmin(instance)
     if (process.env.SMTP_HOST) {
       throw new Response('SMTP is controlled by the deployment environment', { status: 409 })
     }
@@ -400,11 +400,11 @@ export const listUsers = createServerFn({ method: 'GET' })
     }),
   )
 
-export const listDeploymentUsers = createServerFn({ method: 'GET' }).handler(async () =>
+export const listAccounts = createServerFn({ method: 'GET' }).handler(async () =>
   rpc(async () => {
     const instance = await app()
-    await admin(instance)
-    return instance.repository.listDeploymentUsers().map((account) => ({ ...account, image: userImage(account.email, account.image) }))
+    await superAdmin(instance)
+    return instance.repository.listAccounts().map((account) => ({ ...account, image: userImage(account.email, account.image) }))
   }),
 )
 
@@ -561,7 +561,7 @@ export const acceptInvite = createServerFn({ method: 'POST' })
       if (invite.recipientEmail && invite.recipientEmail !== data.email) {
         throw new Response('this invitation belongs to another email address', { status: 403 })
       }
-      if (instance.repository.deploymentUserExists(data.email)) {
+      if (instance.repository.accountExists(data.email)) {
         throw new Response('an account with this email already exists — sign in instead', { status: 409 })
       }
 
@@ -674,7 +674,7 @@ function cloudProviderName(provider: 'dropbox' | 'google-drive' | 'onedrive') {
 export const getTelemetrySettings = createServerFn({ method: 'GET' }).handler(async () =>
   rpc(async () => {
     const instance = await app()
-    if ((await me(instance)).role !== 'admin') throw new Response('forbidden', { status: 403 })
+    if (!(await me(instance)).superAdmin) throw new Response('forbidden', { status: 403 })
     return resolveTelemetryConfig(deploymentSettings(instance.repository))
   }),
 )
@@ -685,7 +685,7 @@ export const updateTelemetrySettings = createServerFn({ method: 'POST' })
     rpc(async () => {
       const instance = await app()
       requireMutationOrigin()
-      if ((await me(instance)).role !== 'admin') throw new Response('forbidden', { status: 403 })
+      if (!(await me(instance)).superAdmin) throw new Response('forbidden', { status: 403 })
       const config = { enabled: data.enabled }
       instance.repository.setDeploymentSetting('telemetry', config)
       return config
@@ -831,7 +831,7 @@ export const beginCloudConnection = createServerFn({ method: 'POST' })
     rpc(async () => {
       const instance = await app()
       requireMutationOrigin()
-      const identity = await admin(instance)
+      const identity = await superAdmin(instance)
       const input = { clientId: data.clientId, clientSecret: data.clientSecret }
       const origin = new URL(getRequest().url).origin
       const url =
@@ -852,7 +852,7 @@ export const removeCloudConnection = createServerFn({ method: 'POST' })
     rpc(async () => {
       const instance = await app()
       requireMutationOrigin()
-      await admin(instance)
+      await superAdmin(instance)
       const repositories = instance.repository.listWorkspaces().map((workspace) => instance.repository.scoped(workspace.id))
       if (repositories.some((repository) => resolveStorageConfig(repository).adapter === data.provider))
         throw new Response(`move storage away from ${cloudProviderName(data.provider)} before disconnecting it`, { status: 409 })

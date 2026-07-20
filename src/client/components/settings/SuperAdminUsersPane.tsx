@@ -13,9 +13,9 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
 import { PASSWORD_MIN_LENGTH } from '../../../core/security'
-import type { Identity, Role } from '../../../core/types'
+import type { Account, AccountRole, Identity } from '../../../core/types'
 import { authClient } from '../../authClient'
-import { deploymentUsersQuery, sessionQuery } from '../../queries'
+import { accountsQuery, sessionQuery } from '../../queries'
 import { retryQueries } from '../../queryState'
 import { DialogShell } from '../DialogShell'
 import { QueryState } from '../QueryState'
@@ -24,21 +24,21 @@ import { SettingsActions, SettingsHeader, SettingsPage, SettingsSection } from '
 
 const ROLE_OPTIONS = [
   { value: 'requester', label: 'User' },
-  { value: 'admin', label: 'Super admin' },
+  { value: 'super_admin', label: 'Super admin' },
 ] as const
 
-const columnHelper = createColumnHelper<Identity>()
+const columnHelper = createColumnHelper<Account>()
 type UserAction = 'impersonate' | 'role' | 'password'
 
-export function AdminUsersPane() {
-  const usersResult = useQuery(deploymentUsersQuery())
+export function SuperAdminUsersPane() {
+  const usersResult = useQuery(accountsQuery())
   const sessionResult = useQuery(sessionQuery())
   const users = usersResult.data
   const session = sessionResult.data
   const me = session?.identity
   const passwordEnabled = session?.auth.password !== false
   const [adding, setAdding] = useState(false)
-  const [dialog, setDialog] = useState<{ action: UserAction; user: Identity } | null>(null)
+  const [dialog, setDialog] = useState<{ action: UserAction; user: Account } | null>(null)
 
   if (!users || !session) {
     return (
@@ -105,8 +105,8 @@ function userColumns({
 }: {
   me?: Identity
   passwordEnabled: boolean
-  onAction: (action: UserAction, user: Identity) => void
-}): ColumnDef<Identity>[] {
+  onAction: (action: UserAction, user: Account) => void
+}): ColumnDef<Account>[] {
   return [
     columnHelper.accessor('name', {
       header: 'Name',
@@ -140,9 +140,9 @@ function UserActions({
   passwordEnabled,
   onAction,
 }: {
-  user: Identity
+  user: Account
   passwordEnabled: boolean
-  onAction: (action: UserAction, user: Identity) => void
+  onAction: (action: UserAction, user: Account) => void
 }) {
   const [open, setOpen] = useState(false)
   const choose = (action: UserAction) => {
@@ -174,11 +174,11 @@ function UserActions({
   )
 }
 
-function ServerRoleCell({ getValue }: { getValue: () => Identity['role'] }) {
-  return <Badge variant="secondary">{getValue() === 'admin' ? 'Super admin' : 'User'}</Badge>
+function ServerRoleCell({ getValue }: { getValue: () => AccountRole }) {
+  return <Badge variant="secondary">{getValue() === 'super_admin' ? 'Super admin' : 'User'}</Badge>
 }
 
-function UserSummary({ user }: { user: Identity }) {
+function UserSummary({ user }: { user: Account }) {
   return (
     <div className="flex items-center gap-3 rounded-lg border p-3">
       <UserAvatar name={user.name} image={user.image} />
@@ -187,13 +187,13 @@ function UserSummary({ user }: { user: Identity }) {
         <p className="truncate text-sm text-muted-foreground">{user.email}</p>
       </div>
       <Badge variant="secondary" className="ml-auto">
-        {user.role === 'admin' ? 'Super admin' : 'User'}
+        {user.role === 'super_admin' ? 'Super admin' : 'User'}
       </Badge>
     </div>
   )
 }
 
-function ImpersonateUserDialog({ user, onDone }: { user: Identity; onDone: () => void }) {
+function ImpersonateUserDialog({ user, onDone }: { user: Account; onDone: () => void }) {
   const mutation = useMutation({
     mutationFn: async () => {
       const { error } = await authClient.admin.impersonateUser({ userId: user.id })
@@ -222,17 +222,17 @@ function ImpersonateUserDialog({ user, onDone }: { user: Identity; onDone: () =>
   )
 }
 
-function ChangeServerRoleDialog({ user, onDone }: { user: Identity; onDone: () => void }) {
+function ChangeServerRoleDialog({ user, onDone }: { user: Account; onDone: () => void }) {
   const queryClient = useQueryClient()
-  const [role, setRole] = useState<Role>(user.role)
+  const [role, setRole] = useState<AccountRole>(user.role)
   const mutation = useMutation({
-    mutationFn: async (nextRole: Role) => {
+    mutationFn: async (nextRole: AccountRole) => {
       const { error } = await authClient.admin.setRole({ userId: user.id, role: nextRole })
       if (error) throw new Error('Could not change this server role.')
     },
     onSuccess: async (_, nextRole) => {
-      await queryClient.invalidateQueries({ queryKey: ['deployment-users'] })
-      toast.success(`${user.name} is now ${nextRole === 'admin' ? 'a super admin' : 'a user'}.`)
+      await queryClient.invalidateQueries({ queryKey: ['accounts'] })
+      toast.success(`${user.name} is now ${nextRole === 'super_admin' ? 'a super admin' : 'a user'}.`)
       onDone()
     },
   })
@@ -242,7 +242,7 @@ function ChangeServerRoleDialog({ user, onDone }: { user: Identity; onDone: () =
       <UserSummary user={user} />
       <Field>
         <FieldLabel htmlFor={`server-role-${user.id}`}>Role</FieldLabel>
-        <Select items={ROLE_OPTIONS} value={role} onValueChange={(value) => setRole(value as Role)}>
+        <Select items={ROLE_OPTIONS} value={role} onValueChange={(value) => setRole(value as AccountRole)}>
           <SelectTrigger className="w-full" id={`server-role-${user.id}`} aria-label={`Server role for ${user.name}`}>
             <SelectValue />
           </SelectTrigger>
@@ -270,7 +270,7 @@ function ChangeServerRoleDialog({ user, onDone }: { user: Identity; onDone: () =
   )
 }
 
-function SetPasswordDialog({ user, onDone }: { user: Identity; onDone: () => void }) {
+function SetPasswordDialog({ user, onDone }: { user: Account; onDone: () => void }) {
   const mutation = useMutation({
     mutationFn: async (password: string) => {
       const { error } = await authClient.admin.setUserPassword({ userId: user.id, newPassword: password })
@@ -343,18 +343,18 @@ function SetPasswordDialog({ user, onDone }: { user: Identity; onDone: () => voi
 function CreateUserDialog({ passwordEnabled, onDone }: { passwordEnabled: boolean; onDone: () => void }) {
   const queryClient = useQueryClient()
   const mutation = useMutation({
-    mutationFn: async (value: { email: string; name: string; password?: string; role: Role }) => {
+    mutationFn: async (value: { email: string; name: string; password?: string; role: AccountRole }) => {
       const { error } = await authClient.admin.createUser(value)
       if (error) throw new Error('Could not create this user. Check the fields and email address.')
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['deployment-users'] })
+      await queryClient.invalidateQueries({ queryKey: ['accounts'] })
       toast.success('User created.')
       onDone()
     },
   })
   const form = useForm({
-    defaultValues: { email: '', name: '', password: '', role: 'requester' as Role },
+    defaultValues: { email: '', name: '', password: '', role: 'requester' as AccountRole },
     onSubmit: ({ value }) =>
       mutation.mutateAsync({
         email: value.email,
@@ -433,7 +433,7 @@ function CreateUserDialog({ passwordEnabled, onDone }: { passwordEnabled: boolea
           {(field) => (
             <Field>
               <FieldLabel htmlFor="user-role">Role</FieldLabel>
-              <Select items={ROLE_OPTIONS} value={field.state.value} onValueChange={(value) => field.handleChange(value as Role)}>
+              <Select items={ROLE_OPTIONS} value={field.state.value} onValueChange={(value) => field.handleChange(value as AccountRole)}>
                 <SelectTrigger className="w-full" id="user-role">
                   <SelectValue />
                 </SelectTrigger>

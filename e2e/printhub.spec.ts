@@ -185,7 +185,7 @@ test('health and protected routes expose security and correlation headers', asyn
   expect((await request.get('/api/events')).status()).toBe(401)
 })
 
-test('admin routes redirect unauthenticated users', async ({ page }) => {
+test('super admin routes redirect unauthenticated users', async ({ page }) => {
   await page.goto('/admin/integrations')
   await expect(page).toHaveURL(/\/$/)
   await expect(page.getByRole('button', { name: /^(Set up PrintHub|Sign in)$/ })).toBeVisible()

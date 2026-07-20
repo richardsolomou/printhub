@@ -162,8 +162,8 @@ async function createApp() {
         email: user.email,
         name: user.name,
         image: userImage(user.email, user.image),
-        role: user.role === 'admin' ? 'admin' : 'requester',
-        superAdmin: user.role === 'admin',
+        role: 'requester',
+        superAdmin: user.role === 'super_admin',
         twoFactorEnabled: user.twoFactorEnabled ?? false,
         impersonatedBy: session.session.impersonatedBy ?? undefined,
       }

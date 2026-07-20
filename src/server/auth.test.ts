@@ -212,7 +212,7 @@ describe('better-auth integration', () => {
     await expect(auth.api.signInEmail({ body: { email: 'social@example.com', password: 'new-password1234' } })).resolves.toBeTruthy()
   })
 
-  it('gives the first self-hosted sign-up the admin role and keeps sign-up open', async () => {
+  it('gives the first self-hosted sign-up the super admin role and keeps sign-up open', async () => {
     const { repository, auth } = build()
     cleanup = () => repository.close()
 
@@ -221,7 +221,7 @@ describe('better-auth integration', () => {
       returnHeaders: true,
     })
     const session = await auth.api.getSession({ headers: cookieHeaders(headers) })
-    expect(session?.user).toMatchObject({ email: 'first@example.com', role: 'admin' })
+    expect(session?.user).toMatchObject({ email: 'first@example.com', role: 'super_admin' })
 
     const second = await auth.api.signUpEmail({
       body: { email: 'second@example.com', password: 'password1234', name: 'Second' },
@@ -239,10 +239,10 @@ describe('better-auth integration', () => {
       auth.api.signUpEmail({ body: { email: 'second@example.com', password: 'password1234', name: 'Second' } }),
     ])
 
-    expect(listAccounts(repository).filter((entry) => entry.role === 'admin')).toHaveLength(1)
+    expect(listAccounts(repository).filter((entry) => entry.role === 'super_admin')).toHaveLength(1)
   })
 
-  it('lets admins create users with roles, but not requesters', async () => {
+  it('lets super admins create users with roles, but not requesters', async () => {
     const { repository, auth } = build()
     cleanup = () => repository.close()
 
@@ -250,13 +250,13 @@ describe('better-auth integration', () => {
       body: { email: 'op@example.com', password: 'password1234', name: 'Op' },
       returnHeaders: true,
     })
-    const admin = cookieHeaders(headers)
+    const superAdminHeaders = cookieHeaders(headers)
     await createUser(auth, {
       body: { email: 'maker@example.com', password: 'password1234', name: 'Maker', role: 'requester' },
-      headers: admin,
+      headers: superAdminHeaders,
     })
     expect(listAccounts(repository)).toMatchObject([
-      { email: 'op@example.com', role: 'admin' },
+      { email: 'op@example.com', role: 'super_admin' },
       { email: 'maker@example.com', role: 'requester' },
     ])
 
@@ -266,13 +266,13 @@ describe('better-auth integration', () => {
     })
     await expect(
       auth.api.createUser({
-        body: { email: 'sneak@example.com', password: 'password1234', name: 'Sneak', role: 'admin' },
+        body: { email: 'sneak@example.com', password: 'password1234', name: 'Sneak', role: 'super_admin' },
         headers: cookieHeaders(makerHeaders),
       }),
     ).rejects.toMatchObject({ status: 'FORBIDDEN' })
   })
 
-  it('runs request cleanup before an admin deletes an account', async () => {
+  it('runs request cleanup before a super admin deletes an account', async () => {
     let cleanedUserId: string | undefined
     const { repository, auth } = build({
       onUserDeleting: async (userId) => {
@@ -285,10 +285,10 @@ describe('better-auth integration', () => {
       body: { email: 'op@example.com', password: 'password1234', name: 'Op' },
       returnHeaders: true,
     })
-    const admin = cookieHeaders(headers)
+    const superAdminHeaders = cookieHeaders(headers)
     const created = await createUser(auth, {
       body: { email: 'maker@example.com', password: 'password1234', name: 'Maker', role: 'requester' },
-      headers: admin,
+      headers: superAdminHeaders,
     })
     const requestId = repository.createRequest({
       name: 'Model',
@@ -298,7 +298,7 @@ describe('better-auth integration', () => {
       ownerUserId: created.user.id,
     })
 
-    await auth.api.removeUser({ body: { userId: created.user.id }, headers: admin })
+    await auth.api.removeUser({ body: { userId: created.user.id }, headers: superAdminHeaders })
 
     expect(cleanedUserId).toBe(created.user.id)
     expect(repository.getRequest(requestId)).toBeUndefined()
@@ -312,18 +312,20 @@ describe('better-auth integration', () => {
       body: { email: 'op@example.com', password: 'password1234', name: 'Op' },
       returnHeaders: true,
     })
-    const admin = cookieHeaders(headers)
+    const superAdminHeaders = cookieHeaders(headers)
     const created = await createUser(auth, {
       body: { email: 'maker@example.com', password: 'password1234', name: 'Maker', role: 'requester' },
-      headers: admin,
+      headers: superAdminHeaders,
     })
 
-    await expect(auth.api.removeUser({ body: { userId: created.user.id }, headers: admin })).rejects.toThrow('storage unavailable')
+    await expect(auth.api.removeUser({ body: { userId: created.user.id }, headers: superAdminHeaders })).rejects.toThrow(
+      'storage unavailable',
+    )
 
     expect(listAccounts(repository)).toContainEqual(expect.objectContaining({ id: created.user.id }))
   })
 
-  it('admin-set passwords plus session revocation lock out old sessions', async () => {
+  it('super-admin-set passwords plus session revocation lock out old sessions', async () => {
     const { repository, auth } = build()
     cleanup = () => repository.close()
 
@@ -331,10 +333,10 @@ describe('better-auth integration', () => {
       body: { email: 'op@example.com', password: 'password1234', name: 'Op' },
       returnHeaders: true,
     })
-    const admin = cookieHeaders(headers)
+    const superAdminHeaders = cookieHeaders(headers)
     const created = await createUser(auth, {
       body: { email: 'maker@example.com', password: 'first-password', name: 'Maker', role: 'requester' },
-      headers: admin,
+      headers: superAdminHeaders,
     })
 
     const { headers: makerHeaders } = await auth.api.signInEmail({
@@ -344,8 +346,8 @@ describe('better-auth integration', () => {
     const makerSession = cookieHeaders(makerHeaders)
     expect(await auth.api.getSession({ headers: makerSession })).not.toBeNull()
 
-    await auth.api.setUserPassword({ body: { userId: created.user.id, newPassword: 'second-password' }, headers: admin })
-    await auth.api.revokeUserSessions({ body: { userId: created.user.id }, headers: admin })
+    await auth.api.setUserPassword({ body: { userId: created.user.id, newPassword: 'second-password' }, headers: superAdminHeaders })
+    await auth.api.revokeUserSessions({ body: { userId: created.user.id }, headers: superAdminHeaders })
 
     expect(await auth.api.getSession({ headers: makerSession })).toBeNull()
     await expect(auth.api.signInEmail({ body: { email: 'maker@example.com', password: 'first-password' } })).rejects.toMatchObject({
@@ -354,7 +356,7 @@ describe('better-auth integration', () => {
     await expect(auth.api.signInEmail({ body: { email: 'maker@example.com', password: 'second-password' } })).resolves.toBeTruthy()
   })
 
-  it('lets admins promote requesters, but not requesters', async () => {
+  it('lets super admins promote requesters, but not requesters', async () => {
     const { repository, auth } = build()
     cleanup = () => repository.close()
 
@@ -362,29 +364,29 @@ describe('better-auth integration', () => {
       body: { email: 'op@example.com', password: 'password1234', name: 'Op' },
       returnHeaders: true,
     })
-    const admin = cookieHeaders(headers)
+    const superAdminHeaders = cookieHeaders(headers)
     const created = await createUser(auth, {
       body: { email: 'maker@example.com', password: 'password1234', name: 'Maker', role: 'requester' },
-      headers: admin,
+      headers: superAdminHeaders,
     })
     const other = await createUser(auth, {
       body: { email: 'other@example.com', password: 'password1234', name: 'Other', role: 'requester' },
-      headers: admin,
+      headers: superAdminHeaders,
     })
 
-    await auth.api.setRole({ body: { userId: created.user.id, role: 'admin' }, headers: admin })
-    expect(listAccounts(repository)).toContainEqual(expect.objectContaining({ email: 'maker@example.com', role: 'admin' }))
+    await auth.api.setRole({ body: { userId: created.user.id, role: 'super_admin' }, headers: superAdminHeaders })
+    expect(listAccounts(repository)).toContainEqual(expect.objectContaining({ email: 'maker@example.com', role: 'super_admin' }))
 
     const { headers: otherHeaders } = await auth.api.signInEmail({
       body: { email: 'other@example.com', password: 'password1234' },
       returnHeaders: true,
     })
     await expect(
-      auth.api.setRole({ body: { userId: other.user.id, role: 'admin' }, headers: cookieHeaders(otherHeaders) }),
+      auth.api.setRole({ body: { userId: other.user.id, role: 'super_admin' }, headers: cookieHeaders(otherHeaders) }),
     ).rejects.toMatchObject({ status: 'FORBIDDEN' })
   })
 
-  it('lets admins impersonate any user and return to their own session', async () => {
+  it('lets super admins impersonate any user and return to their own session', async () => {
     const { repository, auth } = build()
     cleanup = () => repository.close()
 
@@ -392,28 +394,28 @@ describe('better-auth integration', () => {
       body: { email: 'op@example.com', password: 'password1234', name: 'Op' },
       returnHeaders: true,
     })
-    const adminHeaders = cookieHeaders(headers)
+    const superAdminHeaders = cookieHeaders(headers)
     const created = await createUser(auth, {
-      body: { email: 'other-admin@example.com', password: 'password1234', name: 'Other Admin', role: 'admin' },
-      headers: adminHeaders,
+      body: { email: 'other-super-admin@example.com', password: 'password1234', name: 'Other Super Admin', role: 'super_admin' },
+      headers: superAdminHeaders,
     })
 
     const impersonated = await auth.api.impersonateUser({
       body: { userId: created.user.id },
-      headers: adminHeaders,
+      headers: superAdminHeaders,
       returnHeaders: true,
     })
-    const impersonatedHeaders = mergeCookieHeaders(adminHeaders, impersonated.headers)
+    const impersonatedHeaders = mergeCookieHeaders(superAdminHeaders, impersonated.headers)
     expect(await auth.api.getSession({ headers: impersonatedHeaders })).toMatchObject({
       session: { impersonatedBy: expect.any(String) },
-      user: { email: 'other-admin@example.com', role: 'admin' },
+      user: { email: 'other-super-admin@example.com', role: 'super_admin' },
     })
 
     const stopped = await auth.api.stopImpersonating({ headers: impersonatedHeaders, returnHeaders: true })
     const restoredHeaders = mergeCookieHeaders(impersonatedHeaders, stopped.headers)
     expect(await auth.api.getSession({ headers: restoredHeaders })).toMatchObject({
       session: { impersonatedBy: null },
-      user: { email: 'op@example.com', role: 'admin' },
+      user: { email: 'op@example.com', role: 'super_admin' },
     })
   })
 
