@@ -68,6 +68,17 @@
       }
     },
     {
+      "id": "phrozen-product-pages",
+      "kind": "webpage",
+      "brand": "Phrozen",
+      "pages": {
+        "resin-phrozen-sonic-mighty-8k": "https://phrozen3d.com/en/products/sonic-mighty-8k",
+        "resin-phrozen-sonic-mighty-revo": "https://phrozen3d.com/en/products/sonic-mighty-revo",
+        "resin-phrozen-sonic-mini-8k": "https://phrozen3d.com/en/products/sonic-mini-8k",
+        "resin-phrozen-sonic-mini-8k-s": "https://phrozen3d.com/en/products/sonic-mini-8k-s"
+      }
+    },
+    {
       "id": "elegoo",
       "kind": "shopify",
       "brand": "Elegoo",

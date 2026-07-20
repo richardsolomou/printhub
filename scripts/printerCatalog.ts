@@ -67,6 +67,10 @@ export type ManufacturerImageSource =
       licensePath: string
       licenseOutput: string
     })
+  | (ImageSourceBase & {
+      kind: 'webpage'
+      pages: Record<string, string>
+    })
 
 export type ManufacturerImage = {
   presetId: string
@@ -296,6 +300,17 @@ export function parseBuildVolumeHtml(html: string) {
   return { widthMm: width, depthMm: depth, heightMm: height }
 }
 
+export function extractProductImageUrl(html: string, pageUrl: string) {
+  const candidates = [
+    html.match(/<meta[^>]+(?:property|name)=["'](?:og:image|twitter:image)["'][^>]+content=["']([^"']+)["']/i)?.[1],
+    html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["'](?:og:image|twitter:image)["']/i)?.[1],
+    html.match(/&quot;product_image&quot;:\{&quot;image&quot;:&quot;([^&]+)&quot;/i)?.[1],
+    html.match(/"image"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/i)?.[1],
+  ]
+  const candidate = candidates.find(Boolean)
+  return candidate ? new URL(decodeHtml(candidate).replaceAll('\\/', '/'), pageUrl).href : undefined
+}
+
 function readJsonFiles<T>(root: string, include: (file: string) => boolean) {
   const files: { path: string; value: T }[] = []
   const visit = (directory: string) => {
@@ -358,4 +373,8 @@ function displayDimension(resolution?: number | null, pixelSizeMicrons?: number 
 
 function roundDimension(value: number) {
   return Number(value.toFixed(6))
+}
+
+function decodeHtml(value: string) {
+  return value.replaceAll('&amp;', '&').replaceAll('&#x2F;', '/').replaceAll('&#47;', '/')
 }

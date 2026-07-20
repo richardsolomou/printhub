@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   applyCatalogOverrides,
   definitionPathsFromTree,
+  extractProductImageUrl,
   mergePrinterPresets,
   normalizePrinterModel,
   openResinBuildVolume,
@@ -33,6 +34,15 @@ describe('printer catalog synchronization', () => {
       depthMm: 144,
       heightMm: 350,
     })
+  })
+
+  it('extracts product images from manufacturer page metadata', () => {
+    expect(
+      extractProductImageUrl(
+        '&quot;product_image&quot;:{&quot;image&quot;:&quot;/uploads/Products/Sonic-mini-8K.webp?v=1&quot;}',
+        'https://phrozen3d.com/en/products/sonic-mini-8k',
+      ),
+    ).toBe('https://phrozen3d.com/uploads/Products/Sonic-mini-8K.webp?v=1')
   })
 
   it('accepts serialized printable areas from Orca profiles', () => {

@@ -449,6 +449,38 @@
       "checkedAt": "2026-07-20"
     },
     {
+      "presetId": "resin-phrozen-sonic-mighty-8k",
+      "sourceId": "phrozen-product-pages",
+      "sourcePageUrl": "https://phrozen3d.com/en/products/sonic-mighty-8k",
+      "sourceUrl": "https://phrozen3d.com/uploads/Products/products_1400X1600_Printers/Sonic-Mighty-8K_1400x1600.webp?v=1744279240706",
+      "src": "/printer-presets/manufacturer/resin-phrozen-sonic-mighty-8k.webp",
+      "checkedAt": "2026-07-20"
+    },
+    {
+      "presetId": "resin-phrozen-sonic-mighty-revo",
+      "sourceId": "phrozen-product-pages",
+      "sourcePageUrl": "https://phrozen3d.com/en/products/sonic-mighty-revo",
+      "sourceUrl": "https://phrozen3d.com/uploads/Products/products_1400X1600_Printers/Sonic-Mighty-14K-Revo_1400x1600.webp?v=1743063527866",
+      "src": "/printer-presets/manufacturer/resin-phrozen-sonic-mighty-revo.webp",
+      "checkedAt": "2026-07-20"
+    },
+    {
+      "presetId": "resin-phrozen-sonic-mini-8k",
+      "sourceId": "phrozen-product-pages",
+      "sourcePageUrl": "https://phrozen3d.com/en/products/sonic-mini-8k",
+      "sourceUrl": "https://phrozen3d.com/uploads/Products/products_1400X1600_Printers/Sonic-mini-8K_1400x1600.webp?v=1749974242742",
+      "src": "/printer-presets/manufacturer/resin-phrozen-sonic-mini-8k.webp",
+      "checkedAt": "2026-07-20"
+    },
+    {
+      "presetId": "resin-phrozen-sonic-mini-8k-s",
+      "sourceId": "phrozen-product-pages",
+      "sourcePageUrl": "https://phrozen3d.com/en/products/sonic-mini-8k-s",
+      "sourceUrl": "https://phrozen3d.com/uploads/Products/products_1400X1600_Printers/Sonic-mini-8K-S_1400x1600.webp?v=1747374843369",
+      "src": "/printer-presets/manufacturer/resin-phrozen-sonic-mini-8k-s.webp",
+      "checkedAt": "2026-07-20"
+    },
+    {
       "presetId": "resin-prusa-uvtools-prusa-sl1",
       "sourceId": "prusaslicer",
       "sourcePageUrl": "https://github.com/prusa3d/PrusaSlicer/blob/b028299c770b8380ee81c921a2867d522f288123/resources/profiles/PrusaResearchSLA/SL1_thumbnail.png",

@@ -3,6 +3,7 @@ import path from 'node:path'
 import pRetry from 'p-retry'
 import {
   definitionPathsFromTree,
+  extractProductImageUrl,
   normalizePrinterModel,
   openResinBuildVolume,
   parseBuildVolumeHtml,
@@ -44,7 +45,7 @@ const openResinPrinters = new Map<string, { printer: OpenResinPrinter; definitio
 
 if (update) {
   for (const source of manifest.sources) {
-    if (source.kind !== 'shopify') source.revision = await latestGithubRevision(source)
+    if (source.kind === 'github' || source.kind === 'open-resin') source.revision = await latestGithubRevision(source)
   }
 }
 
@@ -52,7 +53,7 @@ const manufacturerPresets: GeneratedPrinterPreset[] = []
 const manufacturerSources: ManufacturerCatalogSource[] = []
 const claimedCatalogPresetIds = new Set(communityPresets.map((preset) => preset.id))
 for (const source of manifest.sources) {
-  if (!source.catalog || source.kind === 'github') continue
+  if (!source.catalog || source.kind === 'github' || source.kind === 'webpage') continue
   const synchronized = source.kind === 'open-resin' ? await synchronizeGithubCatalog(source) : await synchronizeShopifyCatalog(source)
   for (const preset of synchronized) {
     if (claimedCatalogPresetIds.has(preset.id)) continue
@@ -81,7 +82,9 @@ for (const source of manifest.sources) {
       ? await synchronizeGithubSource(source, claimedPresetIds)
       : source.kind === 'github'
         ? await synchronizeGithubImages(source, claimedPresetIds)
-        : await synchronizeShopifySource(source, claimedPresetIds)
+        : source.kind === 'webpage'
+          ? await synchronizeWebpageImages(source, claimedPresetIds)
+          : await synchronizeShopifySource(source, claimedPresetIds)
   images.push(...synchronized)
   for (const image of synchronized) claimedPresetIds.add(image.presetId)
 }
@@ -221,6 +224,25 @@ async function synchronizeGithubImages(source: Extract<ManufacturerImageSource, 
   return synchronizedImages
 }
 
+async function synchronizeWebpageImages(source: Extract<ManufacturerImageSource, { kind: 'webpage' }>, existingPresetIds: Set<string>) {
+  const catalogPresetIds = new Set(catalogPresets.map((preset) => preset.id))
+  const synchronizedImages: ManufacturerImage[] = []
+  for (const [presetId, sourcePageUrl] of Object.entries(source.pages)) {
+    if (!catalogPresetIds.has(presetId) || existingPresetIds.has(presetId)) continue
+    const pageResponse = await fetchWithRetry(sourcePageUrl)
+    if (!pageResponse.ok) throw new Error(`${source.id} page for ${presetId} returned ${pageResponse.status}`)
+    const sourceUrl = extractProductImageUrl(await pageResponse.text(), sourcePageUrl)
+    if (!sourceUrl) throw new Error(`${source.id} page for ${presetId} has no product image`)
+    const extension = imageExtension(sourceUrl)
+    const src = `/printer-presets/manufacturer/${presetId}.${extension}`
+    const imageResponse = await fetchWithRetry(sourceUrl)
+    if (!imageResponse.ok) throw new Error(`${source.id} image for ${presetId} returned ${imageResponse.status}`)
+    writeFileSync(path.join(root, 'public', src), Buffer.from(await imageResponse.arrayBuffer()))
+    synchronizedImages.push({ presetId, sourceId: source.id, sourcePageUrl, sourceUrl, src, checkedAt })
+  }
+  return synchronizedImages
+}
+
 async function synchronizeGithubCatalog(source: Extract<ManufacturerImageSource, { kind: 'open-resin' }>) {
   const excludeTitlePattern = source.catalog?.excludeTitlePattern ? new RegExp(source.catalog.excludeTitlePattern, 'i') : undefined
   return (await loadOpenResinPrinters(source)).flatMap(({ printer, definitionPath }) => {
@@ -268,7 +290,7 @@ async function githubDefinitionPaths(source: Extract<ManufacturerImageSource, { 
   return paths
 }
 
-async function latestGithubRevision(source: Exclude<ManufacturerImageSource, { kind: 'shopify' }>) {
+async function latestGithubRevision(source: Extract<ManufacturerImageSource, { kind: 'github' | 'open-resin' }>) {
   const response = await fetchWithRetry(`https://api.github.com/repos/${source.repository}/commits/${source.branch}`)
   if (!response.ok) throw new Error(`${source.id} branch ${source.branch} returned ${response.status}`)
   const commit = (await response.json()) as { sha?: string }
@@ -276,20 +298,20 @@ async function latestGithubRevision(source: Exclude<ManufacturerImageSource, { k
   return commit.sha
 }
 
-async function synchronizeGithubLicense(source: Exclude<ManufacturerImageSource, { kind: 'shopify' }>) {
+async function synchronizeGithubLicense(source: Extract<ManufacturerImageSource, { kind: 'github' | 'open-resin' }>) {
   const response = await fetchWithRetry(rawGithubUrl(source, source.licensePath))
   if (!response.ok) throw new Error(`${source.id} license returned ${response.status}`)
   writeFileSync(path.join(root, source.licenseOutput), await response.text())
 }
 
-function rawGithubUrl(source: Exclude<ManufacturerImageSource, { kind: 'shopify' }>, filePath: string) {
+function rawGithubUrl(source: Extract<ManufacturerImageSource, { kind: 'github' | 'open-resin' }>, filePath: string) {
   return `https://raw.githubusercontent.com/${source.repository}/${source.revision}/${filePath}`
 }
 
 function fetchWithRetry(url: string) {
   return pRetry(
     async () => {
-      const response = await fetch(url)
+      const response = await fetch(url, { headers: { 'user-agent': 'PrintHub printer catalog sync' } })
       if (response.status === 429 || response.status >= 500) throw new Error(`${url} returned ${response.status}`)
       return response
     },

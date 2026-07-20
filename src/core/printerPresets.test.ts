@@ -32,4 +32,13 @@ describe('printer presets', () => {
       PRINTER_PRESETS.filter((preset) => preset.brand === 'Prusa' && preset.printType === 'resin').map((preset) => preset.image?.sourceId),
     ).toEqual(['prusaslicer', 'prusaslicer'])
   })
+
+  it('includes official product images for current Phrozen printers', () => {
+    expect(PRINTER_PRESETS.filter((preset) => preset.image?.sourceId === 'phrozen-product-pages').map((preset) => preset.id)).toEqual([
+      'resin-phrozen-sonic-mighty-8k',
+      'resin-phrozen-sonic-mighty-revo',
+      'resin-phrozen-sonic-mini-8k',
+      'resin-phrozen-sonic-mini-8k-s',
+    ])
+  })
 })

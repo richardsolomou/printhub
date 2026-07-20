@@ -8,7 +8,7 @@ PrintHub ships a generated offline catalog so self-hosted installations never de
 - UVtools supplies the primary resin printer catalog and usable build dimensions.
 - Open Resin Alliance supplies supplemental resin definitions and transparent printer artwork for supported manufacturers.
 - PrusaSlicer supplies transparent profile thumbnails for Prusa resin printers.
-- Official manufacturer product feeds supply remaining models that are missing from the community catalogs, currently HeyGears.
+- Official manufacturer product feeds and product pages supply remaining models and images that are missing from the community catalogs, currently HeyGears and Phrozen.
 
 Source repositories and pinned revisions live in `sources.json`. Manufacturer feed snapshots live in `manufacturer-printers.json`, while their feed configuration lives in `image-sources.json`. Open Resin printer definitions are discovered automatically below each configured repository path. Brand normalization, exclusions, and corrections live in `overrides.json` so upstream data remains reproducible while local curation stays explicit.
 

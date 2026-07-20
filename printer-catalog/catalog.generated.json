@@ -5992,6 +5992,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Phrozen%20Sonic%20Mighty%208K.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-phrozen-sonic-mighty-8k.webp",
+        "sourceId": "phrozen-product-pages",
+        "sourceUrl": "https://phrozen3d.com/en/products/sonic-mighty-8k"
       }
     },
     {
@@ -6005,6 +6010,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Phrozen%20Sonic%20Mighty%20Revo.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-phrozen-sonic-mighty-revo.webp",
+        "sourceId": "phrozen-product-pages",
+        "sourceUrl": "https://phrozen3d.com/en/products/sonic-mighty-revo"
       }
     },
     {
@@ -6044,6 +6054,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Phrozen%20Sonic%20Mini%208K.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-phrozen-sonic-mini-8k.webp",
+        "sourceId": "phrozen-product-pages",
+        "sourceUrl": "https://phrozen3d.com/en/products/sonic-mini-8k"
       }
     },
     {
@@ -6057,6 +6072,11 @@
       "source": {
         "id": "uvtools",
         "url": "https://github.com/sn4k3/UVtools/blob/865562dac0cc2c55b23f392c18a009537d706d4a/PrusaSlicer/printer/Phrozen%20Sonic%20Mini%208K%20S.ini"
+      },
+      "image": {
+        "src": "/printer-presets/manufacturer/resin-phrozen-sonic-mini-8k-s.webp",
+        "sourceId": "phrozen-product-pages",
+        "sourceUrl": "https://phrozen3d.com/en/products/sonic-mini-8k-s"
       }
     },
     {
