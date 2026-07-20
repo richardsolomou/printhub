@@ -66,6 +66,15 @@ test('manages a fair print queue and assigns work to printers', async ({ page })
   await expect(requestCard(page, 'oversized-model').getByLabel('Fits no enabled printer')).toBeVisible({ timeout: 30_000 })
   await screenshot(page, 'oversized-model-alert')
 
+  await page.getByRole('button', { name: 'Filters' }).click()
+  const requesterFilter = page.getByPlaceholder('Anyone')
+  await requesterFilter.click()
+  await page.getByRole('option', { name: /^Owner · \d+$/ }).click()
+  await expect(requesterFilter).toHaveValue(/^Owner · \d+$/)
+  await page.getByRole('button', { name: 'Done' }).click()
+  await expect(page.getByRole('button', { name: 'Owner', exact: true })).toBeVisible()
+  await screenshot(page, 'requester-filter-labels')
+
   await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Settings' }).click()
   await page.getByRole('link', { name: 'Printers' }).click()
   await expect(page.getByText('Manage the machines available for print assignment.')).toBeVisible()
@@ -80,6 +89,16 @@ test('manages a fair print queue and assigns work to printers', async ({ page })
     .toBeGreaterThan(0)
   await expect(page.getByLabel(/Usable width|Planning and material assumptions/)).toHaveCount(0)
   await screenshot(page, 'printer-assignment-settings')
+
+  await page.goto('/admin/integrations')
+  await page
+    .locator('[data-slot="settings-section"]')
+    .filter({ hasText: 'Outbound email' })
+    .getByRole('button', { name: 'Configure' })
+    .click()
+  await expect(page.getByLabel('Security')).toContainText('STARTTLS')
+  await screenshot(page, 'smtp-security-label')
+  await page.getByRole('button', { name: 'Cancel' }).click()
 
   await page.getByRole('button', { name: 'Open account menu' }).click()
   await page.getByRole('button', { name: 'Sign out' }).click()
@@ -127,6 +146,7 @@ function requestCard(page: Page, name: string) {
 async function choose(select: Locator, option: string) {
   await select.click()
   await select.page().getByRole('option', { name: option, exact: true }).click()
+  await expect(select).toContainText(option)
 }
 
 async function moveCard(page: Page, name: string, from: string, to: string) {
