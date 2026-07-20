@@ -1,12 +1,11 @@
-import crypto from 'node:crypto'
 import { OneDriveAssetStore } from '../adapters/oneDrive'
-import type { IntegrationConfig, OneDriveConnectionConfig, PublicCloudConnection } from '../core/auth'
+import type { OneDriveConnectionConfig, PublicCloudConnection } from '../core/auth'
+import { connectionIntegrationConfig, connectionStateMatches, createConnectionState, hashesMatch } from './cloudConnectionState'
 import { getStoredIntegrationConfig, setStoredIntegrationConfig, type SettingStore } from './integrations'
 
 const AUTHORIZE_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize'
 const TOKEN_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/token'
 const PROFILE_URL = 'https://graph.microsoft.com/v1.0/me?$select=id,displayName,mail,userPrincipalName'
-const STATE_TTL = 10 * 60 * 1_000
 const SCOPES = ['offline_access', 'User.Read', 'Files.ReadWrite']
 
 export class OneDrivePermissionError extends Error {
@@ -39,22 +38,22 @@ export function beginOneDriveAuthorization(
   origin: string,
   returnTo: string,
 ) {
-  const config = integrationConfig(repository)
+  const config = connectionIntegrationConfig(repository)
   const current = config.oneDrive
   const clientSecret = input.clientSecret || current?.clientSecret
   if (!clientSecret) throw new Response('Microsoft client secret is required', { status: 400 })
-  const state = crypto.randomBytes(32).toString('base64url')
+  const { state, stateHash, expiresAt } = createConnectionState()
   const redirectUri = oneDriveCallbackUrl(origin)
   const oneDrive: OneDriveConnectionConfig = {
     ...(current ?? { clientId: input.clientId, clientSecret }),
     pending: {
       clientId: input.clientId,
       clientSecret,
-      stateHash: hash(state),
+      stateHash,
       adminId,
       redirectUri,
       returnTo,
-      expiresAt: Date.now() + STATE_TTL,
+      expiresAt,
     },
   }
   setStoredIntegrationConfig(repository, { ...config, oneDrive })
@@ -74,11 +73,11 @@ export async function completeOneDriveAuthorization(repository: SettingStore, re
   const url = new URL(request.url)
   const code = url.searchParams.get('code')
   const state = url.searchParams.get('state')
-  const config = integrationConfig(repository)
+  const config = connectionIntegrationConfig(repository)
   const connection = config.oneDrive
   const pending = connection?.pending
   if (!code || !state || !connection || !pending) throw new Response('OneDrive connection request is incomplete', { status: 400 })
-  if (pending.expiresAt < Date.now() || pending.adminId !== adminId || !safeEqual(pending.stateHash, hash(state))) {
+  if (!connectionStateMatches(pending, state, adminId)) {
     throw new Response('OneDrive connection request expired or did not match', { status: 400 })
   }
   const tokenResponse = await fetch(TOKEN_URL, {
@@ -115,8 +114,8 @@ export async function completeOneDriveAuthorization(repository: SettingStore, re
     if ([401, 403].includes((error as { status?: number }).status ?? 0)) throw new OneDrivePermissionError(pending.returnTo)
     throw error
   }
-  const latest = integrationConfig(repository)
-  if (!latest.oneDrive?.pending || !safeEqual(latest.oneDrive.pending.stateHash, pending.stateHash)) {
+  const latest = connectionIntegrationConfig(repository)
+  if (!latest.oneDrive?.pending || !hashesMatch(latest.oneDrive.pending.stateHash, pending.stateHash)) {
     throw new Response('OneDrive connection request was replaced', { status: 409 })
   }
   setStoredIntegrationConfig(repository, { ...latest, oneDrive: next })
@@ -124,20 +123,6 @@ export async function completeOneDriveAuthorization(repository: SettingStore, re
 }
 
 export function disconnectOneDrive(repository: SettingStore) {
-  const config = integrationConfig(repository)
+  const config = connectionIntegrationConfig(repository)
   setStoredIntegrationConfig(repository, { ...config, oneDrive: undefined })
-}
-
-function integrationConfig(repository: SettingStore): IntegrationConfig {
-  return getStoredIntegrationConfig(repository) ?? { passwordEnabled: true }
-}
-
-function hash(value: string) {
-  return crypto.createHash('sha256').update(value).digest('hex')
-}
-
-function safeEqual(left: string, right: string) {
-  const leftBytes = Buffer.from(left)
-  const rightBytes = Buffer.from(right)
-  return leftBytes.length === rightBytes.length && crypto.timingSafeEqual(leftBytes, rightBytes)
 }
