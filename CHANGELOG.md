@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.27.2
+
+### Patch Changes
+
+- aa76449: Keep board sorting and filters within the available screen space and remove ambiguous large and small order sorting choices.
+
 ## 0.27.1
 
 ### Patch Changes
