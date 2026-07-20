@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.26.0
+
+### Minor Changes
+
+- f654710: Add missing resin printers from Open Resin Alliance definitions so that the catalog includes newer models with transparent artwork.
+
 ## 0.25.1
 
 ### Patch Changes
