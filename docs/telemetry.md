@@ -4,7 +4,7 @@ PrintHub sends anonymous usage telemetry by default to help improve the app. Thi
 
 ## What is sent
 
-Events go to the project's telemetry relay (`t.ras.sh`), which forwards them to PostHog. Events are keyed by the internal, randomly generated user ID — never an email address, name, or other profile data. Server-side error reports use the fixed identifier `server`.
+Events go through the app's own `/ingest` route, which reverse-proxies to PostHog. Events are keyed by the internal, randomly generated user ID — never an email address, name, or other profile data. Server-side error reports use the fixed identifier `server`.
 
 | Event                       | Property keys                                          |
 | --------------------------- | ------------------------------------------------------ |
@@ -17,6 +17,12 @@ Events go to the project's telemetry relay (`t.ras.sh`), which forwards them to 
 | `stl_downloaded`            | `print_type`                                           |
 | `stl_full_detail_requested` | —                                                      |
 | `upload_opened`             | `source`, plus `file_count` for drag-and-drop          |
+| `workspace_created`         | —                                                      |
+| `workspace_switched`        | —                                                      |
+| `user_signed_in`            | `auth_method`, `account_created`, `trusted_device`     |
+| `user_signed_out`           | —                                                      |
+
+`account_created` is only present for password sign-in; `trusted_device` is only present for two-factor sign-in.
 
 Page navigation within the app is also captured, along with the standard analytics metadata the PostHog library attaches (browser, operating system, screen size).
 
