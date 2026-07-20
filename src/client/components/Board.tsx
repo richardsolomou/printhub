@@ -1,16 +1,22 @@
 import { useCallback, useEffect, useEffectEvent, useMemo, useState } from 'react'
 import { monitorForElements, type ElementEventPayloadMap } from '@atlaskit/pragmatic-drag-and-drop/element/adapter'
 import { extractClosestEdge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge'
+import { Menu } from '@base-ui/react/menu'
 import { useServerFn } from '@tanstack/react-start'
 import { usePostHog } from '@posthog/react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
 import { requestQueueOrder, type BoardSort, type PublicPrintRequest } from '../../core/types'
 import { compareRequesterPriorityQueues, compareRoundRobinQueue, requesterQueuePriorities } from '../../core/requestQueue'
 import type { StatusId, WorkflowDefinition } from '../../core/workflow'
-import { moveCopies, reorderRequest } from '../../server/fns'
+import { deleteRequests, moveCopies, moveCopiesBatch, reorderRequest } from '../../server/fns'
 import { canDropOnColumn, canDropOnRequest } from '../boardDrag'
+import { selectBoardRequest, type BoardSelection } from '../boardSelection'
 import { Column } from './Column'
 import { MoveDialog } from './MoveDialog'
+import { BulkMoveDialog } from './BulkMoveDialog'
+import { BulkDeleteDialog } from './BulkDeleteDialog'
 import { useWorkspaceSlug } from '../workspace'
 
 type Override = { counts: PublicPrintRequest['counts']; orders: PublicPrintRequest['orders'] }
@@ -21,6 +27,7 @@ type PendingMove = {
   destinations?: { id: StatusId; label: string }[]
   max: number
 }
+type PendingBatchMove = { to?: StatusId; destinations?: { id: StatusId; label: string }[] }
 
 export function Board({
   requests,
@@ -41,23 +48,39 @@ export function Board({
 }) {
   const workspaceSlug = useWorkspaceSlug()
   const posthog = usePostHog()
-  const queryClient = useQueryClient()
   const callMoveCopies = useServerFn(moveCopies)
+  const callMoveCopiesBatch = useServerFn(moveCopiesBatch)
+  const callDeleteRequests = useServerFn(deleteRequests)
   const callReorder = useServerFn(reorderRequest)
-  const moveMutation = useMutation({
-    mutationFn: callMoveCopies,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['requests'] }),
-  })
-  const reorderMutation = useMutation({
-    mutationFn: callReorder,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['requests'] }),
-  })
+  const moveMutation = useMutation({ mutationFn: callMoveCopies })
+  const batchMoveMutation = useMutation({ mutationFn: callMoveCopiesBatch })
+  const deleteMutation = useMutation({ mutationFn: callDeleteRequests })
+  const reorderMutation = useMutation({ mutationFn: callReorder })
   // Optimistic placement until the live query reflects it; clearing any
   // earlier (e.g. when the server fn resolves) makes copies flash back.
   const [overrides, setOverrides] = useState<Record<string, Override>>({})
   const [pendingMove, setPendingMove] = useState<PendingMove | null>(null)
+  const [pendingBatchMove, setPendingBatchMove] = useState<PendingBatchMove | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [batchError, setBatchError] = useState<string>()
+  const [selection, setSelection] = useState<BoardSelection | null>(null)
   const [settlingIds, setSettlingIds] = useState<Set<string>>(new Set())
   const priorityStatus = workflow.statuses[0]?.id
+
+  const clearSelection = useCallback(() => {
+    setSelection(null)
+    setPendingBatchMove(null)
+    setConfirmDelete(false)
+    setBatchError(undefined)
+  }, [])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && selection && !pendingBatchMove && !confirmDelete) clearSelection()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [clearSelection, confirmDelete, pendingBatchMove, selection])
 
   const countsOf = useCallback((request: PublicPrintRequest) => overrides[request.id]?.counts ?? request.counts, [overrides])
   const ordersOf = useCallback((request: PublicPrintRequest) => overrides[request.id]?.orders ?? request.orders, [overrides])
@@ -169,38 +192,65 @@ export function Board({
     [compare, countsOf, requests],
   )
 
-  const performStepReorder = useCallback(
-    (request: PublicPrintRequest, status: StatusId, direction: 'earlier' | 'later') => {
-      if (sort !== 'fair' || !request.mine || status !== priorityStatus) return
-      const list = columnForRequester(request, status)
-      const index = list.findIndex((candidate) => candidate.id === request.id)
-      const targetIndex = direction === 'earlier' ? index - 1 : index + 1
-      const target = list[targetIndex]
-      if (index < 0 || !target) return
-
-      const outside = list[direction === 'earlier' ? targetIndex - 1 : targetIndex + 1]
-      const order = outside
-        ? (sortKey(target, status) + sortKey(outside, status)) / 2
-        : sortKey(target, status) + (direction === 'earlier' ? -1 : 1)
-      performReorder(request.id, status, order)
-    },
-    [columnForRequester, performReorder, priorityStatus, sort, sortKey],
+  const selectedEntries = useMemo(() => {
+    if (!selection) return []
+    return requests
+      .filter((request) => selection.ids.has(request.id) && countsOf(request)[selection.status] > 0)
+      .map((request) => ({ request, max: countsOf(request)[selection.status] }))
+  }, [countsOf, requests, selection])
+  const adjustableEntries = useMemo(() => selectedEntries.filter(({ max }) => max > 1), [selectedEntries])
+  const batchDestinations = useMemo(
+    () =>
+      selection
+        ? workflow.statuses
+            .filter((status) => canDropOnColumn(selection.status, status.id))
+            .map((status) => ({ id: status.id, label: status.label }))
+        : [],
+    [selection, workflow.statuses],
   )
 
-  const openMoveDialog = useCallback(
-    (request: PublicPrintRequest, from: StatusId) => {
-      const destinations = workflow.statuses
-        .filter((status) => canDropOnColumn(from, status.id))
-        .map((status) => ({ id: status.id, label: status.label }))
-      const max = countsOf(request)[from]
-      if (max > 0 && destinations.length > 0) setPendingMove({ requestId: request.id, from, destinations, max })
-    },
-    [countsOf, workflow.statuses],
-  )
+  const moveSelected = async (destination: StatusId, counts: Record<string, number>, toastErrors = false) => {
+    if (!selection || selectedEntries.length === 0) return
+    setBatchError(undefined)
+    try {
+      await batchMoveMutation.mutateAsync({
+        data: {
+          workspaceSlug,
+          moves: selectedEntries.map(({ request, max }) => ({
+            id: request.id,
+            from: selection.status,
+            to: destination,
+            count: counts[request.id] ?? max,
+          })),
+        },
+      })
+      clearSelection()
+    } catch (error) {
+      posthog.captureException(error, { action: 'move_request_batch' })
+      const message = error instanceof Error ? error.message : 'The batch could not be moved.'
+      setBatchError(message)
+      if (toastErrors) toast.error(message)
+    }
+  }
+
+  const openBatchMove = (to?: StatusId) => {
+    if (!selection || selectedEntries.length === 0) return
+    if (to && adjustableEntries.length === 0) {
+      void moveSelected(to, {}, true)
+      return
+    }
+    if (to || batchDestinations.length > 0) {
+      setBatchError(undefined)
+      setPendingBatchMove({ to, destinations: to ? undefined : batchDestinations })
+    }
+  }
 
   const handleDrop = useEffectEvent(({ source, location }: ElementEventPayloadMap['onDrop']) => {
     const requestId = source.data.requestId
     const from = source.data.from as StatusId
+    const selectedRequestIds = Array.isArray(source.data.selectedRequestIds)
+      ? source.data.selectedRequestIds.filter((id): id is string => typeof id === 'string')
+      : []
     const target = location.current.dropTargets[0]
     if (typeof requestId !== 'string' || !target) return
     setSettlingIds((current) => new Set(current).add(requestId))
@@ -247,6 +297,10 @@ export function Board({
     } else return
 
     if (!isAdmin) return
+    if (selectedRequestIds.length > 0 && selection?.status === from && selectedRequestIds.every((id) => selection.ids.has(id))) {
+      openBatchMove(to)
+      return
+    }
     const request = requests.find((j) => j.id === requestId)
     if (!request) return
     const available = countsOf(request)[from]
@@ -278,7 +332,15 @@ export function Board({
   }
 
   return (
-    <main className="board grid min-h-0 flex-1 grid-flow-col grid-cols-none auto-cols-[minmax(280px,1fr)] gap-3 overflow-x-auto p-3 max-[900px]:auto-cols-[82%]">
+    <main
+      className="board grid min-h-0 flex-1 grid-flow-col grid-cols-none auto-cols-[minmax(280px,1fr)] gap-3 overflow-x-auto p-3 max-[900px]:auto-cols-[82%]"
+      onPointerDown={(event) => {
+        if (!selection) return
+        const target = event.target as Element
+        if (!target.closest('.board')) return
+        if (!target.closest('.card,button,input,[role="dialog"],[data-selection-controls]')) clearSelection()
+      }}
+    >
       {workflow.statuses.map((definition) => {
         const status = definition.id
         return (
@@ -295,9 +357,16 @@ export function Board({
             showPrintType={showPrintTypes}
             filtered={filtered}
             settlingIds={settlingIds}
+            selectionStatus={selection?.status}
+            selectedIds={selection?.ids ?? new Set()}
             onOpenRequest={onOpenRequest}
-            onMoveRequest={openMoveDialog}
-            onReorderRequest={performStepReorder}
+            onStartSelection={(columnStatus, requestId) => {
+              const first = requestId ?? requests.find((request) => countsOf(request)[columnStatus] > 0)?.id
+              if (first) setSelection({ status: columnStatus, ids: new Set(requestId ? [requestId] : []), anchorId: first })
+            }}
+            onSelectRequest={(columnStatus, requestId, orderedIds, options) =>
+              setSelection((current) => selectBoardRequest(current, columnStatus, orderedIds, requestId, options))
+            }
           />
         )
       })}
@@ -314,6 +383,76 @@ export function Board({
             setPendingMove(null)
           }}
           onCancel={() => setPendingMove(null)}
+        />
+      )}
+      {selection && selectedEntries.length > 0 && (
+        <div
+          data-selection-controls
+          className="fixed right-3 bottom-3 left-3 z-40 flex items-center gap-2 rounded-xl border bg-popover/95 p-2 shadow-lg backdrop-blur sm:right-auto sm:left-1/2 sm:-translate-x-1/2"
+        >
+          <span className="whitespace-nowrap px-2 text-sm font-medium">{selectedEntries.length} selected</span>
+          {adjustableEntries.length > 0 ? (
+            <Button size="sm" disabled={batchMoveMutation.isPending} onClick={() => openBatchMove()}>
+              Move
+            </Button>
+          ) : (
+            <Menu.Root>
+              <Menu.Trigger render={<Button size="sm" disabled={batchMoveMutation.isPending} />}>Move</Menu.Trigger>
+              <Menu.Portal>
+                <Menu.Positioner align="start" side="top" sideOffset={8} className="isolate z-50">
+                  <Menu.Popup className="min-w-40 rounded-lg bg-popover p-1 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-hidden data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
+                    {batchDestinations.map((destination) => (
+                      <Menu.Item
+                        key={destination.id}
+                        className="flex h-8 cursor-default items-center rounded-md px-2 outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                        onClick={() => void moveSelected(destination.id, {}, true)}
+                      >
+                        {destination.label}
+                      </Menu.Item>
+                    ))}
+                  </Menu.Popup>
+                </Menu.Positioner>
+              </Menu.Portal>
+            </Menu.Root>
+          )}
+          <Button size="sm" variant="destructive" onClick={() => setConfirmDelete(true)}>
+            Delete
+          </Button>
+          <Button size="sm" variant="ghost" onClick={clearSelection}>
+            Clear selection
+          </Button>
+        </div>
+      )}
+      {pendingBatchMove && selection && selectedEntries.length > 0 && (
+        <BulkMoveDialog
+          entries={adjustableEntries}
+          requestCount={selectedEntries.length}
+          destination={pendingBatchMove.to}
+          destinations={pendingBatchMove.destinations}
+          pending={batchMoveMutation.isPending}
+          error={batchError}
+          onConfirm={(counts, destination) => void moveSelected(destination, counts)}
+          onCancel={() => {
+            if (!batchMoveMutation.isPending) {
+              setPendingBatchMove(null)
+              setBatchError(undefined)
+            }
+          }}
+        />
+      )}
+      {confirmDelete && selection && selectedEntries.length > 0 && (
+        <BulkDeleteDialog
+          requests={selectedEntries.map(({ request }) => request)}
+          onConfirm={async () => {
+            try {
+              await deleteMutation.mutateAsync({ data: { workspaceSlug, ids: selectedEntries.map(({ request }) => request.id) } })
+              clearSelection()
+            } catch (error) {
+              posthog.captureException(error, { action: 'delete_request_batch' })
+              setConfirmDelete(false)
+            }
+          }}
+          onCancel={() => setConfirmDelete(false)}
         />
       )}
     </main>

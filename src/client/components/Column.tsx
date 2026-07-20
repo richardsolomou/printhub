@@ -8,6 +8,7 @@ import type { PublicPrintRequest } from '../../core/types'
 import { cn } from '@/lib/utils'
 import { Card, CardHeader } from '@/components/ui/card'
 import { Empty, EmptyDescription } from '@/components/ui/empty'
+import { Button } from '@/components/ui/button'
 import { canDropOnColumn } from '../boardDrag'
 import { RequestCard } from './RequestCard'
 
@@ -20,9 +21,11 @@ export function Column({
   showPrintType,
   filtered,
   settlingIds,
+  selectionStatus,
+  selectedIds,
   onOpenRequest,
-  onMoveRequest,
-  onReorderRequest,
+  onStartSelection,
+  onSelectRequest,
 }: {
   status: StatusId
   definition: WorkflowStatus
@@ -32,9 +35,11 @@ export function Column({
   showPrintType: boolean
   filtered: boolean
   settlingIds: Set<string>
+  selectionStatus?: StatusId
+  selectedIds: Set<string>
   onOpenRequest: (requestId: string) => void
-  onMoveRequest: (request: PublicPrintRequest, status: StatusId) => void
-  onReorderRequest: (request: PublicPrintRequest, status: StatusId, direction: 'earlier' | 'later') => void
+  onStartSelection: (status: StatusId, requestId?: string) => void
+  onSelectRequest: (status: StatusId, requestId: string, orderedIds: string[], options: { range: boolean; toggle: boolean }) => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -71,18 +76,6 @@ export function Column({
     () => new Set(entries.filter(({ request }) => request.mine).map(({ request }) => request.id)),
     [entries],
   )
-  const requesterPositions = useMemo(() => {
-    const totals = new Map<string, number>()
-    const positions = new Map<string, { index: number; total: number }>()
-    for (const { request } of entries) totals.set(request.requesterId, (totals.get(request.requesterId) ?? 0) + 1)
-    const seen = new Map<string, number>()
-    for (const { request } of entries) {
-      const index = seen.get(request.requesterId) ?? 0
-      positions.set(request.id, { index, total: totals.get(request.requesterId) ?? 1 })
-      seen.set(request.requesterId, index + 1)
-    }
-    return positions
-  }, [entries])
   const virtualizer = useVirtualizer({
     count: entries.length,
     getScrollElement: () => bodyRef.current,
@@ -104,7 +97,21 @@ export function Column({
           )}
         />
         {definition.label}
-        <span className="ml-auto rounded-full bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground" title="Copies">
+        {isAdmin && entries.length > 0 && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className="ml-auto normal-case tracking-normal min-[901px]:hidden"
+            onClick={() => onStartSelection(status)}
+          >
+            Select
+          </Button>
+        )}
+        <span
+          className={cn('rounded-full bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground', !isAdmin && 'ml-auto')}
+          title="Copies"
+        >
           {total}
         </span>
       </CardHeader>
@@ -117,7 +124,6 @@ export function Column({
         <div className="virtual-list relative w-full" style={{ height: virtualizer.getTotalSize() }}>
           {virtualizer.getVirtualItems().map((item) => {
             const { request, count } = entries[item.index]
-            const requesterPosition = requesterPositions.get(request.id)
             return (
               <VirtualRow key={request.id} index={item.index} start={item.start} measureElement={virtualizer.measureElement}>
                 <RequestCard
@@ -128,20 +134,20 @@ export function Column({
                   canDrag={isAdmin || (reorderEnabled && request.mine)}
                   reorderEnabled={reorderEnabled}
                   settling={settlingIds.has(request.id)}
+                  selected={selectionStatus === status && selectedIds.has(request.id)}
+                  selectionMode={selectionStatus !== undefined}
+                  selectedRequestIds={selectionStatus === status && selectedIds.has(request.id) ? [...selectedIds] : undefined}
                   showPrintType={showPrintType}
                   showPrinter={isAdmin}
                   showRequester={isAdmin}
                   onOpen={() => onOpenRequest(request.id)}
-                  onMove={isAdmin ? () => onMoveRequest(request, status) : undefined}
-                  onMoveEarlier={
-                    reorderEnabled && request.mine && requesterPosition && requesterPosition.index > 0
-                      ? () => onReorderRequest(request, status, 'earlier')
-                      : undefined
-                  }
-                  onMoveLater={
-                    reorderEnabled && request.mine && requesterPosition && requesterPosition.index < requesterPosition.total - 1
-                      ? () => onReorderRequest(request, status, 'later')
-                      : undefined
+                  onSelect={(options) =>
+                    onSelectRequest(
+                      status,
+                      request.id,
+                      entries.map((entry) => entry.request.id),
+                      options,
+                    )
                   }
                 />
               </VirtualRow>
