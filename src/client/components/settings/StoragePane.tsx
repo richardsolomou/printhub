@@ -25,7 +25,7 @@ import {
   startStorageMigration,
   updateStorageSettings,
 } from '../../../server/fns'
-import { cloudConnectionsQuery, storageMigrationQuery, storageQuery } from '../../queries'
+import { cloudConnectionsQuery, sessionQuery, storageMigrationQuery, storageQuery } from '../../queries'
 import { retryQueries } from '../../queryState'
 import {
   cloudflareAccountId,
@@ -95,17 +95,19 @@ export function StoragePane({ onboarding = false, onSaved }: { onboarding?: bool
   const storageResult = useQuery(storageQuery(workspaceSlug))
   const migrationResult = useQuery(storageMigrationQuery(workspaceSlug))
   const connectionsResult = useQuery(cloudConnectionsQuery())
+  const sessionResult = useQuery(sessionQuery(workspaceSlug))
   const current = storageResult.data
   const migration = migrationResult.data
   const cloudConnections = connectionsResult.data
-  if (current === undefined || migration === undefined || cloudConnections === undefined) {
+  const session = sessionResult.data
+  if (current === undefined || migration === undefined || cloudConnections === undefined || session === undefined) {
     const state = (
       <QueryState
-        loading={storageResult.isPending || migrationResult.isPending || connectionsResult.isPending}
-        error={storageResult.error ?? migrationResult.error ?? connectionsResult.error}
+        loading={storageResult.isPending || migrationResult.isPending || connectionsResult.isPending || sessionResult.isPending}
+        error={storageResult.error ?? migrationResult.error ?? connectionsResult.error ?? sessionResult.error}
         loadingLabel="Loading storage settings…"
         errorTitle="Could not load storage settings"
-        onRetry={() => void retryQueries(storageResult.refetch, migrationResult.refetch, connectionsResult.refetch)}
+        onRetry={() => void retryQueries(storageResult.refetch, migrationResult.refetch, connectionsResult.refetch, sessionResult.refetch)}
       />
     )
     if (onboarding) return state
@@ -125,6 +127,8 @@ export function StoragePane({ onboarding = false, onSaved }: { onboarding?: bool
       current={current}
       migration={migration}
       cloudConnections={cloudConnections}
+      deploymentAdmin={Boolean(session.identity?.deploymentAdmin)}
+      localStorageAllowed={session.localStorageAllowed}
       onboarding={onboarding}
       onSaved={onSaved}
     />
@@ -135,12 +139,16 @@ function StorageForm({
   current,
   migration,
   cloudConnections,
+  deploymentAdmin,
+  localStorageAllowed,
   onboarding,
   onSaved,
 }: {
   current: StorageConfig
   migration?: PublicStorageMigration | null
   cloudConnections: CloudConnections
+  deploymentAdmin: boolean
+  localStorageAllowed: boolean
   onboarding: boolean
   onSaved?: () => void
 }) {

@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { DrizzleRepository } from './repository'
 import { createDatabase } from './connection'
 import type { PrinterProfile } from '../core/types'
-import { requests, requestStatuses, uploadSessions, user } from './schema'
+import { member, requests, requestStatuses, uploadSessions, user } from './schema'
 
 function insertUser(
   repository: DrizzleRepository,
@@ -32,6 +32,17 @@ describe('DrizzleRepository contract', () => {
     insertUser(repository, { id: 'attacker', name: 'Attacker', email: 'attacker@example.com' })
   })
   afterEach(() => repository.close())
+
+  it('does not trust workspaces owned by ordinary users with local storage', () => {
+    expect(repository.ownedByDeploymentAdmin()).toBe(false)
+  })
+
+  it('trusts workspaces owned by deployment administrators with local storage', () => {
+    repository.database.update(user).set({ role: 'admin' }).where(eq(user.id, 'owner')).run()
+    repository.database.update(member).set({ role: 'owner' }).where(eq(member.userId, 'owner')).run()
+
+    expect(repository.ownedByDeploymentAdmin()).toBe(true)
+  })
 
   it('persists requests and tracks copy quantities transactionally', () => {
     const id = repository.createRequest({

@@ -699,6 +699,17 @@ export class DrizzleRepository implements Repository {
     return Boolean(this.database.select({ id: user.id }).from(user).where(eq(user.email, email.toLowerCase())).get())
   }
 
+  ownedByDeploymentAdmin() {
+    return Boolean(
+      this.database
+        .select({ id: user.id })
+        .from(member)
+        .innerJoin(user, eq(user.id, member.userId))
+        .where(and(eq(member.organizationId, this.workspace()), eq(member.role, 'owner'), eq(user.role, 'admin')))
+        .get(),
+    )
+  }
+
   getDeploymentSetting<T>(key: string): T | undefined {
     const row = this.database
       .select({ value: deploymentSettings.valueJson })

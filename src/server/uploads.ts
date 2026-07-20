@@ -8,6 +8,7 @@ import { TusUploadStore, UPLOAD_TTL } from '../adapters/tus'
 import type { NewUploadedRequestInput } from '../core/services'
 import { UploadRequestLimiter, validSameOrigin } from './uploadGuards'
 import { assertUploadCapacity } from './operations'
+import { hostedStorageRequiresRemote } from './storagePolicy'
 
 const MAX_TOTAL_BYTES = 1024 * 1024 * 1024
 const WORKSPACE_METADATA_KEY = 'printhubWorkspaceId'
@@ -152,6 +153,8 @@ export async function handleUpload(request: Request) {
   if (!validSameOrigin(request)) return Response.json({ error: 'cross-origin upload rejected' }, { status: 403 })
   const instance = await app()
   const context = await instance.workspace(request.headers)
+  if (hostedStorageRequiresRemote(context.storage, context.repository))
+    return Response.json({ error: 'an admin must configure cloud or S3-compatible storage before uploads are allowed' }, { status: 503 })
   if (!context.storageReady)
     return Response.json({ error: 'storage is not ready — an admin needs to fix Settings → Storage first' }, { status: 503 })
   if (context.storageMigration.active())
