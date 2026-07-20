@@ -17,13 +17,13 @@ export function UpdateNotices({ identity, hosted, serverVersion }: { identity?: 
 
   if (clientNeedsRefresh(serverVersion, __APP_VERSION__)) {
     return (
-      <aside className="sticky top-0 z-50 flex items-center justify-center gap-3 border-b bg-primary px-4 py-2 text-sm text-primary-foreground shadow-sm">
-        <span>PrintHub has been updated. Refresh to use the latest version.</span>
-        <Button type="button" size="sm" variant="secondary" onClick={() => window.location.reload()}>
+      <div className="fixed right-3 bottom-3 left-3 z-50 flex items-center gap-2 rounded-xl border bg-popover/95 p-2 shadow-lg backdrop-blur sm:right-auto sm:left-1/2 sm:-translate-x-1/2">
+        <span className="whitespace-nowrap px-2 text-sm font-medium">PrintHub has been updated.</span>
+        <Button type="button" size="sm" onClick={() => window.location.reload()}>
           <RefreshCw />
           Refresh
         </Button>
-      </aside>
+      </div>
     )
   }
 
