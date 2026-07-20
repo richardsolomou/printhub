@@ -56,9 +56,15 @@ test('manages a fair print queue and assigns work to printers', async ({ page })
   await upload(page, { name: 'first-model', printType: 'Resin', buffer: boxStl('first-model', 10, 10, 10) })
   await upload(page, { name: 'large-order', printType: 'Resin', buffer: boxStl('large-order', 20, 10, 10), quantity: 3 })
 
+  await page.setViewportSize({ width: 760, height: 480 })
+  const pageHeightBeforeSort = await documentHeight(page)
   await page.getByRole('button', { name: 'Sort requests: Requester priorities' }).click()
+  await expectPopoverWithinViewport(page, page.getByRole('menu', { name: 'Sort requests' }))
+  expect(await documentHeight(page)).toBe(pageHeightBeforeSort)
+  await expect(page.getByRole('menuitemradio', { name: /Largest|Smallest/ })).toHaveCount(0)
   await screenshot(page, 'grouped-sort-options')
-  await page.getByRole('menuitemradio', { name: 'Largest orders first', exact: true }).click()
+  await page.getByRole('menuitemradio', { name: 'Newest first', exact: true }).click()
+  await page.setViewportSize({ width: 1280, height: 720 })
   const queuedCards = page.locator('[data-status="todo"] button.card')
   await expect(queuedCards.first()).toContainText('large-order')
   await moveCard(page, 'large-order', 'todo', 'up_next')
@@ -90,12 +96,18 @@ test('manages a fair print queue and assigns work to printers', async ({ page })
   await expect(requestCard(page, 'oversized-model').getByLabel('Fits no enabled printer')).toBeVisible({ timeout: 30_000 })
   await screenshot(page, 'oversized-model-alert')
 
+  await page.setViewportSize({ width: 760, height: 480 })
+  const pageHeightBeforeFilters = await documentHeight(page)
   await page.getByRole('button', { name: 'Filters' }).click()
+  await expectPopoverWithinViewport(page, page.locator('[data-slot="popover-content"]'))
+  expect(await documentHeight(page)).toBe(pageHeightBeforeFilters)
+  await screenshot(page, 'compact-board-filters')
   const requesterFilter = page.getByPlaceholder('Anyone')
   await requesterFilter.click()
   await page.getByRole('option', { name: /^Owner · \d+$/ }).click()
   await expect(requesterFilter).toHaveValue(/^Owner · \d+$/)
   await page.getByRole('button', { name: 'Done' }).click()
+  await page.setViewportSize({ width: 1280, height: 720 })
   await expect(page.getByRole('button', { name: 'Owner', exact: true })).toBeVisible()
   await screenshot(page, 'requester-filter-labels')
 
@@ -173,6 +185,20 @@ async function choose(select: Locator, option: string) {
   await select.click()
   await select.page().getByRole('option', { name: option, exact: true }).click()
   await expect(select).toContainText(option)
+}
+
+async function expectPopoverWithinViewport(page: Page, popover: Locator) {
+  await expect(popover).toBeVisible()
+  const box = await popover.boundingBox()
+  const viewport = page.viewportSize()
+  expect(box).not.toBeNull()
+  expect(viewport).not.toBeNull()
+  expect(box!.y).toBeGreaterThanOrEqual(0)
+  expect(box!.y + box!.height).toBeLessThanOrEqual(viewport!.height)
+}
+
+function documentHeight(page: Page) {
+  return page.evaluate(() => document.documentElement.scrollHeight)
 }
 
 async function moveCard(page: Page, name: string, from: string, to: string) {
