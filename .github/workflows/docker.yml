@@ -20,6 +20,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --audit-level high
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm db:check
@@ -72,6 +73,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/dependency-review-action@v5
+        continue-on-error: true
         with:
           fail-on-severity: high
 
