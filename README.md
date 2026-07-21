@@ -11,7 +11,7 @@
 
 Collect STL requests, order the queue fairly, auto-assign compatible printers, and track every copy from **Queue → Up next → Printing → Finishing → Ready**.
 
-<img src="docs/media/printhub-demo.gif" alt="STL Quest tour showing the request board and interactive STL viewer" width="1200" />
+<img src="docs/media/stlquest-demo.gif" alt="STL Quest tour showing the request board and interactive STL viewer" width="1200" />
 </div>
 
 ## Who is it for? 👋
