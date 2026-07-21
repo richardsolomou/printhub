@@ -21,6 +21,7 @@ questions:
       attrs:
         - variable: additional_envs
           label: Additional Environment Variables
+          description: Configure additional environment variables for PrintHub.
           schema:
             type: list
             default: []
@@ -73,6 +74,7 @@ questions:
           label: WebUI Port
           schema:
             type: dict
+            show_if: [["host_network", "=", false]]
             attrs:
               - variable: bind_mode
                 label: Port Bind Mode

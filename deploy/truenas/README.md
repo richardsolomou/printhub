@@ -11,7 +11,7 @@ Before submitting:
 5. Attach `public/favicon.svg` in the PR; a maintainer uploads it to the TrueNAS CDN and returns the `icon:` URL.
 6. Use Node 24 and exactly pnpm 11.12.0 (`corepack prepare pnpm@11.12.0 --activate`). `pnpm version-packages` synchronizes `app_version` and the versioned container image tag for application releases; update `date_added` and the catalog package version when preparing a catalog submission.
 
-Re-check the compose template's library calls (`healthcheck.set_custom_test`, storage/port helpers) against the selected catalog library version before submitting.
+Re-check the compose template's library calls (health check, storage, and port helpers) against the selected catalog library version before submitting.
 
 ## Custom App installation
 

@@ -36,6 +36,7 @@ run_as_context:
     user_name: Host user is [apps]
 screenshots: []
 sources:
+  - https://apps.truenas.com/catalog/printhub_community/
   - https://github.com/richardsolomou/printhub
   - https://github.com/richardsolomou/printhub/pkgs/container/printhub
 title: PrintHub

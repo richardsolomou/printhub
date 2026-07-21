@@ -8,24 +8,26 @@ run_as:
 network:
   web_port:
     bind_mode: published
-    port_number: 30058
+    port_number: 30059
     host_ips: []
-  host_network: false
+  host_network: true
+
+ix_volumes:
+  data: /opt/tests/mnt/data
+  prints: /opt/tests/mnt/prints
 
 storage:
   data:
-    type: host_path
-    host_path_config:
-      path: /opt/tests/printhub-data
+    type: ix_volume
+    ix_volume_config:
+      dataset_name: data
       acl_enable: false
-      auto_permissions: true
       create_host_path: true
   prints:
-    type: host_path
-    host_path_config:
-      path: /opt/tests/printhub-prints
+    type: ix_volume
+    ix_volume_config:
+      dataset_name: prints
       acl_enable: false
-      auto_permissions: true
       create_host_path: true
 
 labels: []
