@@ -13,7 +13,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { SOCIAL_AUTH_PROVIDERS, type SocialAuthProvider } from '../../../core/auth'
 import { PASSWORD_MIN_LENGTH } from '../../../core/security'
 import type { Identity } from '../../../core/types'
-import { setOwnPassword } from '../../../server/fns'
+import { changeOwnEmail, setOwnPassword, unlinkOwnAccount } from '../../../server/fns'
 import { authClient } from '../../authClient'
 import { accountMethodsQuery, sessionQuery } from '../../queries'
 import { retryQueries } from '../../queryState'
@@ -33,7 +33,8 @@ export function AccountPane({ me }: { me: Identity }) {
   const methods = methodsResult.data
   const linked = new Set(methods?.linked ?? [])
   const hasPassword = linked.has('credential')
-  const methodsLoaded = methods !== undefined
+  const usableLinkedMethods =
+    Number(hasPassword && methods?.passwordAvailable) + (methods?.availableProviders.filter((provider) => linked.has(provider)).length ?? 0)
   const [changingPassword, setChangingPassword] = useState(false)
   const [editingProfile, setEditingProfile] = useState(false)
   const [removingMethod, setRemovingMethod] = useState<'credential' | SocialAuthProvider>()
@@ -106,7 +107,6 @@ export function AccountPane({ me }: { me: Identity }) {
             name="Password"
             linked={hasPassword}
             available={methods?.passwordAvailable ?? false}
-            loaded={methodsLoaded}
             action={
               hasPassword && session?.auth.password ? (
                 <div className="flex flex-wrap gap-2">
@@ -117,7 +117,7 @@ export function AccountPane({ me }: { me: Identity }) {
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={linked.size < 2}
+                    disabled={usableLinkedMethods < 2}
                     onClick={() => setRemovingMethod('credential')}
                   >
                     Remove password
@@ -140,14 +140,13 @@ export function AccountPane({ me }: { me: Identity }) {
                 name={PROVIDER_NAMES[provider]}
                 linked={linked.has(provider)}
                 available={methods.availableProviders.includes(provider)}
-                loaded={methodsLoaded}
                 action={
                   linked.has(provider) ? (
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      disabled={linked.size < 2}
+                      disabled={usableLinkedMethods < 2}
                       onClick={() => setRemovingMethod(provider)}
                     >
                       Unlink {PROVIDER_NAMES[provider]}
@@ -174,6 +173,7 @@ export function AccountPane({ me }: { me: Identity }) {
             name={me.name}
             email={me.email}
             emailConfigured={session.email.configured}
+            hasPassword={hasPassword}
             onDone={async () => {
               setEditingProfile(false)
               await queryClient.invalidateQueries({ queryKey: ['session'] })
@@ -228,34 +228,46 @@ function ProfileForm({
   name,
   email,
   emailConfigured,
+  hasPassword,
   onDone,
 }: {
   name: string
   email: string
   emailConfigured: boolean
+  hasPassword: boolean
   onDone: () => void | Promise<void>
 }) {
   const [error, setError] = useState('')
+  const queryClient = useQueryClient()
+  const changeEmail = useServerFn(changeOwnEmail)
   const form = useForm({
-    defaultValues: { name, email },
+    defaultValues: { name, email, currentPassword: '' },
     onSubmit: async ({ value }) => {
       setError('')
       const nextName = value.name.trim()
       const nextEmail = value.email.trim().toLowerCase()
+      if (!nextName) {
+        setError('Name is required.')
+        return
+      }
       if (nextName !== name) {
         const { error: failed } = await authClient.updateUser({ name: nextName })
         if (failed) {
           setError('Could not update your name.')
           return
         }
+        await queryClient.invalidateQueries({ queryKey: ['session'] })
       }
       if (nextEmail !== email) {
-        const { error: failed } = await authClient.changeEmail({ newEmail: nextEmail, callbackURL: '/account' })
-        if (failed) {
+        try {
+          await changeEmail({ data: { email: nextEmail, password: value.currentPassword } })
+        } catch {
           setError(
-            emailConfigured
-              ? 'Could not change your email address.'
-              : 'Email verification must be configured to change this email address.',
+            !hasPassword
+              ? 'Create a password sign-in method before changing your email address.'
+              : emailConfigured
+                ? 'Could not change your email address. Check your current password.'
+                : 'Email verification must be configured to change this email address.',
           )
           return
         }
@@ -304,6 +316,29 @@ function ProfileForm({
           </Field>
         )}
       </form.Field>
+      <form.Subscribe selector={(state) => state.values.email}>
+        {(currentEmail) =>
+          email !== currentEmail.trim().toLowerCase() &&
+          hasPassword && (
+            <form.Field name="currentPassword">
+              {(field) => (
+                <Field>
+                  <FieldLabel htmlFor="profile-current-password">Current password</FieldLabel>
+                  <Input
+                    id="profile-current-password"
+                    type="password"
+                    value={field.state.value}
+                    maxLength={256}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                    required
+                  />
+                  <FieldDescription>Confirm your password to change the account email.</FieldDescription>
+                </Field>
+              )}
+            </form.Field>
+          )
+        }
+      </form.Subscribe>
       <FieldError>{error}</FieldError>
       <form.Subscribe selector={(state) => state.isSubmitting}>
         {(busy) => (
@@ -320,6 +355,7 @@ function ProfileForm({
 function RemoveMethodForm({ method, onDone }: { method: 'credential' | SocialAuthProvider; onDone: () => void | Promise<void> }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const unlinkAccount = useServerFn(unlinkOwnAccount)
   const label = method === 'credential' ? 'password sign-in' : PROVIDER_NAMES[method]
   return (
     <div className="flex flex-col gap-4">
@@ -334,13 +370,15 @@ function RemoveMethodForm({ method, onDone }: { method: 'credential' | SocialAut
         onClick={async () => {
           setBusy(true)
           setError('')
-          const { error: failed } = await authClient.unlinkAccount({ providerId: method })
-          if (failed) setError('Could not remove this sign-in method. Make sure another method is linked first.')
-          else {
+          try {
+            await unlinkAccount({ data: { provider: method } })
             toast.success(`${method === 'credential' ? 'Password sign-in removed' : `${PROVIDER_NAMES[method]} unlinked`}.`)
             await onDone()
+          } catch {
+            setError('Could not remove this sign-in method. Make sure another enabled method is linked first.')
+          } finally {
+            setBusy(false)
           }
-          setBusy(false)
         }}
       >
         {busy && <Spinner />}
@@ -516,14 +554,12 @@ function MethodCard({
   name,
   linked,
   available,
-  loaded,
   action,
 }: {
   method: 'password' | SocialAuthProvider
   name: string
   linked: boolean
   available: boolean
-  loaded: boolean
   action?: ReactNode
 }) {
   return (
@@ -533,13 +569,11 @@ function MethodCard({
           <AuthMethodIcon method={method} /> {name}
         </CardTitle>
         <CardDescription>
-          {!loaded ? 'Checking account…' : linked ? 'Linked to this account.' : available ? 'Available to link.' : 'Disabled by the admin.'}
+          {linked ? 'Linked to this account.' : available ? 'Available to link.' : 'Disabled by the admin.'}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col items-start gap-3">
-        <Badge variant={linked ? 'default' : 'secondary'}>
-          {!loaded ? 'Checking' : linked ? 'Linked' : available ? 'Not linked' : 'Unavailable'}
-        </Badge>
+        <Badge variant={linked ? 'default' : 'secondary'}>{linked ? 'Linked' : available ? 'Not linked' : 'Unavailable'}</Badge>
         {action}
       </CardContent>
     </Card>
