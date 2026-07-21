@@ -2,4 +2,4 @@
 'stlquest': patch
 ---
 
-Remove completed PrintHub startup migration paths now that supported deployments use STL Quest storage names.
+Remove completed PrintHub migration paths and use STL Quest names for new Compose data directories.
