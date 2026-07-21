@@ -23,7 +23,7 @@ pnpm check
 pnpm test:e2e
 ```
 
-`pnpm check` runs formatting, linting, migration validation, printer-catalog validation, the production build, type checking, unit tests, and the backup CLI smoke test. The build runs before type checking because it generates `src/routeTree.gen.ts`. `pnpm test:e2e` builds and tests the production server; use `pnpm test:e2e:run` for fast reruns against the current build, or set `PLAYWRIGHT_DEV_SERVER=1` only when debugging against Vite. Install Chromium once with `pnpm test:e2e:install` before running the end-to-end suite.
+`pnpm check` runs formatting, linting, migration validation, printer-catalog and Unraid metadata validation, the production build, type checking, unit tests, and the backup CLI smoke test. The build runs before type checking because it generates `src/routeTree.gen.ts`. `pnpm test:e2e` builds and tests the production server; use `pnpm test:e2e:run` for fast reruns against the current build, or set `PLAYWRIGHT_DEV_SERVER=1` only when debugging against Vite. Install Chromium once with `pnpm test:e2e:install` before running the end-to-end suite.
 
 Run `pnpm test:e2e:screenshots` when you need the manual inspection screenshots under `test-results/`, or `pnpm test:e2e:trace` when debugging with a Playwright trace; regular local runs skip both.
 
