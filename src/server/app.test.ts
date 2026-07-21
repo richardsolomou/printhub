@@ -160,6 +160,10 @@ describe('app initialization', () => {
       adapter: 'local',
       root: '/legacy',
     })
+    expect(workspaceStorageConfig({ adapter: 'local', root: '/legacy' }, 'legacy-workspace', true)).toEqual({
+      adapter: 'local',
+      root: path.join('/legacy', 'legacy-workspace'),
+    })
   })
 
   it('migrates legacy workspace assets into a private storage namespace on startup', async () => {
@@ -203,7 +207,7 @@ describe('app initialization', () => {
     await expect(fs.promises.readFile(sourcePath, 'utf8')).resolves.toBe('model')
     expect(repository.getSetting('storage')).toEqual({
       adapter: 'local',
-      root: path.join(process.env.PRINTS_DIR, 'legacy-workspace'),
+      root: process.env.PRINTS_DIR,
     })
   })
 

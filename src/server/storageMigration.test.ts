@@ -77,7 +77,7 @@ describe('StorageMigrationCoordinator', () => {
     await coordinator.startLegacyNamespace({ adapter: 'local', root: destinationRoot })
     await vi.waitFor(() => expect(repository.getSetting(LEGACY_STORAGE_NAMESPACE_SETTING)).toBe(true))
 
-    expect(repository.getSetting<StorageConfig>('storage')).toEqual({ adapter: 'local', root: destinationRoot })
+    expect(repository.getSetting<StorageConfig>('storage')).toEqual({ adapter: 'local', root: sourceRoot })
   })
 
   it('finishes a legacy namespace migration when an asset was already moved', async () => {

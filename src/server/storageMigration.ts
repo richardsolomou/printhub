@@ -188,7 +188,7 @@ export class StorageMigrationCoordinator {
       finishedAt,
     }
     this.repository.setSettings({
-      storage: completed.destination,
+      storage: completed.purpose === 'legacy-namespace' ? completed.source : completed.destination,
       [STORAGE_MIGRATION_SETTING]: completed,
       ...(completed.purpose === 'legacy-namespace' ? { [LEGACY_STORAGE_NAMESPACE_SETTING]: true } : {}),
     })

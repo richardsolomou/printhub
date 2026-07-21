@@ -62,8 +62,8 @@ export function resolveBoardConfig(repository: Repository): BoardConfig {
   return { privateRequests: stored?.privateRequests ?? false }
 }
 
-export function workspaceStorageConfig(config: StorageConfig, workspaceId?: string): StorageConfig {
-  if (!workspaceId || workspaceId === 'legacy-workspace') return config
+export function workspaceStorageConfig(config: StorageConfig, workspaceId?: string, legacyNamespaced = false): StorageConfig {
+  if (!workspaceId || (workspaceId === 'legacy-workspace' && !legacyNamespaced)) return config
   return namespacedStorageConfig(config, workspaceId)
 }
 
@@ -74,7 +74,8 @@ export function namespacedStorageConfig(config: StorageConfig, workspaceId: stri
 }
 
 export function buildAssetStore(config: StorageConfig, repository?: Repository, workspaceId?: string) {
-  const workspaceConfig = workspaceStorageConfig(config, workspaceId)
+  const legacyNamespaced = workspaceId === 'legacy-workspace' && repository?.getSetting(LEGACY_STORAGE_NAMESPACE_SETTING) === true
+  const workspaceConfig = workspaceStorageConfig(config, workspaceId, legacyNamespaced)
   if (workspaceConfig.adapter === 's3') return new S3AssetStore(workspaceConfig)
   if (workspaceConfig.adapter === 'webdav') return new WebDAVAssetStore(workspaceConfig)
   const settings = repository instanceof DrizzleRepository ? deploymentSettings(repository) : repository
@@ -280,9 +281,9 @@ async function createApp() {
       const ownerReplacement = workspaces.find((candidate) => candidate.id !== membership.id && candidate.role === 'owner')
       const wasPersonal = repository!.isPersonalWorkspace(baseIdentity.id, membership.id)
       const scopedRepository = repository!.scoped(membership.id)
-      const storage = workspaceStorageConfig(resolveStorageConfig(scopedRepository), membership.id)
-      const storageNamespaced =
-        membership.id !== 'legacy-workspace' || scopedRepository.getSetting(LEGACY_STORAGE_NAMESPACE_SETTING) === true
+      const legacyNamespaced = scopedRepository.getSetting(LEGACY_STORAGE_NAMESPACE_SETTING) === true
+      const storage = workspaceStorageConfig(resolveStorageConfig(scopedRepository), membership.id, legacyNamespaced)
+      const storageNamespaced = membership.id !== 'legacy-workspace' || legacyNamespaced
       const pendingRuntime = pendingRuntimes.get(membership.id)
       const workspaceRuntime = runtimes.get(membership.id) ?? (pendingRuntime ? await pendingRuntime : undefined)
       await workspaceRuntime?.close()
