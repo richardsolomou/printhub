@@ -37,16 +37,19 @@ export function Column({
   onOpenRequest: (requestId: string) => void
   onSelectRequest: (status: StatusId, requestId: string, orderedIds: string[], options: { range: boolean; toggle: boolean }) => void
 }) {
+  const laneRef = useRef<HTMLDivElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
   const [isOver, setIsOver] = useState(false)
 
   useEffect(() => {
-    const element = bodyRef.current
-    // The lane is the drop target for cross-status moves — admin only.
-    if (!element) return
+    const element = laneRef.current
+    const scrollElement = bodyRef.current
+    // The lane is the drop target for cross-status moves — admin only — kept separate from the
+    // scrollable body so it doesn't share a DOM node with the auto-scroll/virtualizer bindings.
+    if (!element || !scrollElement) return
     return combine(
       autoScrollForElements({
-        element,
+        element: scrollElement,
         getAllowedAxis: () => 'vertical',
         getConfiguration: () => ({ maxScrollSpeed: 'fast' }),
       }),
@@ -77,7 +80,7 @@ export function Column({
   })
 
   return (
-    <div className="column-lane flex min-h-0 flex-col" data-status={status}>
+    <div ref={laneRef} className="column-lane flex min-h-0 flex-col" data-status={status}>
       <div
         ref={bodyRef}
         className={cn(

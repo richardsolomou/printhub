@@ -218,7 +218,7 @@ test('manages a fair print queue and assigns work to printers', async ({ page })
   await screenshot(page, 'fair-queue-printer-assignment')
 
   await upload(page, { name: 'oversized-model', printType: 'Resin', buffer: boxStl('oversized-model', 150, 150, 100) })
-  await expect(requestCard(page, 'oversized-model').getByLabel('Fits no enabled printer')).toBeVisible({ timeout: 30_000 })
+  await expect(requestCard(page, 'oversized-model').getByLabel('Fits no printer')).toBeVisible({ timeout: 30_000 })
   await screenshot(page, 'oversized-model-alert')
 
   await page.setViewportSize({ width: 760, height: 480 })
