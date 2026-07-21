@@ -1,8 +1,6 @@
 import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer'
 
-const LEGACY_MAGIC = 0x50484d31
 const MAGIC = 0x50484d32
-const LEGACY_HEADER_BYTES = 32
 const HEADER_BYTES = 44
 const VERTEX_STRIDE = 8
 
@@ -55,12 +53,10 @@ export async function encodePreviewMesh(positions: Float32Array, indices: Uint32
 }
 
 export async function decodePreviewMesh(file: Uint8Array): Promise<Float32Array | undefined> {
-  if (file.byteLength < LEGACY_HEADER_BYTES) return undefined
+  if (file.byteLength < HEADER_BYTES) return undefined
   const view = new DataView(file.buffer, file.byteOffset, file.byteLength)
   const magic = view.getUint32(0)
-  if (magic === LEGACY_MAGIC) return decodeLegacyPreviewMesh(file, view)
   if (magic !== MAGIC) return undefined
-  if (file.byteLength < HEADER_BYTES) throw new Error('invalid preview mesh length')
 
   const triangleCount = view.getUint32(4, true)
   const vertexCount = view.getUint32(8, true)
@@ -112,20 +108,4 @@ function previewBounds(view: DataView, offset: number): number[] {
     }
   }
   return bounds
-}
-
-function decodeLegacyPreviewMesh(file: Uint8Array, view: DataView): Float32Array {
-  const triangleCount = view.getUint32(4, true)
-  if (LEGACY_HEADER_BYTES + triangleCount * 18 !== file.byteLength) throw new Error('invalid preview mesh length')
-  const bounds = previewBounds(view, 8)
-  const positions = new Float32Array(triangleCount * 9)
-  let offset = LEGACY_HEADER_BYTES
-  for (let index = 0; index < positions.length; index++) {
-    const axis = index % 3
-    const minimum = bounds[axis]
-    const extent = bounds[axis + 3] - minimum
-    positions[index] = minimum + (view.getUint16(offset, true) / 65_535) * extent
-    offset += 2
-  }
-  return positions
 }

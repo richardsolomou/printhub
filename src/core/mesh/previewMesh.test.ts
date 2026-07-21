@@ -20,17 +20,7 @@ describe('preview mesh format', () => {
     expect((await encodePreviewMesh(positions, indices)).byteLength).toBeLessThan(25_000)
   })
 
-  it('ignores legacy STL data', async () => {
+  it('ignores STL data', async () => {
     expect(await decodePreviewMesh(new Uint8Array(84))).toBeUndefined()
-  })
-
-  it('reads first-generation quantized previews during regeneration', async () => {
-    const legacy = new Uint8Array(50)
-    const view = new DataView(legacy.buffer)
-    view.setUint32(0, 0x50484d31)
-    view.setUint32(4, 1, true)
-    ;[0, 0, 0, 10, 10, 10].forEach((value, axis) => view.setFloat32(8 + axis * 4, value, true))
-    ;[0, 0, 0, 65_535, 0, 0, 0, 65_535, 0].forEach((value, index) => view.setUint16(32 + index * 2, value, true))
-    expect(Array.from((await decodePreviewMesh(legacy))!)).toEqual([0, 0, 0, 10, 0, 0, 0, 10, 0])
   })
 })

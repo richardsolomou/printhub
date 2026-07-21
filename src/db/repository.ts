@@ -13,22 +13,15 @@ import type {
   UploadOperation,
 } from '../core/types'
 import { initialStatus, workflow } from '../core/workflow'
-import {
-  automaticallyAssignedPrinter,
-  LEGACY_PRINTERS_SETTING,
-  normalizePrinterProfile,
-  PRINTERS_SETTING,
-  storedPrinterProfiles,
-} from '../core/printers'
+import { automaticallyAssignedPrinter, normalizePrinterProfile, PRINTERS_SETTING, storedPrinterProfiles } from '../core/printers'
 import { backupDatabase } from './backup'
 import { closeDatabase, databaseFile, openDatabase, type STLQuestDatabase } from './connection'
 import { migrateDatabase } from './migrations'
-import { migrateLegacyDatabasePath } from './paths'
+import { databasePath } from './paths'
 import {
   assetGenerationJobs,
   deploymentSettings,
   invites,
-  invitation,
   member,
   operations,
   organization,
@@ -66,7 +59,7 @@ export class DrizzleRepository implements Repository {
   }
 
   static open(file?: string) {
-    const resolvedFile = file ?? migrateLegacyDatabasePath()
+    const resolvedFile = file ?? databasePath()
     fs.mkdirSync(path.dirname(resolvedFile), { recursive: true })
     return new DrizzleRepository(openDatabase(resolvedFile))
   }
@@ -783,11 +776,7 @@ export class DrizzleRepository implements Repository {
 
   replacePrinterProfiles(profiles: PrinterProfile[]) {
     this.database.transaction((tx) => {
-      const previous = (
-        this.getSettingFrom<PrinterProfile[]>(tx, PRINTERS_SETTING) ??
-        this.getSettingFrom<PrinterProfile[]>(tx, LEGACY_PRINTERS_SETTING) ??
-        []
-      ).map(normalizePrinterProfile)
+      const previous = (this.getSettingFrom<PrinterProfile[]>(tx, PRINTERS_SETTING) ?? []).map(normalizePrinterProfile)
       const next = profiles.map(normalizePrinterProfile)
       const nextById = new Map(next.map((profile) => [profile.id, profile]))
 
@@ -814,14 +803,6 @@ export class DrizzleRepository implements Repository {
         .run()
 
       this.setSettingWith(tx, PRINTERS_SETTING, next)
-      tx.delete(settings)
-        .where(
-          and(
-            eq(settings.workspaceId, this.workspace()),
-            inArray(settings.key, [LEGACY_PRINTERS_SETTING, 'plate-planner-draft', 'plate-planner-drafts']),
-          ),
-        )
-        .run()
     })
     this.backfillAutomaticPrinterAssignments()
   }
@@ -838,8 +819,7 @@ export class DrizzleRepository implements Repository {
 
     for (const workspaceId of workspaceIds) {
       const repository = this.workspaceId === workspaceId ? this : this.scoped(workspaceId)
-      const stored =
-        repository.getSetting<PrinterProfile[]>(PRINTERS_SETTING) ?? repository.getSetting<PrinterProfile[]>(LEGACY_PRINTERS_SETTING)
+      const stored = repository.getSetting<PrinterProfile[]>(PRINTERS_SETTING)
       if (!stored) continue
       const normalized = stored.map(normalizePrinterProfile)
       if (normalized.some((profile, index) => profile.presetId !== stored[index]?.presetId)) {
@@ -1023,46 +1003,12 @@ export class DrizzleRepository implements Repository {
   }
 
   ensurePersonalWorkspace(identity: { id: string; name: string }) {
-    const legacy = this.database
-      .select({ id: organization.id, name: organization.name, slug: organization.slug, role: member.role })
-      .from(organization)
-      .innerJoin(member, and(eq(member.organizationId, organization.id), eq(member.userId, identity.id)))
-      .where(eq(organization.id, 'legacy-workspace'))
-      .get()
     const existing = this.database
       .select({ id: organization.id, name: organization.name, slug: organization.slug, role: member.role })
       .from(organization)
       .innerJoin(member, and(eq(member.organizationId, organization.id), eq(member.userId, identity.id)))
       .where(eq(organization.personalOwnerId, identity.id))
       .get()
-    if (legacy) {
-      if (!existing) {
-        if (legacy.role === 'owner')
-          this.database.update(organization).set({ personalOwnerId: identity.id }).where(eq(organization.id, legacy.id)).run()
-        return legacy
-      }
-      if (existing.id === legacy.id) return existing
-      const repaired = this.database.transaction((tx) => {
-        const hasData =
-          (tx.select({ total: count() }).from(requests).where(eq(requests.workspaceId, existing.id)).get()?.total ?? 0) > 0 ||
-          (tx.select({ total: count() }).from(settings).where(eq(settings.workspaceId, existing.id)).get()?.total ?? 0) > 0 ||
-          (tx.select({ total: count() }).from(operations).where(eq(operations.workspaceId, existing.id)).get()?.total ?? 0) > 0 ||
-          (tx.select({ total: count() }).from(uploadSessions).where(eq(uploadSessions.workspaceId, existing.id)).get()?.total ?? 0) > 0 ||
-          (tx.select({ total: count() }).from(invites).where(eq(invites.workspaceId, existing.id)).get()?.total ?? 0) > 0 ||
-          (tx.select({ total: count() }).from(invitation).where(eq(invitation.organizationId, existing.id)).get()?.total ?? 0) > 0 ||
-          (tx
-            .select({ total: count() })
-            .from(member)
-            .where(and(eq(member.organizationId, existing.id), ne(member.userId, identity.id)))
-            .get()?.total ?? 0) > 0
-        if (hasData) return false
-        tx.delete(organization).where(eq(organization.id, existing.id)).run()
-        if (legacy.role === 'owner')
-          tx.update(organization).set({ personalOwnerId: identity.id }).where(eq(organization.id, legacy.id)).run()
-        return true
-      })
-      if (repaired) return legacy
-    }
     if (existing) return existing
     if (process.env.NODE_ENV === 'test') {
       const testWorkspace = this.workspaceBySlug('test-workspace')

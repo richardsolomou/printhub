@@ -33,34 +33,9 @@ function enabled(value: string | undefined) {
   return ['1', 'true', 'yes', 'on'].includes((value ?? '').trim().toLowerCase())
 }
 
-function legacySmtp(stored?: IntegrationConfig): SmtpEmailConfig | undefined {
-  if (stored?.smtp) return stored.smtp
-  if (stored?.email?.adapter === 'smtp') {
-    const email = stored.email as { from: string; host: string; port: number; secure: boolean; user?: string; password?: string }
-    return { ...email, testedAt: stored.emailTestedAt }
-  }
-  const email = stored?.emails?.find((item) => item.adapter === 'smtp' && item.enabled) as
-    | ({ from: string; host: string; port: number; secure: boolean; user?: string; password?: string; testedAt?: number } & Record<
-        string,
-        unknown
-      >)
-    | undefined
-  return email
-    ? {
-        from: email.from,
-        host: email.host,
-        port: email.port,
-        secure: email.secure,
-        user: email.user,
-        password: email.password,
-        testedAt: email.testedAt,
-      }
-    : undefined
-}
-
 export function resolveSmtpConfig(stored?: IntegrationConfig, environment: NodeJS.ProcessEnv = process.env): SmtpEmailConfig | undefined {
   const configured = environment.SMTP_HOST?.trim()
-  if (!configured) return legacySmtp(stored)
+  if (!configured) return stored?.smtp
   const from = environment.EMAIL_FROM?.trim()
   const host = environment.SMTP_HOST?.trim()
   if (!from) throw new Error('EMAIL_FROM is required for SMTP email')

@@ -280,7 +280,7 @@ describe('STLQuestService crash recovery', () => {
   })
 
   it('exposes configured printer assignments and rejects unknown printers', async () => {
-    repository.setSetting('plate-planner-profiles', [slaPrinter])
+    repository.setSetting('printers', [slaPrinter])
     const id = repository.createRequest({
       name: 'Assigned',
       fileName: 'assigned.stl',
@@ -300,7 +300,7 @@ describe('STLQuestService crash recovery', () => {
   })
 
   it('validates assignment-first request targets', () => {
-    repository.setSetting('plate-planner-profiles', [slaPrinter, filamentPrinter])
+    repository.setSetting('printers', [slaPrinter, filamentPrinter])
     expect(() =>
       service.createRequest(
         {

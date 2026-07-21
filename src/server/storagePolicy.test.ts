@@ -70,9 +70,9 @@ describe('hosted storage policy', () => {
     expect(storageConfigured(encrypted)).toBe(true)
   })
 
-  it('detects legacy storage settings', () => {
-    const legacy = { getSetting: (key: string) => (key === 'storage' ? { adapter: 'local' } : undefined) }
+  it('detects storage migration settings', () => {
+    const migrating = { getSetting: (key: string) => (key === 'storage' ? { adapter: 'local' } : undefined) }
 
-    expect(storageConfigured(legacy)).toBe(true)
+    expect(storageConfigured(migrating)).toBe(true)
   })
 })

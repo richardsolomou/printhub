@@ -35,6 +35,6 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:
       # App data: SQLite database, settings, in-flight uploads.
-      - ${DATA_HOST_DIR:-./printhub-data}:/data
+      - ${DATA_HOST_DIR:-./stlquest-data}:/data
       # Your resin and filament files stay private as plain files organized by production stage.
       - ${PRINTS_HOST_DIR:-./prints}:/prints

@@ -189,7 +189,7 @@ describe('tus upload transport', () => {
     const { DrizzleRepository } = await import('../db/repository')
     const repository = DrizzleRepository.open(path.join(process.env.DATA_DIR, 'stlquest.sqlite'))
     repository.setSetting('storage', { adapter: 'local', root: prints })
-    repository.setSetting('plate-planner-profiles', [
+    repository.setSetting('printers', [
       {
         id: 'resin-printer',
         name: 'Resin printer',
