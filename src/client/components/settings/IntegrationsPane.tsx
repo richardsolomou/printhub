@@ -54,7 +54,7 @@ export function IntegrationsPane() {
     <SettingsPage>
       <SettingsHeader
         title="Integrations"
-        description="Configure sign-in methods and optional SMTP delivery. New accounts are always invite-only."
+        description="Configure sign-in methods and optional SMTP delivery. Workspace membership is always invite-only."
       />
       <AuthenticationSettings data={data} onConfigure={setProvider} />
       <SmtpSettings data={data} onConfigure={() => setSmtpOpen(true)} />
@@ -85,7 +85,7 @@ function AuthenticationSettings({
   return (
     <SettingsSection
       title="Authentication"
-      description="Password, Google, and Discord can be enabled together. Account creation always requires an invite."
+      description="Password, Google, and Discord can be enabled together. Joining an existing workspace always requires an invite."
     >
       <div className="grid gap-3 sm:grid-cols-3">
         <Card>

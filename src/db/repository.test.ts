@@ -670,8 +670,26 @@ describe('DrizzleRepository contract', () => {
     const database = new Database(':memory:')
     const migrated = new DrizzleRepository(createDatabase(database))
 
-    expect(database.prepare('SELECT count(*) count FROM __drizzle_migrations').get()).toEqual({ count: 10 })
+    expect(database.prepare('SELECT count(*) count FROM __drizzle_migrations').get()).toEqual({ count: 11 })
     migrated.close()
+  })
+
+  it('renames only the untouched legacy workspace display name', () => {
+    const database = new Database(':memory:')
+    database.exec(`
+      CREATE TABLE organization (id text PRIMARY KEY NOT NULL, name text NOT NULL, slug text NOT NULL);
+      INSERT INTO organization VALUES ('legacy-workspace', 'PrintHub', 'printhub');
+      INSERT INTO organization VALUES ('custom-workspace', 'PrintHub', 'custom');
+    `)
+    const migration = fs.readFileSync(path.resolve('drizzle/0010_rename_legacy_workspace.sql'), 'utf8')
+
+    database.exec(migration)
+
+    expect(database.prepare('SELECT id, name, slug FROM organization ORDER BY id').all()).toEqual([
+      { id: 'custom-workspace', name: 'PrintHub', slug: 'custom' },
+      { id: 'legacy-workspace', name: 'STL Quest', slug: 'printhub' },
+    ])
+    database.close()
   })
 
   it('renames the legacy global admin role without changing workspace roles', () => {

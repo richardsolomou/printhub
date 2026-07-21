@@ -275,6 +275,9 @@ test('manages a fair print queue and assigns work to printers', async ({ page })
 
   await page.goto('/admin/integrations')
   await page.setViewportSize({ width: 1280, height: 1000 })
+  await expect(page.getByText('Workspace membership is always invite-only.')).toBeVisible()
+  await expect(page.getByText('Joining an existing workspace always requires an invite.')).toBeVisible()
+  await screenshot(page, 'integration-account-access-copy')
   await page
     .locator('[data-slot="settings-section"]')
     .filter({ hasText: 'Outbound email' })
