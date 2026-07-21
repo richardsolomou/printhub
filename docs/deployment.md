@@ -33,6 +33,12 @@ Set `BETTER_AUTH_URL` to the public origin and add it to `BETTER_AUTH_TRUSTED_OR
 
 Model uploads are resumable tus requests sent in 32 MB chunks. Allow request bodies of at least that size (for nginx, `client_max_body_size 64m;`); the app itself caps a single upload at 1 GB. Live board updates stream over server-sent events at `/api/events`, so response buffering must be off for that path.
 
+### Canonical and fallback domains
+
+Run one STL Quest instance at the canonical origin, `https://stl.quest`, and set both `BETTER_AUTH_URL` and `BETTER_AUTH_TRUSTED_ORIGINS` to that origin. The fallback domain does not need another app instance or tunnel route.
+
+To redirect `stlquest.com` with Cloudflare, add the domain as its own zone and create proxied placeholder `A` records for `@` and, if used, `www`, pointing to `192.0.2.1`. Then create a permanent Redirect Rule from `http*://stlquest.com/*` to `https://stl.quest/${2}` with query-string preservation enabled. Add the equivalent rule for `www.stlquest.com` if that hostname should also work.
+
 ### Sample configurations
 
 nginx:
