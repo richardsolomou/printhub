@@ -3,7 +3,6 @@ import { workflow } from './workflow'
 import { getPrinterPreset, PRINTER_PRESETS } from './printerPresets'
 
 export const PRINTERS_SETTING = 'printers'
-export const LEGACY_PRINTERS_SETTING = 'plate-planner-profiles'
 
 export function normalizePrinterProfile(profile: Partial<PrinterProfile> & Pick<PrinterProfile, 'id' | 'name'>): PrinterProfile {
   const preset = getPrinterPreset(profile.presetId) ?? inferredPrinterPreset(profile)
@@ -66,8 +65,7 @@ export function printerFitsModel(printer: PrinterProfile, model?: ModelDimension
 }
 
 export function storedPrinterProfiles(repository: { getSetting<T>(key: string): T | undefined }) {
-  const stored =
-    repository.getSetting<PrinterProfile[]>(PRINTERS_SETTING) ?? repository.getSetting<PrinterProfile[]>(LEGACY_PRINTERS_SETTING) ?? []
+  const stored = repository.getSetting<PrinterProfile[]>(PRINTERS_SETTING) ?? []
   return stored.map(normalizePrinterProfile)
 }
 

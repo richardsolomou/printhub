@@ -111,7 +111,7 @@ The command does not copy model storage. If `INTEGRATIONS_ENCRYPTION_KEY` suppli
 
 Pull the new image and recreate the container. Database migrations run automatically before the server accepts requests. Back up `/data` and the active model store together before upgrading so they can be restored to the same recovery point if a rollback is needed.
 
-The default Compose host directory is `./stlquest-data`. Deployments that previously used the default `./printhub-data` directory must set `DATA_HOST_DIR=./printhub-data` or move that directory before recreating the container.
+The default Compose host directory is `./stlquest-data`; set `DATA_HOST_DIR` to use a different location.
 
 ## Account recovery
 

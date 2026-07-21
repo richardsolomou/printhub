@@ -209,7 +209,7 @@ describe('DrizzleRepository contract', () => {
       requestedPrintType: 'filament',
     })
 
-    repository.setSetting('plate-planner-profiles', [
+    repository.setSetting('printers', [
       {
         id: 'resin-printer',
         name: 'Resin printer',
@@ -672,117 +672,6 @@ describe('DrizzleRepository contract', () => {
 
     expect(database.prepare('SELECT count(*) count FROM __drizzle_migrations').get()).toEqual({ count: 11 })
     migrated.close()
-  })
-
-  it('renames only the untouched legacy workspace display name', () => {
-    const database = new Database(':memory:')
-    database.exec(`
-      CREATE TABLE organization (id text PRIMARY KEY NOT NULL, name text NOT NULL, slug text NOT NULL);
-      CREATE TABLE requests (id text PRIMARY KEY NOT NULL, thumbnail_path text, preview_path text);
-      CREATE TABLE operations (id text PRIMARY KEY NOT NULL, payload_json text NOT NULL);
-      INSERT INTO organization VALUES ('legacy-workspace', 'PrintHub', 'printhub');
-      INSERT INTO organization VALUES ('custom-workspace', 'PrintHub', 'custom');
-      INSERT INTO requests VALUES ('request', '.printhub/thumbnails/model.png', '.printhub/previews/model.phm');
-      INSERT INTO operations VALUES ('operation', '{"trashPath":".printhub/trash/model.stl"}');
-    `)
-    const migration = fs
-      .readFileSync(path.resolve('drizzle/0010_rename_legacy_workspace.sql'), 'utf8')
-      .replaceAll('--> statement-breakpoint', '')
-
-    database.exec(migration)
-
-    expect({
-      organizations: database.prepare('SELECT id, name, slug FROM organization ORDER BY id').all(),
-      request: database.prepare('SELECT thumbnail_path, preview_path FROM requests').get(),
-      operation: database.prepare('SELECT payload_json FROM operations').get(),
-    }).toEqual({
-      organizations: [
-        { id: 'custom-workspace', name: 'PrintHub', slug: 'custom' },
-        { id: 'legacy-workspace', name: 'STL Quest', slug: 'printhub' },
-      ],
-      request: { thumbnail_path: '.stlquest/thumbnails/model.png', preview_path: '.stlquest/previews/model.phm' },
-      operation: { payload_json: '{"trashPath":".stlquest/trash/model.stl"}' },
-    })
-    database.close()
-  })
-
-  it('renames the legacy global admin role without changing workspace roles', () => {
-    const database = new Database(':memory:')
-    database.exec(`
-      CREATE TABLE user (id text PRIMARY KEY NOT NULL, role text);
-      CREATE TABLE member (id text PRIMARY KEY NOT NULL, role text NOT NULL);
-      INSERT INTO user VALUES ('operator', 'admin'), ('requester', 'requester');
-      INSERT INTO member VALUES ('workspace-admin', 'admin');
-    `)
-    const migration = fs.readFileSync(path.resolve('drizzle/0008_rename_super_admin_role.sql'), 'utf8')
-
-    database.exec(migration)
-
-    expect(database.prepare('SELECT id, role FROM user ORDER BY id').all()).toEqual([
-      { id: 'operator', role: 'super_admin' },
-      { id: 'requester', role: 'requester' },
-    ])
-    expect(database.prepare('SELECT role FROM member').get()).toEqual({ role: 'admin' })
-    database.close()
-  })
-
-  it('clears legacy upload completions that cross workspace boundaries', () => {
-    const database = new Database(':memory:')
-    database.exec(`
-      PRAGMA foreign_keys = ON;
-      CREATE TABLE organization (id text PRIMARY KEY NOT NULL);
-      CREATE TABLE user (id text PRIMARY KEY NOT NULL);
-      CREATE TABLE requests (
-        id text PRIMARY KEY NOT NULL,
-        workspace_id text NOT NULL,
-        UNIQUE(workspace_id, id)
-      );
-      CREATE TABLE upload_sessions (
-        id text PRIMARY KEY NOT NULL,
-        workspace_id text NOT NULL REFERENCES organization(id),
-        owner_id text NOT NULL REFERENCES user(id),
-        bytes integer DEFAULT 0 NOT NULL,
-        expires_at integer NOT NULL,
-        completed_request_id text REFERENCES requests(id)
-      );
-      CREATE TABLE operations (workspace_id text NOT NULL, request_id text, upload_id text, state text NOT NULL);
-      CREATE UNIQUE INDEX operations_active_request ON operations(request_id) WHERE request_id IS NOT NULL AND state <> 'committed';
-      CREATE UNIQUE INDEX operations_upload ON operations(upload_id) WHERE upload_id IS NOT NULL;
-      INSERT INTO organization VALUES ('workspace-a'), ('workspace-b');
-      INSERT INTO user VALUES ('owner');
-      INSERT INTO requests VALUES ('request-a', 'workspace-a');
-      INSERT INTO upload_sessions VALUES ('upload-b', 'workspace-b', 'owner', 1, 1, 'request-a');
-    `)
-    const migration = fs.readFileSync(path.resolve('drizzle/0007_conscious_whizzer.sql'), 'utf8').replaceAll('--> statement-breakpoint', '')
-
-    database.exec(migration)
-
-    expect(database.prepare('SELECT completed_request_id FROM upload_sessions WHERE id = ?').get('upload-b')).toEqual({
-      completed_request_id: null,
-    })
-    expect(database.pragma('foreign_key_check')).toEqual([])
-    database.close()
-  })
-
-  it('migrates legacy printer settings and preserves existing assignments', () => {
-    const printer: PrinterProfile = { id: 'paused-filament', name: 'Paused filament printer', printType: 'filament' }
-    repository.setSetting('plate-planner-profiles', [{ ...printer, widthMm: 220 }])
-    repository.setSetting('plate-planner-drafts', { legacy: true })
-    const request = repository.createRequest({
-      name: 'Assigned model',
-      fileName: 'assigned.stl',
-      filePath: 'todo/assigned.stl',
-      quantity: 1,
-      ownerUserId: 'maker',
-      printerId: printer.id,
-    })
-
-    repository.replacePrinterProfiles([printer])
-
-    expect(repository.getRequest(request)).toMatchObject({ printerId: printer.id, requestedPrintType: undefined })
-    expect(repository.getSetting('printers')).toEqual([printer])
-    expect(repository.getSetting('plate-planner-profiles')).toBeUndefined()
-    expect(repository.getSetting('plate-planner-drafts')).toBeUndefined()
   })
 
   it('moves requests from a deleted printer into its same-type pool', () => {

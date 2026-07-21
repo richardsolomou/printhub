@@ -18,7 +18,7 @@ import {
 import { workflow } from '../core/workflow'
 import { SOCIAL_AUTH_PROVIDERS, type IntegrationConfig } from '../core/auth'
 import type { PrinterProfile, Repository, StorageConfig, StorageMigration } from '../core/types'
-import { LEGACY_PRINTERS_SETTING, PRINTERS_SETTING, storedPrinterProfiles } from '../core/printers'
+import { PRINTERS_SETTING, storedPrinterProfiles } from '../core/printers'
 import { encryptSetting, getStoredIntegrationConfig, publicIntegrationConfig, setStoredIntegrationConfig } from './integrations'
 import { requireMutationOrigin } from './mutationOrigin'
 import { userImage } from './avatar'
@@ -134,10 +134,7 @@ export const sessionInfo = createServerFn({ method: 'GET' })
       const workspaces = authenticated ? instance.listWorkspaces(authenticated.id) : []
       const context = authenticated ? await instance.workspace(getRequest().headers, data.workspaceSlug) : undefined
       const printers = context ? storedPrinterProfiles(context.repository) : []
-      const printersConfigured = context
-        ? context.repository.getSetting<PrinterProfile[]>(PRINTERS_SETTING) !== undefined ||
-          context.repository.getSetting<PrinterProfile[]>(LEGACY_PRINTERS_SETTING) !== undefined
-        : false
+      const printersConfigured = context ? context.repository.getSetting<PrinterProfile[]>(PRINTERS_SETTING) !== undefined : false
       return {
         identity: context?.identity ?? identity,
         serverVersion: __APP_VERSION__,
@@ -347,9 +344,6 @@ export const saveSmtpSettings = createServerFn({ method: 'POST' })
       setStoredIntegrationConfig(deploymentSettings(instance.repository), {
         ...config,
         smtp,
-        email: undefined,
-        emailTestedAt: undefined,
-        emails: undefined,
       })
       void instance.telemetry.capture(identity.id, 'auth_provider_configured', { provider: 'smtp', enabled: true }).catch(() => undefined)
       await resetApp()
@@ -369,9 +363,6 @@ export const removeSmtpSettings = createServerFn({ method: 'POST' }).handler(asy
     setStoredIntegrationConfig(deploymentSettings(instance.repository), {
       ...config,
       smtp: undefined,
-      email: undefined,
-      emailTestedAt: undefined,
-      emails: undefined,
     })
     await resetApp()
     return { configured: false }

@@ -72,11 +72,6 @@ export type IntegrationConfig = {
   googleDrive?: GoogleDriveConnectionConfig
   oneDrive?: OneDriveConnectionConfig
   smtp?: SmtpEmailConfig
-  /** Alternate persisted shapes accepted during settings normalization. */
-  socialSignUpEnabled?: boolean
-  email?: ({ adapter: 'smtp' } & Omit<SmtpEmailConfig, 'testedAt'>) | { adapter: string; [key: string]: unknown }
-  emailTestedAt?: number
-  emails?: Array<{ adapter: string; enabled: boolean; testedAt?: number; [key: string]: unknown }>
 }
 
 export type AuthAdapterConfig = AuthCapabilities & Partial<Record<SocialAuthProvider, SocialProviderConfig>>
