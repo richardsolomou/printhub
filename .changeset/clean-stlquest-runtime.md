@@ -2,4 +2,4 @@
 'stlquest': patch
 ---
 
-Remove obsolete compatibility paths and use STL Quest names for new Compose data directories.
+Simplify startup and configuration handling around STL Quest storage, settings, and previews.
