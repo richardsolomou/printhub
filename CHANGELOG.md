@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.31.0
+
+### Minor Changes
+
+- e959853: Let users explore PrintHub before completing storage and printer setup, while keeping uploads disabled until storage is ready.
+
 ## 0.30.1
 
 ### Patch Changes
