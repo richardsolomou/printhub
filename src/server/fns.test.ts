@@ -29,7 +29,7 @@ describe('storage settings', () => {
     const current = {
       adapter: 'webdav' as const,
       endpoint: 'https://storage.example.com/dav',
-      root: 'printhub',
+      root: 'stlquest',
       username: 'user',
       password: 'secret',
     }

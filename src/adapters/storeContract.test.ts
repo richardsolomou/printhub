@@ -68,8 +68,8 @@ async function s3Harness(): Promise<Harness> {
 
 async function webDAVHarness(): Promise<Harness> {
   const root = `stlquest-contract-${crypto.randomUUID()}`
-  const username = process.env.WEBDAV_TEST_USERNAME ?? 'printhub'
-  const password = process.env.WEBDAV_TEST_PASSWORD ?? 'printhub'
+  const username = process.env.WEBDAV_TEST_USERNAME ?? 'stlquest'
+  const password = process.env.WEBDAV_TEST_PASSWORD ?? 'stlquest'
   const config = { adapter: 'webdav' as const, endpoint: WEBDAV_URL!, root, username, password }
   const client = createClient(config.endpoint, { username, password })
   const data = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-contract-webdav-'))

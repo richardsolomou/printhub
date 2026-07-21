@@ -166,28 +166,4 @@ describe('GoogleDriveAssetStore', () => {
 
     await expect(store.stat('missing.stl')).resolves.toBeUndefined()
   })
-
-  it('reuses a legacy PrintHub root folder', async () => {
-    const fetch = vi
-      .fn()
-      .mockResolvedValueOnce(Response.json({ access_token: 'access-token', expires_in: 3_600 }))
-      .mockResolvedValueOnce(Response.json({ files: [] }))
-      .mockResolvedValueOnce(
-        Response.json({ files: [{ id: 'legacy-root', name: 'PrintHub', mimeType: 'application/vnd.google-apps.folder' }] }),
-      )
-      .mockResolvedValueOnce(Response.json({ id: 'legacy-root' }))
-      .mockResolvedValueOnce(Response.json({ files: [] }))
-    vi.stubGlobal('fetch', fetch)
-    const store = new GoogleDriveAssetStore('', connection)
-
-    await expect(store.stat('missing.stl')).resolves.toBeUndefined()
-    expect(fetch).toHaveBeenNthCalledWith(
-      4,
-      'https://www.googleapis.com/drive/v3/files/legacy-root?fields=id',
-      expect.objectContaining({
-        method: 'PATCH',
-        body: JSON.stringify({ appProperties: { stlQuestRoot: 'true' } }),
-      }),
-    )
-  })
 })

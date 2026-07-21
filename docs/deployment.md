@@ -119,7 +119,6 @@ The other remaining `printhub` identifiers are not covered by that database migr
 
 - Keep applied SQL migrations, historical changelog entries, and the `PrintHub` values they migrate permanently. Removing them breaks fresh installs and upgrades from older versions.
 - Existing local `.printhub` asset folders are renamed automatically to `.stlquest`, and the database migration updates persisted preview, thumbnail, and pending-operation paths. Cloud adapters use `.stlquest` from their first release because no existing deployments use them.
-- Keep the Google Drive `printhubRoot` lookup until every existing Drive-backed workspace has connected through an STL Quest release. The adapter automatically tags legacy root folders with `stlQuestRoot` when it finds them, allowing the fallback to be removed after the rollout window.
 - The lease file is renamed automatically from `printhub.lock` to `stlquest.lock` before the database opens.
 - Releases publish both `ghcr.io/richardsolomou/stl.quest` and the legacy `ghcr.io/richardsolomou/printhub` alias, so existing deployment manifests continue receiving the same images while moving to the new name.
 

@@ -264,15 +264,6 @@ export class GoogleDriveAssetStore implements AssetStore {
   private async findRootFolder() {
     const current = await this.list("appProperties has { key='stlQuestRoot' and value='true' } and trashed=false")
     if (current[0]) return current[0].id
-    const legacy = await this.list("appProperties has { key='printhubRoot' and value='true' } and trashed=false")
-    if (legacy[0]) {
-      await this.request(`${API}/files/${encodeURIComponent(legacy[0].id)}?fields=id`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ appProperties: { stlQuestRoot: 'true' } }),
-      })
-      return legacy[0].id
-    }
     const response = await this.request(`${API}/files?fields=id,name,mimeType`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
