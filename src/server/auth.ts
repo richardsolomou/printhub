@@ -90,6 +90,18 @@ export function createAuth(
           }
         : undefined,
     },
+    emailVerification: options?.email
+      ? {
+          sendVerificationEmail: async ({ user, url }) => {
+            await options.email!.send({
+              to: user.email,
+              subject: 'Verify your STL Quest email address',
+              text: `Verify your STL Quest email address using this link: ${url}\n\nThis link expires in one hour.`,
+              html: `<p>Verify your STL Quest email address using the link below.</p><p><a href="${url}">Verify email address</a></p><p>This link expires in one hour.</p>`,
+            })
+          },
+        }
+      : undefined,
     socialProviders,
     account: {
       accountLinking: {
@@ -101,7 +113,13 @@ export function createAuth(
       encryptOAuthTokens: true,
     },
     session: { expiresIn: 30 * 24 * 60 * 60 },
-    user: { additionalFields: { color: { type: 'string', required: false, input: false } } },
+    user: {
+      additionalFields: { color: { type: 'string', required: false, input: false } },
+      changeEmail: {
+        enabled: true,
+        updateEmailWithoutVerification: true,
+      },
+    },
     databaseHooks: {
       user: {
         create: {

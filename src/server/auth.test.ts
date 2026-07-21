@@ -212,6 +212,47 @@ describe('better-auth integration', () => {
     await expect(auth.api.signInEmail({ body: { email: 'social@example.com', password: 'new-password1234' } })).resolves.toBeTruthy()
   })
 
+  it('lets users update their profile and remove password sign-in when another method is linked', async () => {
+    const { repository, auth } = build()
+    cleanup = () => repository.close()
+    const { headers } = await auth.api.signUpEmail({
+      body: { email: 'before@example.com', password: 'password1234', name: 'Before' },
+      returnHeaders: true,
+    })
+    const requestHeaders = cookieHeaders(headers)
+
+    await auth.api.updateUser({ body: { name: 'After' }, headers: requestHeaders })
+    await auth.api.changeEmail({ body: { newEmail: 'after@example.com' }, headers: requestHeaders })
+    repository.database
+      .insert(account)
+      .values({
+        id: 'google-account',
+        accountId: 'google-user',
+        providerId: 'google',
+        userId: repository.database.select({ id: user.id }).from(user).get()!.id,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .run()
+    await auth.api.unlinkAccount({ body: { providerId: 'credential' }, headers: requestHeaders })
+
+    expect(repository.database.select().from(user).get()).toMatchObject({ name: 'After', email: 'after@example.com' })
+    expect(await auth.api.listUserAccounts({ headers: requestHeaders })).toEqual([expect.objectContaining({ providerId: 'google' })])
+  })
+
+  it('does not remove the last sign-in method', async () => {
+    const { repository, auth } = build()
+    cleanup = () => repository.close()
+    const { headers } = await auth.api.signUpEmail({
+      body: { email: 'only@example.com', password: 'password1234', name: 'Only' },
+      returnHeaders: true,
+    })
+
+    await expect(auth.api.unlinkAccount({ body: { providerId: 'credential' }, headers: cookieHeaders(headers) })).rejects.toMatchObject({
+      status: 'BAD_REQUEST',
+    })
+  })
+
   it('gives the first self-hosted sign-up the super admin role and keeps sign-up open', async () => {
     const { repository, auth } = build()
     cleanup = () => repository.close()
