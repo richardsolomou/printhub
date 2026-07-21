@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0
+
+### Minor Changes
+
+- 71812cc: Show workspace admins who is actively viewing the board with live avatar indicators and name tooltips.
+- f464a3f: Manage your profile, email address, and linked sign-in methods from the account page so that you can choose how you access STL Quest.
+
 ## 1.0.1
 
 ### Patch Changes
