@@ -104,13 +104,13 @@ The command does not copy model storage. If `INTEGRATIONS_ENCRYPTION_KEY` suppli
 
 1. Stop the container.
 2. Restore the local storage root or the matching remote bucket/folder state from the same recovery point as the database.
-3. Replace `/data/stlquest.sqlite` with the database backup, and delete any leftover `stlquest.sqlite-wal` and `stlquest.sqlite-shm` files so stale write-ahead state is not applied to the restored database. Upgraded installations that still use `printhub.sqlite` should restore to that existing filename instead.
+3. Replace `/data/stlquest.sqlite` with the database backup, and delete any leftover `stlquest.sqlite-wal` and `stlquest.sqlite-shm` files so stale write-ahead state is not applied to the restored database.
 4. Restore the matching `/data/integration-secrets.key`, or configure the exact backed-up `INTEGRATIONS_ENCRYPTION_KEY`, before startup. The wrong or missing key prevents encrypted storage and integration settings from being read.
 5. Start the container. If the backup predates the current version, migrations run automatically on boot.
 
 ## Upgrading
 
-Pull the new image and recreate the container. Database migrations run automatically on boot after taking the pre-migration snapshot; a failed migration aborts startup, so the previous image plus the snapshot under `/data/backups` is always the rollback path.
+Pull the new image and recreate the container. On the first start after upgrading from PrintHub, the app checkpoints and renames `/data/printhub.sqlite` to `/data/stlquest.sqlite` before opening it. Database migrations then run automatically after taking the pre-migration snapshot; a failed migration aborts startup. To roll back to a PrintHub release after the rename, stop the container and rename the database back to `/data/printhub.sqlite` before starting the old image.
 
 ## Account recovery
 

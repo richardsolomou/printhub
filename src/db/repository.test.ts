@@ -1134,11 +1134,21 @@ describe('databasePath', () => {
     expect(databasePath()).toBe(path.join(temporary, 'stlquest.sqlite'))
   })
 
-  it('keeps using an existing PrintHub database', async () => {
+  it('renames an existing PrintHub database before opening it', async () => {
     const temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-legacy-database-'))
     vi.stubEnv('DATA_DIR', temporary)
-    await fs.promises.writeFile(path.join(temporary, 'printhub.sqlite'), '')
+    const legacyFile = path.join(temporary, 'printhub.sqlite')
+    const currentFile = path.join(temporary, 'stlquest.sqlite')
+    const legacy = new Database(legacyFile)
+    legacy.pragma('journal_mode = WAL')
+    legacy.exec("CREATE TABLE migration_test (value TEXT NOT NULL); INSERT INTO migration_test VALUES ('preserved')")
+    legacy.close()
 
-    expect(databasePath()).toBe(path.join(temporary, 'printhub.sqlite'))
+    const repository = DrizzleRepository.open()
+
+    expect(repository.databaseInfo().path).toBe(currentFile)
+    expect(repository.database.$client.prepare('SELECT value FROM migration_test').pluck().get()).toBe('preserved')
+    expect(fs.existsSync(legacyFile)).toBe(false)
+    repository.close()
   })
 })
