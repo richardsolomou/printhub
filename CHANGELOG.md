@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.1
+
+### Patch Changes
+
+- 1913490: Simplify startup and configuration handling around STL Quest storage, settings, and previews.
+
 ## 1.0.0
 
 ### Major Changes
