@@ -15,8 +15,8 @@ export function syncReleaseVersion(
   const imageValues = fs.readFileSync(imageValuesPath, 'utf8')
   if (!/^    tag: .*$/m.test(imageValues)) throw new Error('TrueNAS image values must contain images.image.tag')
 
-  fs.writeFileSync(manifestPath, manifest.replace(/^app_version: .*$/m, `app_version: ${packageJson.version}`))
-  fs.writeFileSync(imageValuesPath, imageValues.replace(/^    tag: .*$/m, `    tag: ${packageJson.version}`))
+  fs.writeFileSync(manifestPath, manifest.replace(/^app_version: .*$/m, `app_version: v${packageJson.version}`))
+  fs.writeFileSync(imageValuesPath, imageValues.replace(/^    tag: .*$/m, `    tag: v${packageJson.version}`))
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) syncReleaseVersion()

@@ -1,6 +1,8 @@
 groups:
   - name: PrintHub Configuration
     description: Configure PrintHub
+  - name: User and Group Configuration
+    description: Configure User and Group for PrintHub
   - name: Network Configuration
     description: Configure Network for PrintHub
   - name: Storage Configuration
@@ -38,6 +40,29 @@ questions:
                       schema:
                         type: string
 
+  - variable: run_as
+    label: ""
+    group: User and Group Configuration
+    schema:
+      type: dict
+      attrs:
+        - variable: user
+          label: User ID
+          description: The user ID that owns PrintHub files.
+          schema:
+            type: int
+            min: 568
+            default: 568
+            required: true
+        - variable: group
+          label: Group ID
+          description: The group ID that owns PrintHub files.
+          schema:
+            type: int
+            min: 568
+            default: 568
+            required: true
+
   - variable: network
     label: ""
     group: Network Configuration
@@ -70,7 +95,7 @@ questions:
                 label: Port Number
                 schema:
                   type: int
-                  default: 30110
+                  default: 30057
                   min: 1
                   max: 65535
                   required: true
@@ -179,6 +204,13 @@ questions:
                         type: hostpath
                         show_if: [["acl_enable", "=", false]]
                         required: true
+                    - variable: auto_permissions
+                      label: Automatic Permissions
+                      description: Allow TrueNAS to set the host path owner to the user and group required by PrintHub.
+                      schema:
+                        type: boolean
+                        default: false
+                        show_if: [["acl_enable", "=", false]]
         - variable: prints
           label: Print Files Storage
           description: |
@@ -196,7 +228,7 @@ questions:
                 schema:
                   type: string
                   required: true
-                  default: "host_path"
+                  default: "ix_volume"
                   enum:
                     - value: "host_path"
                       description: Host Path (Path that already exists on the system)
@@ -258,6 +290,13 @@ questions:
                         type: hostpath
                         show_if: [["acl_enable", "=", false]]
                         required: true
+                    - variable: auto_permissions
+                      label: Automatic Permissions
+                      description: Allow TrueNAS to set the host path owner to the user and group required by PrintHub.
+                      schema:
+                        type: boolean
+                        default: false
+                        show_if: [["acl_enable", "=", false]]
 
   - variable: labels
     label: ""

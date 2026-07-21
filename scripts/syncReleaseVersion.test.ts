@@ -16,8 +16,8 @@ describe('syncReleaseVersion', () => {
 
     syncReleaseVersion(packagePath, manifestPath, imageValuesPath)
 
-    expect(fs.readFileSync(manifestPath, 'utf8')).toBe('annotations: {}\napp_version: 1.2.3\nversion: 1.0.0\n')
-    expect(fs.readFileSync(imageValuesPath, 'utf8')).toBe('images:\n  image:\n    repository: example/printhub\n    tag: 1.2.3\n')
+    expect(fs.readFileSync(manifestPath, 'utf8')).toBe('annotations: {}\napp_version: v1.2.3\nversion: 1.0.0\n')
+    expect(fs.readFileSync(imageValuesPath, 'utf8')).toBe('images:\n  image:\n    repository: example/printhub\n    tag: v1.2.3\n')
   })
 
   it('rejects a manifest without an application version field', () => {
