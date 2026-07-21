@@ -14,6 +14,7 @@ import type { AuthCapabilities, SocialAuthProvider } from '../../core/auth'
 import { PASSWORD_MIN_LENGTH } from '../../core/security'
 import { authClient } from '../authClient'
 import { authErrorMessage } from '../authError'
+import { SOURCE_CODE_URL } from '../sourceCode'
 import { AuthBrand } from './Brand'
 import { AuthMethodIcon } from './AuthMethodIcon'
 import { OnboardingProgress } from './OnboardingProgress'
@@ -92,6 +93,7 @@ export function AuthScreen({ setupRequired, hosted, auth }: { setupRequired: boo
               </Button>
             </CardContent>
           </Card>
+          <SourceOffer />
         </div>
       </main>
     )
@@ -336,8 +338,21 @@ export function AuthScreen({ setupRequired, hosted, auth }: { setupRequired: boo
             )}
           </CardContent>
         </Card>
+        <SourceOffer />
       </div>
     </main>
+  )
+}
+
+function SourceOffer() {
+  return (
+    <p className="text-center text-xs text-muted-foreground">
+      Open source under AGPLv3.{' '}
+      <a className="underline underline-offset-4 hover:text-foreground" href={SOURCE_CODE_URL} target="_blank" rel="noreferrer">
+        Get source code
+      </a>
+      .
+    </p>
   )
 }
 

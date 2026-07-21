@@ -1,12 +1,11 @@
 import { Box, CircleDot, Code2, Globe } from 'lucide-react'
 import { FieldDescription } from '@/components/ui/field'
 import { Item, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from '@/components/ui/item'
+import { SOURCE_CODE_URL } from '../../sourceCode'
 import { Brand } from '../Brand'
 import { SettingsHeader, SettingsPage, SettingsSection } from './SettingsLayout'
 
 export function AboutPane() {
-  const sourceUrl = `https://github.com/richardsolomou/stl.quest/tree/v${__APP_VERSION__}`
-
   return (
     <SettingsPage>
       <SettingsHeader title="About" description="Project information, community links, and licensing." />
@@ -38,7 +37,7 @@ export function AboutPane() {
           <Item
             variant="outline"
             render={
-              <a href={sourceUrl} target="_blank" rel="noreferrer">
+              <a href={SOURCE_CODE_URL} target="_blank" rel="noreferrer">
                 Source code
               </a>
             }

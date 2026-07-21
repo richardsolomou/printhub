@@ -13,7 +13,7 @@ Running:
 
 Structure:
 
-- `e2e/printhub.spec.ts` is one long sequential journey (onboarding → storage → printers → workspaces → uploads → settings → invites). Most features extend it at the matching stage rather than adding a new file.
+- `e2e/00-stlquest.spec.ts` is one long sequential journey (onboarding → storage → printers → workspaces → uploads → settings → invites). Most features extend it at the matching stage rather than adding a new file.
 - A separate spec (like `e2e/request-ordering.spec.ts`) is warranted only when the scenario needs its own isolated state.
 - Fixtures: `e2e/fixtures/stl.ts` synthesizes STL box geometry programmatically (`boxStl(name, width, depth, height)`); static binaries cover oversized/edge cases.
 - The `screenshot()`/`mobileScreenshot()` helpers run only locally (skipped in CI) and write to `test-results/manual-inspection/` — inspect them after UI changes, including the 320px mobile viewport.

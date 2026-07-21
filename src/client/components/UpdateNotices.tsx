@@ -8,14 +8,11 @@ import { releaseUpdateQuery } from '../queries'
 import { clientNeedsRefresh } from '../updateNotices'
 
 const DISMISSED_RELEASE_KEY = 'stlquest.dismissedReleaseVersion'
-const LEGACY_DISMISSED_RELEASE_KEY = 'printhub.dismissedReleaseVersion'
 
 export function UpdateNotices({ identity, hosted, serverVersion }: { identity?: Identity; hosted: boolean; serverVersion: string }) {
   const releaseQuery = useQuery(releaseUpdateQuery(Boolean(identity?.superAdmin && typeof window !== 'undefined')))
   const [dismissedRelease, setDismissedRelease] = useState(() =>
-    typeof window === 'undefined'
-      ? undefined
-      : (window.localStorage.getItem(DISMISSED_RELEASE_KEY) ?? window.localStorage.getItem(LEGACY_DISMISSED_RELEASE_KEY)),
+    typeof window === 'undefined' ? undefined : window.localStorage.getItem(DISMISSED_RELEASE_KEY),
   )
 
   if (clientNeedsRefresh(serverVersion, __APP_VERSION__)) {

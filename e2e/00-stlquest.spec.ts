@@ -17,6 +17,11 @@ test('manages a fair print queue and assigns work to printers', async ({ page })
   const printerName = 'Resin Station With A Long Descriptive Name'
   await optimizePageForE2E(page)
   await page.goto('/')
+  await expect(page.getByRole('link', { name: 'Get source code' })).toHaveAttribute(
+    'href',
+    /^https:\/\/github\.com\/richardsolomou\/stl\.quest\/tree\/v\d+\.\d+\.\d+$/,
+  )
+  await screenshot(page, 'auth-source-offer')
   await page.getByRole('button', { name: 'Set up STL Quest' }).click()
   await page.getByLabel('Name').fill('Owner')
   await page.getByLabel('Email').fill(email)

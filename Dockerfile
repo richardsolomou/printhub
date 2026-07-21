@@ -22,6 +22,8 @@ RUN rm -rf /usr/local/lib/node_modules/npm \
     && mkdir -p /data /prints \
     && chown -R node:node /app /data /prints
 COPY --from=build --chown=node:node /app/.output ./.output
+COPY --from=build --chown=node:node /app/LICENSE /app/THIRD_PARTY_NOTICES.md ./
+COPY --from=build --chown=node:node /app/LICENSES ./LICENSES
 ARG VITE_POSTHOG_HOST
 ARG VITE_POSTHOG_PROJECT_TOKEN
 ENV NODE_ENV=production PORT=3000 DATA_DIR=/data PRINTS_DIR=/prints \

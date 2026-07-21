@@ -20,7 +20,7 @@ export async function uploadPrint(workspaceSlug: string, entry: UploadEntry, onP
     removeFingerprintOnSuccess: true,
     fingerprint: async (file) =>
       [
-        'printhub',
+        'stlquest',
         workspaceSlug,
         file.name,
         file.type,
