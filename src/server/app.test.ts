@@ -11,21 +11,21 @@ describe('app initialization', () => {
     delete process.env.DATA_DIR
     delete process.env.PRINTS_DIR
     vi.unstubAllEnvs()
-    const singleton = globalThis as typeof globalThis & { __printhub?: Promise<{ close(): Promise<void> }> }
-    const running = singleton.__printhub
-    delete singleton.__printhub
+    const singleton = globalThis as typeof globalThis & { __stlquest?: Promise<{ close(): Promise<void> }> }
+    const running = singleton.__stlquest
+    delete singleton.__stlquest
     if (running) await (await running.catch(() => undefined))?.close()
     vi.resetModules()
     if (temporary) await fs.promises.rm(temporary, { recursive: true, force: true })
   })
 
   it('boots with unwritable storage and recovers once settings point somewhere writable', async () => {
-    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-app-'))
+    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-app-'))
     process.env.DATA_DIR = path.join(temporary, 'data')
     const invalidPrints = path.join(temporary, 'not-a-directory')
     await fs.promises.writeFile(invalidPrints, 'blocked')
     const { DrizzleRepository } = await import('../db/repository')
-    const seed = DrizzleRepository.open(path.join(process.env.DATA_DIR, 'printhub.sqlite'))
+    const seed = DrizzleRepository.open(path.join(process.env.DATA_DIR, 'stlquest.sqlite'))
     seed.setSetting('storage', { adapter: 'local', root: invalidPrints })
     seed.close()
 
@@ -40,23 +40,23 @@ describe('app initialization', () => {
   })
 
   it('boots with Dropbox storage disconnected so an admin can recover it', async () => {
-    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-app-dropbox-'))
+    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-app-dropbox-'))
     process.env.DATA_DIR = path.join(temporary, 'data')
     const { DrizzleRepository } = await import('../db/repository')
-    const seed = DrizzleRepository.open(path.join(process.env.DATA_DIR, 'printhub.sqlite'))
-    seed.setSetting('storage', { adapter: 'dropbox', root: 'PrintHub' })
+    const seed = DrizzleRepository.open(path.join(process.env.DATA_DIR, 'stlquest.sqlite'))
+    seed.setSetting('storage', { adapter: 'dropbox', root: 'STL Quest' })
     seed.close()
 
     const { app } = await import('./app')
     const instance = await app()
     await expect(instance.defaultWorkspaceRuntime()).resolves.toMatchObject({
       storageReady: false,
-      storage: { adapter: 'dropbox', root: 'PrintHub' },
+      storage: { adapter: 'dropbox', root: 'STL Quest' },
     })
   })
 
   it('clears a rejected singleton and recovers after a transient database failure', async () => {
-    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-app-db-'))
+    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-app-db-'))
     const blocked = path.join(temporary, 'blocked')
     await fs.promises.writeFile(blocked, 'not a directory')
     process.env.DATA_DIR = path.join(blocked, 'data')
@@ -67,14 +67,14 @@ describe('app initialization', () => {
   })
 
   it('reconciles workflow changes in a cached app instance', async () => {
-    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-app-workflow-'))
+    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-app-workflow-'))
     process.env.DATA_DIR = path.join(temporary, 'data')
     const { DrizzleRepository } = await import('../db/repository')
     const reconcileWorkflow = vi.spyOn(DrizzleRepository.prototype, 'reconcileWorkflow')
     const { app } = await import('./app')
     await app()
-    const singleton = globalThis as typeof globalThis & { __printhubWorkflowVersion?: string }
-    singleton.__printhubWorkflowVersion = 'older-workflow'
+    const singleton = globalThis as typeof globalThis & { __stlquestWorkflowVersion?: string }
+    singleton.__stlquestWorkflowVersion = 'older-workflow'
 
     await app()
 
@@ -82,7 +82,7 @@ describe('app initialization', () => {
   })
 
   it('shuts down telemetry when the application closes', async () => {
-    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-app-telemetry-'))
+    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-app-telemetry-'))
     process.env.DATA_DIR = path.join(temporary, 'data')
     const { OptionalPostHogTelemetry } = await import('../adapters/telemetry')
     const shutdown = vi.spyOn(OptionalPostHogTelemetry.prototype, 'shutdown')
@@ -95,13 +95,13 @@ describe('app initialization', () => {
   })
 
   it('requires a canonical auth URL in hosted mode', async () => {
-    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-app-hosted-'))
+    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-app-hosted-'))
     process.env.DATA_DIR = path.join(temporary, 'data')
-    vi.stubEnv('PRINTHUB_HOSTED', 'true')
+    vi.stubEnv('STLQUEST_HOSTED', 'true')
     vi.stubEnv('BETTER_AUTH_URL', '')
     const { app } = await import('./app')
 
-    await expect(app()).rejects.toThrow('BETTER_AUTH_URL is required when PRINTHUB_HOSTED=true')
+    await expect(app()).rejects.toThrow('BETTER_AUTH_URL is required when STLQUEST_HOSTED=true')
   })
 
   it('uses a configured auth URL outside hosted mode', async () => {
@@ -112,7 +112,7 @@ describe('app initialization', () => {
   })
 
   it('does not initialize workspace storage until the workspace is accessed', async () => {
-    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-app-lazy-'))
+    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-app-lazy-'))
     process.env.DATA_DIR = path.join(temporary, 'data')
     process.env.PRINTS_DIR = path.join(temporary, 'prints')
     const workspacePrints = path.join(process.env.PRINTS_DIR, 'test-workspace')
@@ -163,7 +163,7 @@ describe('app initialization', () => {
   })
 
   it('preserves stale-looking parts with live durable sessions and removes expired ones', async () => {
-    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-app-uploads-'))
+    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-app-uploads-'))
     process.env.DATA_DIR = path.join(temporary, 'data')
     const uploads = path.join(process.env.DATA_DIR, 'uploads')
     await fs.promises.mkdir(uploads, { recursive: true })
@@ -173,7 +173,7 @@ describe('app initialization', () => {
     const old = new Date(Date.now() - 2 * 86_400_000)
     await Promise.all([fs.promises.utimes(live, old, old), fs.promises.utimes(expired, old, old)])
     const { DrizzleRepository } = await import('../db/repository')
-    const repository = DrizzleRepository.open(path.join(process.env.DATA_DIR, 'printhub.sqlite'))
+    const repository = DrizzleRepository.open(path.join(process.env.DATA_DIR, 'stlquest.sqlite'))
     repository.database
       .insert(user)
       .values({
@@ -215,11 +215,11 @@ describe('app initialization', () => {
   })
 
   it('inherits storage when creating a workspace', async () => {
-    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-app-workspace-storage-'))
+    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-app-workspace-storage-'))
     process.env.DATA_DIR = path.join(temporary, 'data')
     const prints = path.join(temporary, 'prints')
     const { DrizzleRepository } = await import('../db/repository')
-    const seed = DrizzleRepository.open(path.join(process.env.DATA_DIR, 'printhub.sqlite'))
+    const seed = DrizzleRepository.open(path.join(process.env.DATA_DIR, 'stlquest.sqlite'))
     seed.setSetting('storage', { adapter: 'local', root: prints })
     seed.close()
 
@@ -244,7 +244,7 @@ describe('app initialization', () => {
   })
 
   it('creates one runtime per workspace and rejects non-members', async () => {
-    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-app-workspaces-'))
+    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-app-workspaces-'))
     process.env.DATA_DIR = path.join(temporary, 'data')
     process.env.PRINTS_DIR = path.join(temporary, 'prints')
     const { app } = await import('./app')
@@ -292,7 +292,7 @@ describe('app initialization', () => {
   })
 
   it('deletes an owned workspace, its records, and local files before activating the remaining workspace', async () => {
-    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-app-delete-workspace-'))
+    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-app-delete-workspace-'))
     process.env.DATA_DIR = path.join(temporary, 'data')
     process.env.PRINTS_DIR = path.join(temporary, 'prints')
     const { app } = await import('./app')
@@ -331,7 +331,7 @@ describe('app initialization', () => {
   })
 
   it('rejects a mismatched workspace name and protects the only workspace', async () => {
-    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-app-delete-last-workspace-'))
+    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-app-delete-last-workspace-'))
     process.env.DATA_DIR = path.join(temporary, 'data')
     process.env.PRINTS_DIR = path.join(temporary, 'prints')
     const { app } = await import('./app')

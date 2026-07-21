@@ -1,6 +1,7 @@
-import { Box, CircleDot, Code2 } from 'lucide-react'
+import { Box, CircleDot, Code2, Globe } from 'lucide-react'
 import { FieldDescription } from '@/components/ui/field'
 import { Item, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from '@/components/ui/item'
+import { SOURCE_CODE_URL } from '../../sourceCode'
 import { Brand } from '../Brand'
 import { SettingsHeader, SettingsPage, SettingsSection } from './SettingsLayout'
 
@@ -20,7 +21,23 @@ export function AboutPane() {
           <Item
             variant="outline"
             render={
-              <a href="https://github.com/richardsolomou/printhub" target="_blank" rel="noreferrer">
+              <a href="https://stl.quest" target="_blank" rel="noreferrer">
+                Website
+              </a>
+            }
+          >
+            <ItemMedia variant="icon">
+              <Globe />
+            </ItemMedia>
+            <ItemContent>
+              <ItemTitle>stl.quest</ItemTitle>
+              <ItemDescription>Visit the official STL Quest website</ItemDescription>
+            </ItemContent>
+          </Item>
+          <Item
+            variant="outline"
+            render={
+              <a href={SOURCE_CODE_URL} target="_blank" rel="noreferrer">
                 Source code
               </a>
             }
@@ -30,13 +47,13 @@ export function AboutPane() {
             </ItemMedia>
             <ItemContent>
               <ItemTitle>Source code</ItemTitle>
-              <ItemDescription>Explore the project, star it, or contribute</ItemDescription>
+              <ItemDescription>Get the corresponding source code for this version</ItemDescription>
             </ItemContent>
           </Item>
           <Item
             variant="outline"
             render={
-              <a href="https://github.com/richardsolomou/printhub/issues" target="_blank" rel="noreferrer">
+              <a href="https://github.com/richardsolomou/stl.quest/issues" target="_blank" rel="noreferrer">
                 Issues and ideas
               </a>
             }
@@ -52,7 +69,7 @@ export function AboutPane() {
           <Item
             variant="outline"
             render={
-              <a href="https://github.com/richardsolomou/printhub/releases" target="_blank" rel="noreferrer">
+              <a href="https://github.com/richardsolomou/stl.quest/releases" target="_blank" rel="noreferrer">
                 Release notes
               </a>
             }
@@ -68,8 +85,8 @@ export function AboutPane() {
         </ItemGroup>
       </SettingsSection>
       <FieldDescription>
-        PrintHub is open source under the MIT License. It has no hosted service or mandatory cloud account, and anonymous telemetry can be
-        disabled at any time.
+        STL Quest is open source under the GNU Affero General Public License v3.0. Hosted and self-hosted users can obtain the corresponding
+        source code above, and anonymous telemetry can be disabled at any time.
       </FieldDescription>
     </SettingsPage>
   )

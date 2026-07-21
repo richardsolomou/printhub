@@ -14,6 +14,7 @@ import type { AuthCapabilities, SocialAuthProvider } from '../../core/auth'
 import { PASSWORD_MIN_LENGTH } from '../../core/security'
 import { authClient } from '../authClient'
 import { authErrorMessage } from '../authError'
+import { SOURCE_CODE_URL } from '../sourceCode'
 import { AuthBrand } from './Brand'
 import { AuthMethodIcon } from './AuthMethodIcon'
 import { OnboardingProgress } from './OnboardingProgress'
@@ -88,10 +89,11 @@ export function AuthScreen({ setupRequired, hosted, auth }: { setupRequired: boo
                 <p className="mt-1">Anonymous usage telemetry is enabled by default and can be disabled in Settings.</p>
               </div>
               <Button type="button" className="self-end" disabled={!hydrated} onClick={() => setShowIntroduction(false)}>
-                Set up PrintHub
+                Set up STL Quest
               </Button>
             </CardContent>
           </Card>
+          <SourceOffer />
         </div>
       </main>
     )
@@ -239,7 +241,7 @@ export function AuthScreen({ setupRequired, hosted, auth }: { setupRequired: boo
                       setResetSent(false)
                     }}
                   >
-                    {creatingAccount ? 'Already have an account? Sign in' : 'New to PrintHub? Create an account'}
+                    {creatingAccount ? 'Already have an account? Sign in' : 'New to STL Quest? Create an account'}
                   </Button>
                 )}
               </form>
@@ -336,8 +338,21 @@ export function AuthScreen({ setupRequired, hosted, auth }: { setupRequired: boo
             )}
           </CardContent>
         </Card>
+        <SourceOffer />
       </div>
     </main>
+  )
+}
+
+function SourceOffer() {
+  return (
+    <p className="text-center text-xs text-muted-foreground">
+      Open source under AGPLv3.{' '}
+      <a className="underline underline-offset-4 hover:text-foreground" href={SOURCE_CODE_URL} target="_blank" rel="noreferrer">
+        Get source code
+      </a>
+      .
+    </p>
   )
 }
 

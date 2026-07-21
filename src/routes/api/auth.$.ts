@@ -3,7 +3,7 @@ import { app } from '../../server/app'
 import { withAuthInvite, withAuthProvisioning } from '../../server/authInvite'
 import { withRequestContext } from '../../server/requestContext'
 
-const INVITE_COOKIE = 'printhub_invite'
+const INVITE_COOKIE = 'stlquest_invite'
 
 function cookie(request: Request, name: string) {
   const value = request.headers

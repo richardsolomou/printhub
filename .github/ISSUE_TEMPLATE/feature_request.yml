@@ -1,5 +1,5 @@
 name: Feature request
-description: Suggest an improvement to PrintHub.
+description: Suggest an improvement to STL Quest.
 title: '[Feature]: '
 labels:
   - enhancement
@@ -14,7 +14,7 @@ body:
   - type: textarea
     id: solution
     attributes:
-      label: What would you like PrintHub to do?
+      label: What would you like STL Quest to do?
       description: Describe the smallest useful outcome.
     validations:
       required: true

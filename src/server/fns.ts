@@ -55,6 +55,7 @@ import { systemDiagnostics } from './operations'
 import { checkForReleaseUpdate } from './releases'
 import { storageDirectories } from './storageDirectories'
 import { assertStorageAllowed, hostedStorageRequiresRemote, localStorageAllowed, storageConfigured } from './storagePolicy'
+import { hostedDeployment } from './hosted'
 
 const INVITE_TTL = 7 * 24 * 60 * 60 * 1000
 
@@ -145,13 +146,13 @@ export const sessionInfo = createServerFn({ method: 'GET' })
         setupRequired: instance.repository.countUsers() === 0,
         storageConfigured: context ? storageConfigured(context.repository) : false,
         storageReady: context ? context.storageReady && !hostedStorageRequiresRemote(context.storage, context.repository) : false,
-        localStorageAllowed: context ? localStorageAllowed(context.repository) : process.env.PRINTHUB_HOSTED !== 'true',
+        localStorageAllowed: context ? localStorageAllowed(context.repository) : !hostedDeployment(),
         printersConfigured,
         printers,
         telemetryEnabled: resolveTelemetryConfig(deploymentSettings(instance.repository)).enabled,
         privateRequests: context ? resolveBoardConfig(context.repository).privateRequests : false,
         auth: instance.authCapabilities,
-        hosted: process.env.PRINTHUB_HOSTED === 'true',
+        hosted: hostedDeployment(),
         email: instance.emailCapabilities,
         workflow,
       }
@@ -336,9 +337,9 @@ export const saveSmtpSettings = createServerFn({ method: 'POST' })
         await delivery.verify()
         await delivery.send({
           to: identity.email,
-          subject: 'PrintHub email is configured',
-          text: 'Your PrintHub SMTP connection is configured and working.',
-          html: '<p>Your PrintHub SMTP connection is configured and working.</p>',
+          subject: 'STL Quest email is configured',
+          text: 'Your STL Quest SMTP connection is configured and working.',
+          html: '<p>Your STL Quest SMTP connection is configured and working.</p>',
         })
       } catch (error) {
         throw new Response(`SMTP verification failed: ${error instanceof Error ? error.message : 'unknown error'}`, { status: 400 })
@@ -470,9 +471,9 @@ export const createInvite = createServerFn({ method: 'POST' })
         try {
           await instance.emailDelivery!.send({
             to: data.email,
-            subject: 'You are invited to PrintHub',
-            text: `You have been invited to PrintHub. Create your account using this single-use link: ${url}\n\nThis link expires in seven days.`,
-            html: `<p>You have been invited to PrintHub.</p><p><a href="${url}">Create your account</a></p><p>This single-use link expires in seven days.</p>`,
+            subject: 'You are invited to STL Quest',
+            text: `You have been invited to STL Quest. Create your account using this single-use link: ${url}\n\nThis link expires in seven days.`,
+            html: `<p>You have been invited to STL Quest.</p><p><a href="${url}">Create your account</a></p><p>This single-use link expires in seven days.</p>`,
           })
         } catch (error) {
           context.repository.deleteInvite(id)
@@ -548,7 +549,7 @@ export const beginProviderInvite = createServerFn({ method: 'POST' })
       if (!instance.authCapabilities.socialProviders.includes(data.provider)) {
         throw new Response(`${data.provider} authentication is not enabled`, { status: 400 })
       }
-      setCookie('printhub_invite', data.token, {
+      setCookie('stlquest_invite', data.token, {
         httpOnly: true,
         sameSite: 'lax',
         secure: new URL(getRequest().url).protocol === 'https:',

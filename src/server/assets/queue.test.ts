@@ -27,7 +27,7 @@ describe('asset generation queue', () => {
   let queue: AssetGenerationQueue
 
   beforeEach(async () => {
-    root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-assets-'))
+    root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-assets-'))
     repository = new DrizzleRepository(createDatabase(':memory:'))
     repository.database
       .insert(user)
@@ -72,7 +72,7 @@ describe('asset generation queue', () => {
     queue.enqueue(id)
     await queue.idle()
     const request = repository.getRequest(id)!
-    expect(request.thumbnailPath).toMatch(/^\.printhub\/thumbnails\/.*\.png$/)
+    expect(request.thumbnailPath).toMatch(/^\.stlquest\/thumbnails\/.*\.png$/)
     expect(await assets.exists(request.thumbnailPath!)).toBe(true)
     expect(published).toContain('request.updated')
     expect(repository.requestsNeedingAssets()).toHaveLength(0)
@@ -251,7 +251,7 @@ describe('asset generation queue', () => {
   it('preserves a completed thumbnail when preview work is interrupted', async () => {
     const id = await requestWithFile()
     repository.startAssetGeneration(id, ['thumbnail', 'preview'])
-    repository.finishAssetGeneration(id, 'thumbnail', { status: 'ready', path: '.printhub/thumbnails/model.png' })
+    repository.finishAssetGeneration(id, 'thumbnail', { status: 'ready', path: '.stlquest/thumbnails/model.png' })
 
     const restarted = new AssetGenerationQueue(repository, assets, events, telemetry)
     restarted.backfill()

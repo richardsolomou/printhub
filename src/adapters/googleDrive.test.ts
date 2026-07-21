@@ -14,7 +14,7 @@ function jsonBody<T>(init?: RequestInit) {
 
 function googleDriveApi() {
   type File = { id: string; name: string; mimeType: string; size?: string; parents: string[]; bytes?: Uint8Array }
-  const files = new Map<string, File>([['root-folder', { id: 'root-folder', name: 'PrintHub', mimeType: folderMime, parents: ['root'] }]])
+  const files = new Map<string, File>([['root-folder', { id: 'root-folder', name: 'STL Quest', mimeType: folderMime, parents: ['root'] }]])
   const uploads = new Map<string, { id: string; name: string; parent: string }>()
   let nextId = 1
   const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -36,7 +36,7 @@ function googleDriveApi() {
     }
     if (url.pathname === '/drive/v3/files' && method === 'GET') {
       const query = url.searchParams.get('q') ?? ''
-      if (query.includes("key='printhubRoot'")) return Response.json({ files: [files.get('root-folder')] })
+      if (query.includes("key='stlQuestRoot'")) return Response.json({ files: [files.get('root-folder')] })
       const parent = query.match(/^'([^']+)' in parents/)?.[1]
       const name = query.match(/name='([^']+)'/)?.[1]
       const wantsFolder = query.includes(`mimeType='${folderMime}'`)
@@ -102,7 +102,7 @@ describe('GoogleDriveAssetStore', () => {
       .fn()
       .mockResolvedValueOnce(Response.json({ access_token: 'access-token', expires_in: 3_600 }))
       .mockResolvedValueOnce(
-        Response.json({ files: [{ id: 'root-id', name: 'PrintHub', mimeType: 'application/vnd.google-apps.folder' }] }),
+        Response.json({ files: [{ id: 'root-id', name: 'STL Quest', mimeType: 'application/vnd.google-apps.folder' }] }),
       )
       .mockResolvedValueOnce(Response.json({ files: [] }))
       .mockResolvedValueOnce(new Response(null, { headers: { location: 'https://upload.example/session' } }))
@@ -119,7 +119,7 @@ describe('GoogleDriveAssetStore', () => {
   it('honors the crash-recovery asset store contract', async () => {
     const api = googleDriveApi()
     vi.stubGlobal('fetch', api.fetch)
-    const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-google-contract-'))
+    const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-google-contract-'))
     const stagedPath = path.join(directory, 'upload.part')
     await fs.promises.writeFile(stagedPath, 'model')
     const store = new GoogleDriveAssetStore('', connection)
@@ -158,7 +158,7 @@ describe('GoogleDriveAssetStore', () => {
         .fn()
         .mockResolvedValueOnce(Response.json({ access_token: 'access-token', expires_in: 3_600 }))
         .mockResolvedValueOnce(
-          Response.json({ files: [{ id: 'root-id', name: 'PrintHub', mimeType: 'application/vnd.google-apps.folder' }] }),
+          Response.json({ files: [{ id: 'root-id', name: 'STL Quest', mimeType: 'application/vnd.google-apps.folder' }] }),
         )
         .mockResolvedValueOnce(Response.json({ files: [] })),
     )

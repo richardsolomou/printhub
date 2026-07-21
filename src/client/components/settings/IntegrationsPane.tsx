@@ -54,7 +54,7 @@ export function IntegrationsPane() {
     <SettingsPage>
       <SettingsHeader
         title="Integrations"
-        description="Configure sign-in methods and optional SMTP delivery. New accounts are always invite-only."
+        description="Configure sign-in methods and optional SMTP delivery. Workspace membership is always invite-only."
       />
       <AuthenticationSettings data={data} onConfigure={setProvider} />
       <SmtpSettings data={data} onConfigure={() => setSmtpOpen(true)} />
@@ -85,7 +85,7 @@ function AuthenticationSettings({
   return (
     <SettingsSection
       title="Authentication"
-      description="Password, Google, and Discord can be enabled together. Account creation always requires an invite."
+      description="Password, Google, and Discord can be enabled together. Joining an existing workspace always requires an invite."
     >
       <div className="grid gap-3 sm:grid-cols-3">
         <Card>
@@ -277,19 +277,19 @@ function ProviderSetupInstructions({
           <>
             <li>Select or create a Google Cloud project, then configure its Branding and Audience screens.</li>
             <li>Open Clients and create an OAuth client with the application type Web application.</li>
-            <li>Add the PrintHub URL below to Authorized JavaScript origins.</li>
+            <li>Add the STL Quest URL below to Authorized JavaScript origins.</li>
             <li>Add the callback URL below to Authorized redirect URIs exactly as shown.</li>
-            <li>Copy the generated client ID and client secret into PrintHub.</li>
+            <li>Copy the generated client ID and client secret into STL Quest.</li>
           </>
         ) : (
           <>
             <li>Create or select a Discord application, then open its OAuth2 settings.</li>
             <li>Add the callback URL below under Redirects and save the change.</li>
-            <li>Copy the client ID, then reset and copy the client secret into PrintHub.</li>
+            <li>Copy the client ID, then reset and copy the client secret into STL Quest.</li>
           </>
         )}
       </ol>
-      {isGoogle && <SetupValue label="PrintHub URL" value={origin} />}
+      {isGoogle && <SetupValue label="STL Quest URL" value={origin} />}
       <SetupValue label="Callback URL" value={callbackUrl} />
     </section>
   )

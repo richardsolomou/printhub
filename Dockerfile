@@ -12,16 +12,18 @@ ARG VITE_POSTHOG_PROJECT_TOKEN
 RUN pnpm build
 
 FROM node:24-alpine
-LABEL org.opencontainers.image.title="PrintHub" \
+LABEL org.opencontainers.image.title="STL Quest" \
       org.opencontainers.image.description="Self-hosted 3D print request queue" \
-      org.opencontainers.image.source="https://github.com/richardsolomou/printhub" \
-      org.opencontainers.image.licenses="MIT"
+      org.opencontainers.image.source="https://github.com/richardsolomou/stl.quest" \
+      org.opencontainers.image.licenses="AGPL-3.0-only"
 WORKDIR /app
 RUN rm -rf /usr/local/lib/node_modules/npm \
     && rm -f /usr/local/bin/npm /usr/local/bin/npx \
     && mkdir -p /data /prints \
     && chown -R node:node /app /data /prints
 COPY --from=build --chown=node:node /app/.output ./.output
+COPY --from=build --chown=node:node /app/LICENSE /app/THIRD_PARTY_NOTICES.md ./
+COPY --from=build --chown=node:node /app/LICENSES ./LICENSES
 ARG VITE_POSTHOG_HOST
 ARG VITE_POSTHOG_PROJECT_TOKEN
 ENV NODE_ENV=production PORT=3000 DATA_DIR=/data PRINTS_DIR=/prints \

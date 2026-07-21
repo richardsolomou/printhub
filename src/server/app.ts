@@ -14,10 +14,11 @@ import { LocalEventBus } from '../adapters/events'
 import { OptionalPostHogTelemetry } from '../adapters/telemetry'
 import { resolveAuthAdapterConfig } from '../adapters/auth'
 import { buildEmailDelivery, resolveSmtpConfig } from '../adapters/email'
-import { PrintHubService } from '../core/services'
+import { STLQuestService } from '../core/services'
 import { workflow } from '../core/workflow'
 import { AssetGenerationQueue } from './assets/queue'
 import { createAuth } from './auth'
+import { hostedDeployment } from './hosted'
 import type { BoardConfig, Identity, Repository, StorageConfig, TelemetryConfig, WorkspaceSummary } from '../core/types'
 import { logger } from './logger'
 import { diagnostics } from './operations'
@@ -38,9 +39,9 @@ import { organization } from '../db/schema'
 
 const workflowVersion = workflow.statuses.map((status) => status.id).join(':')
 const singleton = globalThis as typeof globalThis & {
-  __printhub?: ReturnType<typeof createApp>
-  __printhubWorkflowVersion?: string
-  __printhubWorkflowReconcile?: Promise<void>
+  __stlquest?: ReturnType<typeof createApp>
+  __stlquestWorkflowVersion?: string
+  __stlquestWorkflowReconcile?: Promise<void>
 }
 
 export function resolveStorageConfig(repository: Repository): StorageConfig {
@@ -116,7 +117,7 @@ type WorkspaceRecord = Omit<WorkspaceSummary, 'role'>
 export function resolveAuthUrl() {
   const configured = process.env.BETTER_AUTH_URL?.trim()
   if (!configured) {
-    if (process.env.PRINTHUB_HOSTED === 'true') throw new Error('BETTER_AUTH_URL is required when PRINTHUB_HOSTED=true')
+    if (hostedDeployment()) throw new Error('BETTER_AUTH_URL is required when STLQUEST_HOSTED=true')
     return undefined
   }
   const url = new URL(configured)
@@ -368,7 +369,7 @@ async function createWorkspaceRuntime(
   const assets = buildAssetStore(storage, repository, workspace.id)
   const events = new LocalEventBus()
   let assertAssetsMutable: () => void = () => undefined
-  const service = new PrintHubService(repository, assets, staging, events, telemetry, tusUploads, () => assertAssetsMutable())
+  const service = new STLQuestService(repository, assets, staging, events, telemetry, tusUploads, () => assertAssetsMutable())
   let storageReady = false
   let storageRecovery: Promise<boolean> | undefined
   let assetQueue: AssetGenerationQueue
@@ -436,58 +437,58 @@ async function createWorkspaceRuntime(
 }
 
 export function app() {
-  if (singleton.__printhub) {
-    const running = singleton.__printhub
-    if (singleton.__printhubWorkflowVersion === workflowVersion) return running
+  if (singleton.__stlquest) {
+    const running = singleton.__stlquest
+    if (singleton.__stlquestWorkflowVersion === workflowVersion) return running
     const reconciliation =
-      singleton.__printhubWorkflowReconcile ??
+      singleton.__stlquestWorkflowReconcile ??
       running.then((instance) => {
         for (const workspace of instance.repository.listWorkspaces()) instance.repository.scoped(workspace.id).reconcileWorkflow()
-        singleton.__printhubWorkflowVersion = workflowVersion
+        singleton.__stlquestWorkflowVersion = workflowVersion
       })
-    singleton.__printhubWorkflowReconcile = reconciliation
+    singleton.__stlquestWorkflowReconcile = reconciliation
     const clearReconciliation = () => {
-      if (singleton.__printhubWorkflowReconcile === reconciliation) delete singleton.__printhubWorkflowReconcile
+      if (singleton.__stlquestWorkflowReconcile === reconciliation) delete singleton.__stlquestWorkflowReconcile
     }
     void reconciliation.then(clearReconciliation, clearReconciliation)
     return Promise.all([running, reconciliation]).then(([instance]) => instance)
   }
   const pending = createApp()
-  singleton.__printhub = pending
+  singleton.__stlquest = pending
   void pending.then(
     () => {
-      singleton.__printhubWorkflowVersion = workflowVersion
+      singleton.__stlquestWorkflowVersion = workflowVersion
     },
     () => undefined,
   )
   void pending.catch(() => {
-    if (singleton.__printhub === pending) delete singleton.__printhub
+    if (singleton.__stlquest === pending) delete singleton.__stlquest
   })
   return pending
 }
 
 export async function resetApp() {
-  const running = singleton.__printhub
-  delete singleton.__printhub
-  delete singleton.__printhubWorkflowVersion
-  delete singleton.__printhubWorkflowReconcile
+  const running = singleton.__stlquest
+  delete singleton.__stlquest
+  delete singleton.__stlquestWorkflowVersion
+  delete singleton.__stlquestWorkflowReconcile
   const instance = running ? await running.catch(() => undefined) : undefined
   await instance?.close()
   logger.info('application singleton reset')
 }
 
 export async function shutdownApp() {
-  const running = singleton.__printhub
-  delete singleton.__printhub
-  delete singleton.__printhubWorkflowVersion
-  delete singleton.__printhubWorkflowReconcile
+  const running = singleton.__stlquest
+  delete singleton.__stlquest
+  delete singleton.__stlquestWorkflowVersion
+  delete singleton.__stlquestWorkflowReconcile
   const instance = running ? await running.catch(() => undefined) : undefined
   await instance?.close()
 }
 
-const lifecycle = globalThis as typeof globalThis & { __printhubSignals?: boolean }
-if (!lifecycle.__printhubSignals && process.env.NODE_ENV !== 'test') {
-  lifecycle.__printhubSignals = true
+const lifecycle = globalThis as typeof globalThis & { __stlquestSignals?: boolean }
+if (!lifecycle.__stlquestSignals && process.env.NODE_ENV !== 'test') {
+  lifecycle.__stlquestSignals = true
   for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     process.once(signal, () => {
       void shutdownApp().finally(() => process.exit(0))

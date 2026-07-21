@@ -1,6 +1,6 @@
 # Printer catalog
 
-PrintHub ships a generated offline catalog so self-hosted installations never depend on third-party services at runtime.
+STL Quest ships a generated offline catalog so self-hosted installations never depend on third-party services at runtime.
 
 The catalog is the sourced dataset and its provenance; the application exposes each generated entry as a printer preset.
 

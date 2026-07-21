@@ -76,9 +76,9 @@ const CLOUD_HELP: Record<
   'google-drive': {
     consoleUrl: 'https://console.cloud.google.com/apis/credentials',
     credentials: 'Enable the Google Drive API and create an OAuth client for a web application.',
-    intro: 'Google Drive stores files in a PrintHub folder using the limited drive.file permission.',
+    intro: 'Google Drive stores files in a STL Quest folder using the limited drive.file permission.',
     permissions: 'Add the redirect URI below to the OAuth client’s authorized redirect URIs.',
-    root: 'Leave blank to use the PrintHub folder in Google Drive directly.',
+    root: 'Leave blank to use the STL Quest folder in Google Drive directly.',
     secret: 'Client secret',
   },
   onedrive: {
@@ -334,7 +334,7 @@ function StorageForm({
         <>
           <h3 className="font-heading text-xl font-semibold">Choose storage</h3>
           <p className="text-sm leading-relaxed text-muted-foreground">
-            PrintHub needs a writable destination before the board is ready. Choose {storageChoices}.
+            STL Quest needs a writable destination before the board is ready. Choose {storageChoices}.
           </p>
         </>
       )}
@@ -362,7 +362,7 @@ function StorageForm({
       <ConfirmDialog
         open={cancelMigrationOpen}
         title="Cancel storage migration?"
-        description="PrintHub will finish the file currently being copied, then stop. The original storage location will remain active, and files already copied to the destination will be left there."
+        description="STL Quest will finish the file currently being copied, then stop. The original storage location will remain active, and files already copied to the destination will be left there."
         confirmLabel="Cancel migration"
         destructive
         onCancel={() => setCancelMigrationOpen(false)}
@@ -450,7 +450,7 @@ function StorageForm({
                   </>
                 )}
               </form.Field>
-              <FieldDescription>PrintHub adds a private workspace directory below the selected folder.</FieldDescription>
+              <FieldDescription>STL Quest adds a private workspace directory below the selected folder.</FieldDescription>
             </Field>
           ) : adapter === 'webdav' ? (
             <div className="flex flex-col gap-4">
@@ -473,7 +473,7 @@ function StorageForm({
                       placeholder="https://storage.example.com/dav"
                       required
                     />
-                    <FieldDescription>Hosted PrintHub requires HTTPS and must be able to reach this address.</FieldDescription>
+                    <FieldDescription>Hosted STL Quest requires HTTPS and must be able to reach this address.</FieldDescription>
                   </Field>
                 )}
               </form.Field>
@@ -485,9 +485,9 @@ function StorageForm({
                       id="webdav-root"
                       value={field.state.value}
                       onChange={(event) => field.handleChange(event.target.value)}
-                      placeholder="printhub"
+                      placeholder="stlquest"
                     />
-                    <FieldDescription>PrintHub adds a private workspace directory below this folder.</FieldDescription>
+                    <FieldDescription>STL Quest adds a private workspace directory below this folder.</FieldDescription>
                   </Field>
                 )}
               </form.Field>
@@ -578,7 +578,7 @@ function StorageForm({
                       <ol className="mt-3 list-decimal space-y-1 pl-5 text-muted-foreground">
                         <li>{CLOUD_HELP[adapter].credentials}</li>
                         <li>{CLOUD_HELP[adapter].permissions}</li>
-                        <li>Copy the client ID and secret into PrintHub, then connect the account.</li>
+                        <li>Copy the client ID and secret into STL Quest, then connect the account.</li>
                       </ol>
                     )}
                   </div>
@@ -672,7 +672,7 @@ function StorageForm({
                       id={`${adapter}-root`}
                       value={field.state.value}
                       onChange={(event) => field.handleChange(event.target.value)}
-                      placeholder="PrintHub"
+                      placeholder="STL Quest"
                     />
                     <FieldDescription>{CLOUD_HELP[adapter].root}</FieldDescription>
                   </Field>
@@ -807,7 +807,7 @@ function StorageForm({
                       id="storage-prefix"
                       value={field.state.value}
                       onChange={(event) => field.handleChange(event.target.value)}
-                      placeholder="printhub"
+                      placeholder="stlquest"
                     />
                   </Field>
                 )}
@@ -909,7 +909,7 @@ function StorageForm({
     <SettingsPage>
       <SettingsHeader
         title="Storage"
-        description={`Move finished print files between ${storageChoices}. PrintHub copies and verifies every file before switching, and leaves the source untouched as a fallback.`}
+        description={`Move finished print files between ${storageChoices}. STL Quest copies and verifies every file before switching, and leaves the source untouched as a fallback.`}
       />
       <SettingsSection>{formContent}</SettingsSection>
       <ConfirmDialog
@@ -923,7 +923,7 @@ function StorageForm({
               <div className="text-center text-xs font-medium tracking-wide text-muted-foreground uppercase">Copy to</div>
               <StorageLocation label="New storage" config={pendingConfig} />
               <p className="text-sm leading-relaxed text-muted-foreground">
-                PrintHub verifies every copied file before switching. File changes are paused during migration, and the current files are
+                STL Quest verifies every copied file before switching. File changes are paused during migration, and the current files are
                 kept as a backup.
               </p>
             </div>
@@ -1042,7 +1042,7 @@ function isCloudAdapter(adapter: string): adapter is CloudProvider {
 
 function rootForAdapter(adapter: 'local' | 'webdav' | CloudProvider, current: StorageConfig) {
   if (adapter === current.adapter) return current.root
-  return adapter === 'local' ? '/prints' : adapter === 'webdav' ? 'printhub' : ''
+  return adapter === 'local' ? '/prints' : adapter === 'webdav' ? 'stlquest' : ''
 }
 
 function cloudProviderLabel(provider: CloudProvider) {

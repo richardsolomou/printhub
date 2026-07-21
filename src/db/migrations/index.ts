@@ -3,7 +3,7 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { readMigrationFiles } from 'drizzle-orm/migrator'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { PrintHubDatabase } from '../connection'
+import type { STLQuestDatabase } from '../connection'
 
 const migrationConfig = {
   migrationsFolder: import.meta.env.PROD
@@ -11,7 +11,7 @@ const migrationConfig = {
     : fileURLToPath(new URL('../../../drizzle', import.meta.url)),
 }
 
-export function migrateDatabase(database: PrintHubDatabase, beforeMigrate: () => void) {
+export function migrateDatabase(database: STLQuestDatabase, beforeMigrate: () => void) {
   const migrations = readMigrationFiles(migrationConfig)
   const latest = migrations.at(-1)
   const drizzleJournal = database.get<{ found: number }>(

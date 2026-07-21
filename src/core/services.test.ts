@@ -10,7 +10,7 @@ import { createDatabase } from '../db'
 import { DrizzleRepository } from '../db/repository'
 import { organization, requests, requestStatuses, user } from '../db/schema'
 import type { Identity, PrinterProfile, Telemetry } from './types'
-import { PrintHubService } from './services'
+import { STLQuestService } from './services'
 
 const telemetry: Telemetry = { capture: async () => undefined, exception: async () => undefined }
 const admin: Identity = { id: 'admin', email: 'op@example.com', name: 'Admin', role: 'admin' }
@@ -30,18 +30,18 @@ const filamentPrinter = {
   printType: 'filament',
 } satisfies PrinterProfile
 
-describe('PrintHubService crash recovery', () => {
+describe('STLQuestService crash recovery', () => {
   let root: string
   let data: string
   let repository: DrizzleRepository
   let assets: LocalAssetStore
   let staging: UploadStaging
   let removeTusUpload: Mock<(uploadId: string) => Promise<void>>
-  let service: PrintHubService
+  let service: STLQuestService
 
   beforeEach(async () => {
-    root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-service-'))
-    data = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-service-data-'))
+    root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-service-'))
+    data = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-service-data-'))
     repository = new DrizzleRepository(createDatabase(':memory:'))
     const now = new Date()
     for (const identity of [admin, requester, otherRequester]) {
@@ -62,7 +62,7 @@ describe('PrintHubService crash recovery', () => {
     staging = new UploadStaging(data)
     await Promise.all([assets.initialize(), staging.initialize()])
     removeTusUpload = vi.fn(async () => undefined)
-    service = new PrintHubService(repository, assets, staging, new LocalEventBus(), telemetry, { remove: removeTusUpload })
+    service = new STLQuestService(repository, assets, staging, new LocalEventBus(), telemetry, { remove: removeTusUpload })
   })
 
   afterEach(async () => {
@@ -98,12 +98,12 @@ describe('PrintHubService crash recovery', () => {
 
   it('journals original and preview assets with distinct deterministic trash paths', async () => {
     await assets.write('todo/with-preview.stl', new TextEncoder().encode('original'))
-    await assets.write('.printhub/previews/with-preview.stl', new TextEncoder().encode('preview'))
+    await assets.write('.stlquest/previews/with-preview.stl', new TextEncoder().encode('preview'))
     const id = repository.createRequest({
       name: 'Previewed',
       fileName: 'with-preview.stl',
       filePath: 'todo/with-preview.stl',
-      previewPath: '.printhub/previews/with-preview.stl',
+      previewPath: '.stlquest/previews/with-preview.stl',
       quantity: 1,
       ownerUserId: requester.id,
     })
@@ -415,11 +415,11 @@ describe('PrintHubService crash recovery', () => {
 
   it('trashes generated thumbnails alongside the original on delete', async () => {
     const id = await request()
-    await assets.write('.printhub/thumbnails/model.png', new TextEncoder().encode('png bytes'))
-    repository.completeAssetGeneration(id, { thumbnailPath: '.printhub/thumbnails/model.png' })
+    await assets.write('.stlquest/thumbnails/model.png', new TextEncoder().encode('png bytes'))
+    repository.completeAssetGeneration(id, { thumbnailPath: '.stlquest/thumbnails/model.png' })
     expect(repository.getRequest(id)!.hasThumbnail).toBe(true)
     await service.remove(id, admin)
-    expect(await assets.exists('.printhub/thumbnails/model.png')).toBe(false)
+    expect(await assets.exists('.stlquest/thumbnails/model.png')).toBe(false)
   })
 
   it('surfaces an unwritable destination instead of silently dropping the upload', async () => {
@@ -541,7 +541,7 @@ describe('PrintHubService crash recovery', () => {
       },
       exception: async () => undefined,
     }
-    service = new PrintHubService(repository, assets, staging, new LocalEventBus(), rejecting, { remove: removeTusUpload })
+    service = new STLQuestService(repository, assets, staging, new LocalEventBus(), rejecting, { remove: removeTusUpload })
     const unhandled = vi.fn()
     process.on('unhandledRejection', unhandled)
     try {

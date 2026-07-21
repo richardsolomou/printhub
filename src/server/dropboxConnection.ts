@@ -141,7 +141,7 @@ export function disconnectDropbox(repository: SettingStore) {
 }
 
 async function validateDropboxCapabilities(accessToken: string, returnTo: string) {
-  const probe = `/.printhub-connection-check-${crypto.randomUUID()}`
+  const probe = `/.stlquest-connection-check-${crypto.randomUUID()}`
   const movedProbe = `${probe}-moved`
   let cleaned = false
   try {
@@ -152,7 +152,7 @@ async function validateDropboxCapabilities(accessToken: string, returnTo: string
     }
 
     await requireDropboxResponse(
-      await dropboxContent(accessToken, '/files/upload', { path: probe, mode: 'overwrite', autorename: false, mute: true }, 'PrintHub'),
+      await dropboxContent(accessToken, '/files/upload', { path: probe, mode: 'overwrite', autorename: false, mute: true }, 'STL Quest'),
     )
     await requireDropboxResponse(await dropboxContent(accessToken, '/files/download', { path: probe }))
     await requireDropboxResponse(

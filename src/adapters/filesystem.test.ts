@@ -6,14 +6,27 @@ import { LocalAssetStore } from './filesystem'
 import { UploadStaging } from './staging'
 
 describe('LocalAssetStore', () => {
+  it('renames the legacy hidden asset directory during initialization', async () => {
+    const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-store-'))
+    await fs.promises.mkdir(path.join(root, '.printhub', 'previews'), { recursive: true })
+    await fs.promises.writeFile(path.join(root, '.printhub', 'previews', 'model.phm'), 'preview')
+    const store = new LocalAssetStore(root)
+
+    await store.initialize()
+
+    await expect(fs.promises.readFile(path.join(root, '.stlquest', 'previews', 'model.phm'), 'utf8')).resolves.toBe('preview')
+    await expect(fs.promises.stat(path.join(root, '.printhub'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await fs.promises.rm(root, { recursive: true, force: true })
+  })
+
   let root: string
   let data: string
   let store: LocalAssetStore
   let staging: UploadStaging
 
   beforeEach(async () => {
-    root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-prints-'))
-    data = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-data-'))
+    root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-prints-'))
+    data = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-data-'))
     store = new LocalAssetStore(root)
     staging = new UploadStaging(data)
     await Promise.all([store.initialize(), staging.initialize()])
@@ -111,7 +124,7 @@ describe('UploadStaging', () => {
   let staging: UploadStaging
 
   beforeEach(async () => {
-    data = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-staging-'))
+    data = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-staging-'))
     staging = new UploadStaging(data)
     await staging.initialize()
   })

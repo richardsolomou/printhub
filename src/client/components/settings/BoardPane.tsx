@@ -126,7 +126,7 @@ export function BoardPane({ me, workspaceName, workspaceCount }: { me: Identity;
           <AlertDialogHeader>
             <AlertDialogTitle>Delete {workspaceName}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This permanently deletes the workspace and its PrintHub data. Type the workspace name to confirm.
+              This permanently deletes the workspace and its STL Quest data. Type the workspace name to confirm.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <Field>

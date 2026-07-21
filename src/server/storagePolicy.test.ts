@@ -5,19 +5,19 @@ describe('hosted storage policy', () => {
   afterEach(() => vi.unstubAllEnvs())
 
   it('requires remote storage for hosted deployments', () => {
-    vi.stubEnv('PRINTHUB_HOSTED', 'true')
+    vi.stubEnv('STLQUEST_HOSTED', 'true')
 
     expect(hostedStorageRequiresRemote({ adapter: 'local', root: '/prints' }, { isSuperAdminWorkspace: () => false })).toBe(true)
   })
 
   it('allows local storage for super admin workspaces', () => {
-    vi.stubEnv('PRINTHUB_HOSTED', 'true')
+    vi.stubEnv('STLQUEST_HOSTED', 'true')
 
     expect(localStorageAllowed({ isSuperAdminWorkspace: () => true })).toBe(true)
   })
 
   it('allows S3-compatible storage for hosted deployments', () => {
-    vi.stubEnv('PRINTHUB_HOSTED', 'true')
+    vi.stubEnv('STLQUEST_HOSTED', 'true')
 
     expect(() =>
       assertStorageAllowed(
@@ -36,12 +36,12 @@ describe('hosted storage policy', () => {
   })
 
   it('requires HTTPS for hosted WebDAV storage', () => {
-    vi.stubEnv('PRINTHUB_HOSTED', 'true')
+    vi.stubEnv('STLQUEST_HOSTED', 'true')
 
     let rejection: unknown
     try {
       assertStorageAllowed(
-        { adapter: 'webdav', endpoint: 'http://storage.example.com', root: 'printhub', username: 'user', password: 'secret' },
+        { adapter: 'webdav', endpoint: 'http://storage.example.com', root: 'stlquest', username: 'user', password: 'secret' },
         { isSuperAdminWorkspace: () => false },
       )
     } catch (error) {
@@ -52,7 +52,7 @@ describe('hosted storage policy', () => {
   })
 
   it('rejects local storage for hosted deployments', () => {
-    vi.stubEnv('PRINTHUB_HOSTED', 'true')
+    vi.stubEnv('STLQUEST_HOSTED', 'true')
     let rejection: unknown
 
     try {

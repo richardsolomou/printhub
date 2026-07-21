@@ -17,7 +17,7 @@ describe('Dropbox connection', () => {
   let repository: Repository
 
   beforeEach(() => {
-    dataDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'printhub-dropbox-connection-'))
+    dataDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'stlquest-dropbox-connection-'))
     previousDataDirectory = process.env.DATA_DIR
     process.env.DATA_DIR = dataDirectory
     const settings = new Map<string, unknown>()
@@ -47,7 +47,7 @@ describe('Dropbox connection', () => {
         )
         .mockResolvedValueOnce(Response.json({ error_summary: 'path/not_found/' }, { status: 409 }))
         .mockResolvedValueOnce(Response.json({ '.tag': 'file' }))
-        .mockResolvedValueOnce(new Response('PrintHub'))
+        .mockResolvedValueOnce(new Response('STL Quest'))
         .mockResolvedValueOnce(Response.json({ metadata: { '.tag': 'file' } }))
         .mockResolvedValueOnce(Response.json({ metadata: { '.tag': 'file' } })),
     )

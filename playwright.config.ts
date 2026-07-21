@@ -4,7 +4,7 @@ import { defineConfig, devices } from '@playwright/test'
 
 const port = Number(process.env.PLAYWRIGHT_PORT ?? 4173)
 const baseURL = `http://127.0.0.1:${port}`
-const root = process.env.PLAYWRIGHT_DATA_ROOT ?? path.join(os.tmpdir(), `printhub-playwright-${port}`)
+const root = process.env.PLAYWRIGHT_DATA_ROOT ?? path.join(os.tmpdir(), `stlquest-playwright-${port}`)
 const serverCommand = process.env.PLAYWRIGHT_DEV_SERVER
   ? `./node_modules/.bin/vite dev --host 127.0.0.1 --port ${port}`
   : 'node .output/server/index.mjs'

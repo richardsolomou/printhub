@@ -16,7 +16,10 @@ export function networkFilesystem(dataDirectory: string) {
 
 export function acquireDataDirectoryLease(dataDirectory = path.resolve(process.env.DATA_DIR ?? '/data')) {
   fs.mkdirSync(dataDirectory, { recursive: true })
-  const file = path.join(dataDirectory, 'printhub.lock')
+  const file = path.join(dataDirectory, 'stlquest.lock')
+  const legacy = path.join(dataDirectory, 'printhub.lock')
+  if (!fs.existsSync(file) && fs.existsSync(legacy)) fs.renameSync(legacy, file)
+  else if (fs.existsSync(file) && fs.existsSync(legacy)) fs.rmSync(legacy, { force: true })
   const database = openDatabase(file, { timeout: 0 })
   try {
     database.run(sql`PRAGMA journal_mode = DELETE`)
@@ -25,7 +28,7 @@ export function acquireDataDirectoryLease(dataDirectory = path.resolve(process.e
     database.run(sql`BEGIN EXCLUSIVE`)
   } catch (error) {
     closeDatabase(database)
-    throw new Error(`another PrintHub process is already using ${dataDirectory}`, { cause: error })
+    throw new Error(`another STL Quest process is already using ${dataDirectory}`, { cause: error })
   }
   let released = false
   return {

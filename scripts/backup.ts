@@ -2,18 +2,18 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { Command } from 'commander'
 import { backupDatabase } from '../src/db/backup'
-import { closeDatabase, openDatabase } from '../src/db'
+import { closeDatabase, databasePath, openDatabase } from '../src/db'
 
 const options = new Command()
   .name('backup')
-  .description('Create a consistent online backup of the PrintHub SQLite database.')
-  .option('--output <file>', 'backup file path', `printhub-backup-${new Date().toISOString().replaceAll(':', '-')}.sqlite`)
+  .description('Create a consistent online backup of the STL Quest SQLite database.')
+  .option('--output <file>', 'backup file path', `stlquest-backup-${new Date().toISOString().replaceAll(':', '-')}.sqlite`)
   .parse()
   .opts<{ output: string }>()
 
 const destination = path.resolve(options.output)
 const dataDirectory = path.resolve(process.env.DATA_DIR ?? '/data')
-const source = path.join(dataDirectory, 'printhub.sqlite')
+const source = databasePath()
 const integrationKey = path.join(dataDirectory, 'integration-secrets.key')
 if (destination === source) throw new Error('backup output must differ from the live database')
 if (!fs.existsSync(source)) throw new Error(`database does not exist: ${source}`)

@@ -311,7 +311,7 @@ function rawGithubUrl(source: Extract<ManufacturerImageSource, { kind: 'github' 
 function fetchWithRetry(url: string) {
   return pRetry(
     async () => {
-      const response = await fetch(url, { headers: { 'user-agent': 'PrintHub printer catalog sync' } })
+      const response = await fetch(url, { headers: { 'user-agent': 'STL Quest printer catalog sync' } })
       if (response.status === 429 || response.status >= 500) throw new Error(`${url} returned ${response.status}`)
       return response
     },

@@ -12,7 +12,7 @@ describe('Google Drive connection', () => {
   let repository: Repository
 
   beforeEach(() => {
-    dataDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'printhub-google-drive-connection-'))
+    dataDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'stlquest-google-drive-connection-'))
     previousDataDirectory = process.env.DATA_DIR
     process.env.DATA_DIR = dataDirectory
     const settings = new Map<string, unknown>()
@@ -48,8 +48,8 @@ describe('Google Drive connection', () => {
           return Response.json({ id: 'probe-id', size: '1' })
         }
         const query = new URL(url).searchParams.get('q') ?? ''
-        if (query.includes('printhubRoot'))
-          return Response.json({ files: [{ id: 'root-id', name: 'PrintHub', mimeType: 'application/vnd.google-apps.folder' }] })
+        if (query.includes('stlQuestRoot'))
+          return Response.json({ files: [{ id: 'root-id', name: 'STL Quest', mimeType: 'application/vnd.google-apps.folder' }] })
         return Response.json({
           files: uploaded ? [{ id: 'probe-id', name: 'health', mimeType: 'application/octet-stream', size: '1' }] : [],
         })
@@ -120,8 +120,8 @@ describe('Google Drive connection', () => {
           return Response.json({ id: 'probe-id', size: '1' })
         }
         const query = new URL(url).searchParams.get('q') ?? ''
-        if (query.includes('printhubRoot'))
-          return Response.json({ files: [{ id: 'root-id', name: 'PrintHub', mimeType: 'application/vnd.google-apps.folder' }] })
+        if (query.includes('stlQuestRoot'))
+          return Response.json({ files: [{ id: 'root-id', name: 'STL Quest', mimeType: 'application/vnd.google-apps.folder' }] })
         return Response.json({
           files: uploaded ? [{ id: 'probe-id', name: 'health', mimeType: 'application/octet-stream', size: '1' }] : [],
         })

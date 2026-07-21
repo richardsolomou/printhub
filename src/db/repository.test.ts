@@ -3,8 +3,9 @@ import { and, count, eq, sql as drizzleSql } from 'drizzle-orm'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DrizzleRepository } from './repository'
+import { databasePath } from './paths'
 import { createDatabase } from './connection'
 import type { AccountRole, PrinterProfile, WorkspaceRole } from '../core/types'
 import { member, requests, requestStatuses, uploadSessions, user } from './schema'
@@ -84,7 +85,7 @@ describe('DrizzleRepository contract', () => {
       expect.objectContaining({ stage: 'thumbnail', status: 'pending' }),
     ])
     repository.startAssetGeneration(id, ['thumbnail', 'preview'])
-    repository.finishAssetGeneration(id, 'thumbnail', { status: 'ready', path: '.printhub/thumbnails/stages.png' })
+    repository.finishAssetGeneration(id, 'thumbnail', { status: 'ready', path: '.stlquest/thumbnails/stages.png' })
     repository.finishAssetGeneration(id, 'preview', { status: 'skipped' })
     expect(repository.assetGenerationJobs(id)).toEqual([
       expect.objectContaining({ stage: 'preview', status: 'skipped' }),
@@ -102,8 +103,8 @@ describe('DrizzleRepository contract', () => {
       ownerUserId: 'maker',
     })
     repository.startAssetGeneration(id, ['thumbnail', 'preview'])
-    repository.finishAssetGeneration(id, 'thumbnail', { status: 'ready', path: '.printhub/thumbnails/quantized.png' })
-    repository.finishAssetGeneration(id, 'preview', { status: 'ready', path: '.printhub/previews/quantized.phm' })
+    repository.finishAssetGeneration(id, 'thumbnail', { status: 'ready', path: '.stlquest/thumbnails/quantized.png' })
+    repository.finishAssetGeneration(id, 'preview', { status: 'ready', path: '.stlquest/previews/quantized.phm' })
     const migration = fs
       .readFileSync(path.resolve('drizzle/0004_regenerate_compressed_previews.sql'), 'utf8')
       .replaceAll('--> statement-breakpoint', '')
@@ -350,7 +351,7 @@ describe('DrizzleRepository contract', () => {
   })
 
   it('creates a consistent online backup', async () => {
-    const temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-backup-'))
+    const temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-backup-'))
     const source = path.join(temporary, 'source.sqlite')
     const destination = path.join(temporary, 'backups', 'copy.sqlite')
     const persisted = DrizzleRepository.open(source)
@@ -669,8 +670,40 @@ describe('DrizzleRepository contract', () => {
     const database = new Database(':memory:')
     const migrated = new DrizzleRepository(createDatabase(database))
 
-    expect(database.prepare('SELECT count(*) count FROM __drizzle_migrations').get()).toEqual({ count: 10 })
+    expect(database.prepare('SELECT count(*) count FROM __drizzle_migrations').get()).toEqual({ count: 11 })
     migrated.close()
+  })
+
+  it('renames only the untouched legacy workspace display name', () => {
+    const database = new Database(':memory:')
+    database.exec(`
+      CREATE TABLE organization (id text PRIMARY KEY NOT NULL, name text NOT NULL, slug text NOT NULL);
+      CREATE TABLE requests (id text PRIMARY KEY NOT NULL, thumbnail_path text, preview_path text);
+      CREATE TABLE operations (id text PRIMARY KEY NOT NULL, payload_json text NOT NULL);
+      INSERT INTO organization VALUES ('legacy-workspace', 'PrintHub', 'printhub');
+      INSERT INTO organization VALUES ('custom-workspace', 'PrintHub', 'custom');
+      INSERT INTO requests VALUES ('request', '.printhub/thumbnails/model.png', '.printhub/previews/model.phm');
+      INSERT INTO operations VALUES ('operation', '{"trashPath":".printhub/trash/model.stl"}');
+    `)
+    const migration = fs
+      .readFileSync(path.resolve('drizzle/0010_rename_legacy_workspace.sql'), 'utf8')
+      .replaceAll('--> statement-breakpoint', '')
+
+    database.exec(migration)
+
+    expect({
+      organizations: database.prepare('SELECT id, name, slug FROM organization ORDER BY id').all(),
+      request: database.prepare('SELECT thumbnail_path, preview_path FROM requests').get(),
+      operation: database.prepare('SELECT payload_json FROM operations').get(),
+    }).toEqual({
+      organizations: [
+        { id: 'custom-workspace', name: 'PrintHub', slug: 'custom' },
+        { id: 'legacy-workspace', name: 'STL Quest', slug: 'printhub' },
+      ],
+      request: { thumbnail_path: '.stlquest/thumbnails/model.png', preview_path: '.stlquest/previews/model.phm' },
+      operation: { payload_json: '{"trashPath":".stlquest/trash/model.stl"}' },
+    })
+    database.close()
   })
 
   it('renames the legacy global admin role without changing workspace roles', () => {
@@ -1099,7 +1132,7 @@ describe('DrizzleRepository contract', () => {
   })
 
   it('enforces incomplete-upload quotas after reopening the database', async () => {
-    const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-sqlite-'))
+    const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-sqlite-'))
     const file = path.join(directory, 'test.sqlite')
     const expires = Date.now() + 60_000
     const first = DrizzleRepository.open(file)
@@ -1120,5 +1153,34 @@ describe('DrizzleRepository contract', () => {
     )
     reopened.close()
     await fs.promises.rm(directory, { recursive: true, force: true })
+  })
+})
+
+describe('databasePath', () => {
+  afterEach(() => vi.unstubAllEnvs())
+
+  it('uses the STL Quest database name for new data directories', async () => {
+    const temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-database-'))
+    vi.stubEnv('DATA_DIR', temporary)
+
+    expect(databasePath()).toBe(path.join(temporary, 'stlquest.sqlite'))
+  })
+
+  it('renames an existing PrintHub database before opening it', async () => {
+    const temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-legacy-database-'))
+    vi.stubEnv('DATA_DIR', temporary)
+    const legacyFile = path.join(temporary, 'printhub.sqlite')
+    const currentFile = path.join(temporary, 'stlquest.sqlite')
+    const legacy = new Database(legacyFile)
+    legacy.pragma('journal_mode = WAL')
+    legacy.exec("CREATE TABLE migration_test (value TEXT NOT NULL); INSERT INTO migration_test VALUES ('preserved')")
+    legacy.close()
+
+    const repository = DrizzleRepository.open()
+
+    expect(repository.databaseInfo().path).toBe(currentFile)
+    expect(repository.database.$client.prepare('SELECT value FROM migration_test').pluck().get()).toBe('preserved')
+    expect(fs.existsSync(legacyFile)).toBe(false)
+    repository.close()
   })
 })

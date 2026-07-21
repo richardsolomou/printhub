@@ -50,7 +50,7 @@ export function ServerFolderPicker({
         <DialogHeader>
           <DialogTitle>Choose a server folder</DialogTitle>
           <DialogDescription>
-            These are folders visible inside the PrintHub server or container. Host folders must be mounted before they appear here.
+            These are folders visible inside the STL Quest server or container. Host folders must be mounted before they appear here.
           </DialogDescription>
         </DialogHeader>
         <div {...tree.getContainerProps('Server folders')} className="max-h-[50vh] overflow-auto rounded-lg border p-2 outline-none">

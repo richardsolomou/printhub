@@ -32,19 +32,19 @@ describe('server input schemas', () => {
 
   it('validates and normalizes storage settings', () => {
     expect(storageSettingsSchema.parse({ adapter: 'local', root: '  /prints  ' })).toEqual({ adapter: 'local', root: '/prints' })
-    expect(storageSettingsSchema.parse({ adapter: 'dropbox', root: '  PrintHub/models  ' })).toEqual({
+    expect(storageSettingsSchema.parse({ adapter: 'dropbox', root: '  STL Quest/models  ' })).toEqual({
       adapter: 'dropbox',
-      root: 'PrintHub/models',
+      root: 'STL Quest/models',
     })
     expect(
       storageSettingsSchema.parse({
         adapter: 'webdav',
         endpoint: 'https://storage.example.com/dav',
-        root: '  printhub  ',
+        root: '  stlquest  ',
         username: ' user ',
         password: 'secret',
       }),
-    ).toEqual({ adapter: 'webdav', endpoint: 'https://storage.example.com/dav', root: 'printhub', username: 'user', password: 'secret' })
+    ).toEqual({ adapter: 'webdav', endpoint: 'https://storage.example.com/dav', root: 'stlquest', username: 'user', password: 'secret' })
     expect(() => storageSettingsSchema.parse({ adapter: 'local', root: 'relative' })).toThrow()
     expect(() =>
       storageSettingsSchema.parse({

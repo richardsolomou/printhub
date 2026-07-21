@@ -43,7 +43,7 @@ if (check) {
 }
 
 function synchronizeCatalog(sources: CatalogSource[]) {
-  const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), 'printhub-printer-catalog-'))
+  const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), 'stlquest-printer-catalog-'))
   try {
     const presets: GeneratedPrinterPreset[] = []
     const images = new Map<string, string>()

@@ -103,7 +103,7 @@ describe('OneDriveAssetStore', () => {
     const fetch = vi
       .fn()
       .mockResolvedValueOnce(Response.json({ access_token: 'access-token', expires_in: 3_600 }))
-      .mockResolvedValueOnce(Response.json({ id: 'root-id', name: 'PrintHub', folder: {} }))
+      .mockResolvedValueOnce(Response.json({ id: 'root-id', name: 'STL Quest', folder: {} }))
       .mockResolvedValueOnce(Response.json({ id: 'todo-id', name: 'todo', folder: {} }))
       .mockResolvedValueOnce(Response.json({ uploadUrl: 'https://upload.example/session' }))
       .mockResolvedValueOnce(Response.json({ id: 'file-id', size: 5 }))
@@ -119,7 +119,7 @@ describe('OneDriveAssetStore', () => {
   it('honors the crash-recovery asset store contract', async () => {
     const api = oneDriveApi()
     vi.stubGlobal('fetch', api.fetch)
-    const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-onedrive-contract-'))
+    const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-onedrive-contract-'))
     const stagedPath = path.join(directory, 'upload.part')
     await fs.promises.writeFile(stagedPath, 'model')
     const store = new OneDriveAssetStore('', { ...connection })

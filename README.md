@@ -1,20 +1,22 @@
 <div align="center">
-  <img src="public/favicon.svg" width="80" alt="PrintHub logo" />
+  <img src="public/favicon.svg" width="80" alt="STL Quest logo" />
 
-# PrintHub
+# STL Quest
 
 **A private 3D-print production queue for resin and filament printers, available self-hosted or as a managed service.**
 
-[![Latest release](https://img.shields.io/github/v/release/richardsolomou/printhub)](https://github.com/richardsolomou/printhub/releases) [![Build](https://img.shields.io/github/actions/workflow/status/richardsolomou/printhub/docker.yml?branch=main)](https://github.com/richardsolomou/printhub/actions/workflows/docker.yml) [![License](https://img.shields.io/github/license/richardsolomou/printhub)](LICENSE)
+[stl.quest](https://stl.quest)
+
+[![Latest release](https://img.shields.io/github/v/release/richardsolomou/stl.quest)](https://github.com/richardsolomou/stl.quest/releases) [![Build](https://img.shields.io/github/actions/workflow/status/richardsolomou/stl.quest/docker.yml?branch=main)](https://github.com/richardsolomou/stl.quest/actions/workflows/docker.yml) [![License](https://img.shields.io/github/license/richardsolomou/stl.quest)](LICENSE)
 
 Collect STL requests, order the queue fairly, auto-assign compatible printers, and track every copy from **Queue → Up next → Printing → Finishing → Ready**.
 
-<img src="docs/media/printhub-demo.gif" alt="PrintHub tour showing the request board and interactive STL viewer" width="1200" />
+<img src="docs/media/stlquest-demo.gif" alt="STL Quest tour showing the request board and interactive STL viewer" width="1200" />
 </div>
 
 ## Who is it for? 👋
 
-PrintHub replaces spreadsheets and chat threads with one queue, for:
+STL Quest replaces spreadsheets and chat threads with one queue, for:
 
 - **Hobbyists** printing for friends who want requests, quantities, and progress out of their heads.
 - **Print farms and small businesses** juggling more printers, more customers, and a growing backlog.
@@ -23,7 +25,7 @@ PrintHub replaces spreadsheets and chat threads with one queue, for:
 
 1. **Requesters upload models** with quantity, notes, and a preferred print type.
 2. **You pick a queue order** — fair-by-requester, oldest first, whatever fits.
-3. **PrintHub auto-assigns a compatible printer**, or an operator picks one manually.
+3. **STL Quest auto-assigns a compatible printer**, or an operator picks one manually.
 4. **Your slicer handles the build** — orientation, arrangement, and supports.
 5. **Each copy is tracked** through printing, finishing, and collection.
 
@@ -38,22 +40,22 @@ Along the way:
 
 ## Self-hosted or managed 🔒
 
-Run PrintHub as a single self-hosted appliance or a multi-tenant hosted service. Every workspace gets its own board, printers, members, and storage, and users can join other workspaces by invite.
+Run STL Quest as a single self-hosted appliance or a multi-tenant hosted service. Every workspace gets its own board, printers, members, and storage, and users can join other workspaces by invite.
 
-Self-hosted keeps the app, database, files, and history under your control. Hosted workspaces must use S3-compatible or connected cloud storage (super-admin-created workspaces can still use local folders) — every storage location gets an enforced per-workspace namespace. PrintHub doesn't handle slicing or printer control, and there's no public gallery or marketplace.
+Self-hosted keeps the app, database, files, and history under your control. Hosted workspaces must use S3-compatible or connected cloud storage (super-admin-created workspaces can still use local folders) — every storage location gets an enforced per-workspace namespace. STL Quest doesn't handle slicing or printer control, and there's no public gallery or marketplace.
 
 Anonymous telemetry is on by default, never includes model or request data, and can be disabled anytime — see the [telemetry page](docs/telemetry.md) for exactly what's sent.
 
 ## Run it 🚀
 
 ```sh
-docker run -d --name printhub \
+docker run -d --name stlquest \
   --user "$(id -u):$(id -g)" \
   --read-only --tmpfs /tmp:size=256m,mode=1777 \
   -p 3010:3000 \
   -v /path/to/appdata:/data \
   -v /path/to/prints:/prints \
-  ghcr.io/richardsolomou/printhub:latest
+  ghcr.io/richardsolomou/stl.quest:latest
 ```
 
 Open `http://localhost:3010`. The first account created becomes the admin.
@@ -64,7 +66,7 @@ Open `http://localhost:3010`. The first account created becomes the admin.
 
 - **Docker Compose:** configure `docker-compose.yml` and `.env.example`, then run `docker compose up -d`.
 - **TrueNAS SCALE / HexOS:** follow the [TrueNAS guide](deploy/truenas/README.md).
-- **Unraid:** use [`deploy/unraid/printhub.xml`](deploy/unraid/printhub.xml).
+- **Unraid:** use [`deploy/unraid/stlquest.xml`](deploy/unraid/stlquest.xml).
 
 ## Configuration ⚙️
 
@@ -82,8 +84,8 @@ Your slicer remains the source of truth for orientation, arrangement, supports, 
 
 ## Development 🛠️
 
-Requires Node 24.x and pnpm 11.12.0. Setup, checks, and release guidance live in [CONTRIBUTING.md](CONTRIBUTING.md); see [SECURITY.md](SECURITY.md) for vulnerability reports and [GitHub Issues](https://github.com/richardsolomou/printhub/issues) for planned work.
+Requires Node 24.x and pnpm 11.12.0. Setup, checks, and release guidance live in [CONTRIBUTING.md](CONTRIBUTING.md); see [SECURITY.md](SECURITY.md) for vulnerability reports and [GitHub Issues](https://github.com/richardsolomou/stl.quest/issues) for planned work.
 
 ## License
 
-[MIT](LICENSE)
+[GNU Affero General Public License v3.0](LICENSE)

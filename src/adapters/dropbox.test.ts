@@ -104,7 +104,7 @@ describe('DropboxAssetStore', () => {
         return Response.json({ metadata: { '.tag': 'folder' } })
       }),
     )
-    const store = new DropboxAssetStore('PrintHub', connection)
+    const store = new DropboxAssetStore('STL Quest', connection)
 
     await store.writeStream('todo/model.stl', new Blob(['model']).stream(), 5)
 
@@ -115,7 +115,7 @@ describe('DropboxAssetStore', () => {
     expect(requests.find((request) => request.url.endsWith('/files/upload_session/finish'))).toMatchObject({
       argument: {
         cursor: { session_id: 'session-id', offset: 5 },
-        commit: { path: '/PrintHub/todo/model.stl', mode: 'overwrite', autorename: false, mute: true, strict_conflict: false },
+        commit: { path: '/STL Quest/todo/model.stl', mode: 'overwrite', autorename: false, mute: true, strict_conflict: false },
       },
       bytes: 0,
     })
@@ -124,7 +124,7 @@ describe('DropboxAssetStore', () => {
   it('honors the crash-recovery asset store contract', async () => {
     const api = dropboxApi()
     vi.stubGlobal('fetch', api.fetch)
-    const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-dropbox-contract-'))
+    const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-dropbox-contract-'))
     const stagedPath = path.join(directory, 'upload.part')
     await fs.promises.writeFile(stagedPath, 'model')
     const store = new DropboxAssetStore('', connection)

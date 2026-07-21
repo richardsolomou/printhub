@@ -2,7 +2,7 @@ import { createContext, useContext, type ReactNode } from 'react'
 
 const WorkspaceSlugContext = createContext<string | undefined>(undefined)
 
-export const WORKSPACE_CHANGED_KEY = 'printhub-workspace-changed'
+export const WORKSPACE_CHANGED_KEY = 'stlquest-workspace-changed'
 
 export function reloadAfterWorkspaceChange() {
   localStorage.setItem(WORKSPACE_CHANGED_KEY, String(Date.now()))

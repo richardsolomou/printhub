@@ -161,7 +161,7 @@ describe('better-auth integration', () => {
     })
 
     expect(messages).toHaveLength(1)
-    expect(messages[0]).toMatchObject({ to: 'user@example.com', subject: 'Reset your PrintHub password' })
+    expect(messages[0]).toMatchObject({ to: 'user@example.com', subject: 'Reset your STL Quest password' })
     expect(messages[0].text).toContain('/reset-password/')
   })
 
@@ -175,17 +175,17 @@ describe('better-auth integration', () => {
     } as EmailDelivery
     const auth = createAuth(repository.database, SECRET, {
       email,
-      baseURL: 'https://cloud.printhub.example',
-      trustedOrigins: ['https://cloud.printhub.example'],
+      baseURL: 'https://cloud.stlquest.example',
+      trustedOrigins: ['https://cloud.stlquest.example'],
     })
     await auth.api.signUpEmail({ body: { email: 'user@example.com', password: 'password1234', name: 'User' } })
 
     await auth.api.requestPasswordReset({
-      body: { email: 'user@example.com', redirectTo: 'https://cloud.printhub.example/reset-password' },
-      headers: new Headers({ origin: 'https://cloud.printhub.example', host: 'attacker.example' }),
+      body: { email: 'user@example.com', redirectTo: 'https://cloud.stlquest.example/reset-password' },
+      headers: new Headers({ origin: 'https://cloud.stlquest.example', host: 'attacker.example' }),
     })
 
-    expect(messages[0].text).toContain('https://cloud.printhub.example/api/auth/reset-password/')
+    expect(messages[0].text).toContain('https://cloud.stlquest.example/api/auth/reset-password/')
     expect(messages[0].text).not.toContain('attacker.example')
   })
 

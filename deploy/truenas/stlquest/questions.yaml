@@ -1,27 +1,27 @@
 groups:
-  - name: PrintHub Configuration
-    description: Configure PrintHub
+  - name: STL Quest Configuration
+    description: Configure STL Quest
   - name: User and Group Configuration
-    description: Configure User and Group for PrintHub
+    description: Configure User and Group for STL Quest
   - name: Network Configuration
-    description: Configure Network for PrintHub
+    description: Configure Network for STL Quest
   - name: Storage Configuration
-    description: Configure Storage for PrintHub
+    description: Configure Storage for STL Quest
   - name: Labels Configuration
-    description: Configure Labels for PrintHub
+    description: Configure Labels for STL Quest
   - name: Resources Configuration
-    description: Configure Resources for PrintHub
+    description: Configure Resources for STL Quest
 
 questions:
-  - variable: printhub
+  - variable: stlquest
     label: ""
-    group: PrintHub Configuration
+    group: STL Quest Configuration
     schema:
       type: dict
       attrs:
         - variable: additional_envs
           label: Additional Environment Variables
-          description: Configure additional environment variables for PrintHub.
+          description: Configure additional environment variables for STL Quest.
           schema:
             type: list
             default: []
@@ -49,7 +49,7 @@ questions:
       attrs:
         - variable: user
           label: User ID
-          description: The user ID that owns PrintHub files.
+          description: The user ID that owns STL Quest files.
           schema:
             type: int
             min: 568
@@ -57,7 +57,7 @@ questions:
             required: true
         - variable: group
           label: Group ID
-          description: The group ID that owns PrintHub files.
+          description: The group ID that owns STL Quest files.
           schema:
             type: int
             min: 568
@@ -132,7 +132,7 @@ questions:
       attrs:
         - variable: data
           label: App Data Storage
-          description: PrintHub's database, settings, and in-flight uploads.
+          description: STL Quest's database, settings, and in-flight uploads.
           schema:
             type: dict
             attrs:
@@ -208,7 +208,7 @@ questions:
                         required: true
                     - variable: auto_permissions
                       label: Automatic Permissions
-                      description: Allow TrueNAS to set the host path owner to the user and group required by PrintHub.
+                      description: Allow TrueNAS to set the host path owner to the user and group required by STL Quest.
                       schema:
                         type: boolean
                         default: false
@@ -216,7 +216,7 @@ questions:
         - variable: prints
           label: Print Files Storage
           description: |
-            Where your private resin and filament STL files live. PrintHub keeps them
+            Where your private resin and filament STL files live. STL Quest keeps them
             as plain files in production stage folders, so point this at the
             dataset where you want your print files.
           schema:
@@ -294,7 +294,7 @@ questions:
                         required: true
                     - variable: auto_permissions
                       label: Automatic Permissions
-                      description: Allow TrueNAS to set the host path owner to the user and group required by PrintHub.
+                      description: Allow TrueNAS to set the host path owner to the user and group required by STL Quest.
                       schema:
                         type: boolean
                         default: false
@@ -334,8 +334,8 @@ questions:
                         type: string
                         required: true
                         enum:
-                          - value: printhub
-                            description: printhub
+                          - value: stlquest
+                            description: stlquest
 
   - variable: resources
     label: ""
@@ -350,14 +350,14 @@ questions:
             attrs:
               - variable: cpus
                 label: CPUs
-                description: CPUs limit for PrintHub.
+                description: CPUs limit for STL Quest.
                 schema:
                   type: int
                   default: 2
                   required: true
               - variable: memory
                 label: Memory (in MB)
-                description: Memory limit for PrintHub.
+                description: Memory limit for STL Quest.
                 schema:
                   type: int
                   default: 4096

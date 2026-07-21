@@ -1,6 +1,6 @@
 services:
-  printhub:
-    image: ghcr.io/richardsolomou/printhub:latest
+  stlquest:
+    image: ghcr.io/richardsolomou/stl.quest:latest
     build:
       context: .
     restart: unless-stopped
@@ -11,7 +11,7 @@ services:
     ports:
       - '3010:3000'
     environment:
-      PRINTHUB_HOSTED: ${PRINTHUB_HOSTED:-false}
+      STLQUEST_HOSTED: ${STLQUEST_HOSTED:-}
       # Password authentication is enabled by default. Set false only after
       # configuring at least one social provider below.
       AUTH_PASSWORD_ENABLED: ${AUTH_PASSWORD_ENABLED:-true}

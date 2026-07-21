@@ -33,9 +33,9 @@ export class GoogleDriveAssetStore implements AssetStore {
   async initialize() {
     for (const folder of [
       ...workflow.statuses.map((status) => status.folder),
-      '.printhub/previews',
-      '.printhub/thumbnails',
-      '.printhub/trash',
+      '.stlquest/previews',
+      '.stlquest/thumbnails',
+      '.stlquest/trash',
     ]) {
       await this.folderId(folder, true)
     }
@@ -69,7 +69,7 @@ export class GoogleDriveAssetStore implements AssetStore {
   async write(relativePath: string, bytes: Uint8Array) {
     const parentId = await this.parentId(relativePath, true)
     const existing = await this.file(relativePath)
-    const boundary = `printhub-${crypto.randomUUID()}`
+    const boundary = `stlquest-${crypto.randomUUID()}`
     const metadata = JSON.stringify({ name: fileName(relativePath), ...(existing ? {} : { parents: [parentId] }) })
     const body = Buffer.concat([
       Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n`),
@@ -165,7 +165,7 @@ export class GoogleDriveAssetStore implements AssetStore {
 
   async trash(relativePath: string) {
     if (!(await this.file(relativePath))) return undefined
-    const next = `.printhub/trash/${crypto.randomUUID()}__${fileName(relativePath)}`
+    const next = `.stlquest/trash/${crypto.randomUUID()}__${fileName(relativePath)}`
     await this.ensureMoved(relativePath, next)
     return next
   }
@@ -183,14 +183,14 @@ export class GoogleDriveAssetStore implements AssetStore {
   }
 
   async sweepTrash() {
-    const trash = await this.folder('.printhub/trash')
+    const trash = await this.folder('.stlquest/trash')
     if (trash) await this.deleteFile(trash.id)
-    this.folderIds.delete(this.fullFolderPath('.printhub/trash'))
-    await this.folderId('.printhub/trash', true)
+    this.folderIds.delete(this.fullFolderPath('.stlquest/trash'))
+    await this.folderId('.stlquest/trash', true)
   }
 
   async writable() {
-    const probe = `.printhub/health-${crypto.randomUUID()}`
+    const probe = `.stlquest/health-${crypto.randomUUID()}`
     await this.write(probe, new Uint8Array([1]))
     const readable = await this.read(probe)
     await readable.stream.cancel()
@@ -208,7 +208,7 @@ export class GoogleDriveAssetStore implements AssetStore {
 
   private async folder(relativePath: string) {
     const segments = this.fullFolderPath(relativePath).split('/').filter(Boolean)
-    if (!segments.length) return { id: await this.rootFolderId(), name: 'PrintHub', mimeType: FOLDER_MIME }
+    if (!segments.length) return { id: await this.rootFolderId(), name: 'STL Quest', mimeType: FOLDER_MIME }
     const name = segments.pop()!
     const parent = await this.resolveFolders(segments, false).catch((error: NodeJS.ErrnoException) => {
       if (error.code === 'ENOENT') return undefined
@@ -262,13 +262,12 @@ export class GoogleDriveAssetStore implements AssetStore {
   }
 
   private async findRootFolder() {
-    const query = "appProperties has { key='printhubRoot' and value='true' } and trashed=false"
-    const existing = await this.list(query)
-    if (existing[0]) return existing[0].id
+    const current = await this.list("appProperties has { key='stlQuestRoot' and value='true' } and trashed=false")
+    if (current[0]) return current[0].id
     const response = await this.request(`${API}/files?fields=id,name,mimeType`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: 'PrintHub', mimeType: FOLDER_MIME, parents: ['root'], appProperties: { printhubRoot: 'true' } }),
+      body: JSON.stringify({ name: 'STL Quest', mimeType: FOLDER_MIME, parents: ['root'], appProperties: { stlQuestRoot: 'true' } }),
     })
     return ((await response.json()) as DriveFile).id
   }

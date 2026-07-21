@@ -1,6 +1,6 @@
 ---
 name: running-the-app
-description: Launch PrintHub locally and verify changes visually — dev server setup, admin bootstrap, and the screenshot norms UI changes are held to. Use when a change needs to be seen running, not just pass tests.
+description: Launch STL Quest locally and verify changes visually — dev server setup, admin bootstrap, and the screenshot norms UI changes are held to. Use when a change needs to be seen running, not just pass tests.
 ---
 
 # Running the app

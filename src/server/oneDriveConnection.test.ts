@@ -12,7 +12,7 @@ describe('OneDrive connection', () => {
   let repository: Repository
 
   beforeEach(() => {
-    dataDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'printhub-onedrive-connection-'))
+    dataDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'stlquest-onedrive-connection-'))
     previousDataDirectory = process.env.DATA_DIR
     process.env.DATA_DIR = dataDirectory
     const settings = new Map<string, unknown>()
@@ -42,7 +42,7 @@ describe('OneDrive connection', () => {
             : Response.json({ access_token: 'graph-access', expires_in: 3_600 })
         if (url.includes('/v1.0/me?$select='))
           return Response.json({ id: 'account-id', displayName: 'Print Owner', mail: 'owner@example.com' })
-        if (url.endsWith('/special/approot')) return Response.json({ id: 'root-id', name: 'PrintHub', folder: {} })
+        if (url.endsWith('/special/approot')) return Response.json({ id: 'root-id', name: 'STL Quest', folder: {} })
         if (url.includes(':/content')) {
           if (init?.method === 'PUT') {
             uploaded = true
@@ -53,11 +53,11 @@ describe('OneDrive connection', () => {
         if (init?.method === 'DELETE') return new Response(null, { status: 204 })
         if (url.endsWith('/children')) {
           folderCreated = true
-          return Response.json({ id: 'printhub-id', name: '.printhub', folder: {} })
+          return Response.json({ id: 'stlquest-id', name: '.stlquest', folder: {} })
         }
-        if (url.includes('items/root-id:/.printhub'))
+        if (url.includes('items/root-id:/.stlquest'))
           return folderCreated
-            ? Response.json({ id: 'printhub-id', name: '.printhub', folder: {} })
+            ? Response.json({ id: 'stlquest-id', name: '.stlquest', folder: {} })
             : Response.json({ error: { code: 'itemNotFound' } }, { status: 404 })
         return uploaded
           ? Response.json({ id: 'probe-id', name: 'health', size: 1 })

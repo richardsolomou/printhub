@@ -1,6 +1,6 @@
-# Contributing to PrintHub
+# Contributing to STL Quest
 
-Thanks for helping! PrintHub aims to stay a small, hackable codebase. Check existing issues before starting substantial work, and open one first when the scope or product direction needs discussion. Conventions for coding agents live in [AGENTS.md](AGENTS.md).
+Thanks for helping! STL Quest aims to stay a small, hackable codebase. Check existing issues before starting substantial work, and open one first when the scope or product direction needs discussion. Conventions for coding agents live in [AGENTS.md](AGENTS.md).
 
 ## Development setup
 
@@ -29,7 +29,7 @@ Run `pnpm test:e2e:screenshots` when you need the manual inspection screenshots 
 
 The storage contract tests run against a real S3 endpoint when `MINIO_TEST_URL`, `MINIO_TEST_ACCESS_KEY`, and `MINIO_TEST_SECRET_KEY` are set; they skip otherwise. CI runs this contract weekly and on manual workflow dispatch against the pinned MinIO image.
 
-Smoke-test the online backup command against disposable data with `DATA_DIR=/tmp/printhub-test pnpm backup --output /tmp/printhub-backup.sqlite`. Its CLI help is covered by `pnpm check:cli`.
+Smoke-test the online backup command against disposable data with `DATA_DIR=/tmp/stlquest-test pnpm backup --output /tmp/stlquest-backup.sqlite`. Its CLI help is covered by `pnpm check:cli`.
 
 The predefined printer catalog is generated from pinned third-party sources and exact official manufacturer pages. Run `pnpm catalog:sync` to reproduce the committed snapshot, `pnpm catalog:update-images` to refresh pinned image sources and live manufacturer data, or `pnpm catalog:update` to advance GitHub source revisions and regenerate everything. `pnpm catalog:check` validates the committed snapshot, provenance, and required licenses without network access.
 
@@ -37,7 +37,7 @@ The predefined printer catalog is generated from pinned third-party sources and 
 
 Run `pnpm changeset` in pull requests that change the released application. Choose the appropriate patch, minor, or major bump and write a concise user-visible summary. Changes that only affect documentation, tests, refactoring, or release tooling do not need a changeset unless they affect application behavior.
 
-When changesets reach `main`, CI updates `package.json`, `deploy/truenas/printhub/app.yaml`, and `CHANGELOG.md`; creates the matching Git tag and GitHub Release; and publishes the multi-architecture container as `latest`, the release tag, and an immutable `sha-…` tag. PrintHub is not published to npm or another package registry.
+When changesets reach `main`, CI updates `package.json`, `deploy/truenas/stlquest/app.yaml`, and `CHANGELOG.md`; creates the matching Git tag and GitHub Release; and publishes the multi-architecture container as `latest`, the release tag, and an immutable `sha-…` tag. STL Quest is not published to npm or another package registry.
 
 ## Database changes
 
@@ -63,7 +63,7 @@ Commit the generated files under `drizzle/`. Never edit a migration that may alr
 
 ## Conventions
 
-- Keep PrintHub focused on self-hosted request intake and queue management. Payments, shipping, slicing, printer control, and general-purpose automation belong outside the core application.
+- Keep STL Quest focused on self-hosted request intake and queue management. Payments, shipping, slicing, printer control, and general-purpose automation belong outside the core application.
 - Database changes use generated Drizzle migrations; never edit a migration that may already have been applied.
 - Product configuration belongs in **Settings** and the `settings` table. Environment variables are reserved for filesystem paths, operational controls, recovery, and read-only managed-deployment overrides.
 - Server-side state changes publish a typed `AppEvent` (see `src/core/types.ts`); additions are fine, renames are breaking.

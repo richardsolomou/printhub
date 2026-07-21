@@ -239,7 +239,7 @@ function InvitePage() {
             <CardHeader>
               <CardTitle>Invite not valid</CardTitle>
               <CardDescription>
-                This invite link has been used, revoked, or has expired. Ask the person who runs this PrintHub for a new one.
+                This invite link has been used, revoked, or has expired. Ask the person who runs this STL Quest for a new one.
               </CardDescription>
             </CardHeader>
           </Card>
