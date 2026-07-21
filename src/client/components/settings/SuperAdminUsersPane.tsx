@@ -197,7 +197,7 @@ function ImpersonateUserDialog({ user, onDone }: { user: Account; onDone: () => 
   const mutation = useMutation({
     mutationFn: async () => {
       const { error } = await authClient.admin.impersonateUser({ userId: user.id })
-      if (error) throw new Error(`Could not view PrintHub as ${user.name}.`)
+      if (error) throw new Error(`Could not view STL Quest as ${user.name}.`)
     },
     onSuccess: () => window.location.assign('/'),
   })
@@ -206,7 +206,7 @@ function ImpersonateUserDialog({ user, onDone }: { user: Account; onDone: () => 
     <DialogShell title="View as user" onClose={onDone} preventClose={mutation.isPending}>
       <UserSummary user={user} />
       <p className="text-sm text-muted-foreground">
-        You’ll use PrintHub with this user’s permissions for up to one hour, or until you exit impersonation.
+        You’ll use STL Quest with this user’s permissions for up to one hour, or until you exit impersonation.
       </p>
       <FieldError>{mutation.error?.message}</FieldError>
       <div className="flex flex-wrap justify-end gap-2">

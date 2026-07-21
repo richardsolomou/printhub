@@ -8,7 +8,7 @@ describe('storageDirectories', () => {
   let root: string
 
   beforeEach(async () => {
-    root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-directories-'))
+    root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-directories-'))
   })
 
   afterEach(async () => fs.promises.rm(root, { recursive: true, force: true }))

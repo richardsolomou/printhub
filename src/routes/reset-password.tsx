@@ -33,7 +33,7 @@ function ResetPasswordPage() {
         <Card>
           <CardHeader>
             <CardTitle>Reset password</CardTitle>
-            <CardDescription>Choose a new password for your PrintHub account.</CardDescription>
+            <CardDescription>Choose a new password for your STL Quest account.</CardDescription>
           </CardHeader>
           <CardContent>
             <form

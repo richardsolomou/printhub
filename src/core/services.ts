@@ -24,7 +24,7 @@ import { automaticallyAssignedPrinter, normalizePrinterProfile, printerFitsModel
 export type NewRequestInput = Omit<NewPrintRequest, 'ownerUserId'>
 export type NewUploadedRequestInput = Omit<NewRequestInput, 'filePath' | 'previewPath' | 'thumbnailPath'>
 
-export class PrintHubService {
+export class STLQuestService {
   constructor(
     private repository: Repository,
     private assets: AssetStore,

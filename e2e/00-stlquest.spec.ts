@@ -17,13 +17,13 @@ test('manages a fair print queue and assigns work to printers', async ({ page })
   const printerName = 'Resin Station With A Long Descriptive Name'
   await optimizePageForE2E(page)
   await page.goto('/')
-  await page.getByRole('button', { name: 'Set up PrintHub' }).click()
+  await page.getByRole('button', { name: 'Set up STL Quest' }).click()
   await page.getByLabel('Name').fill('Owner')
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Password').fill(password)
   await page.getByLabel('Password').press('Enter')
 
-  await expect(page.getByText('PrintHub has been updated. Refresh to use the latest version.')).toHaveCount(0)
+  await expect(page.getByText('STL Quest has been updated. Refresh to use the latest version.')).toHaveCount(0)
   await expect(page.getByRole('heading', { name: 'Choose storage' })).toBeVisible()
   await page.getByRole('button', { name: 'Skip storage for now' }).click()
   await expect(page.getByRole('heading', { name: 'Add your printers' })).toBeVisible()
@@ -35,7 +35,7 @@ test('manages a fair print queue and assigns work to printers', async ({ page })
   await choose(page.getByLabel('Adapter'), 'Remote folder (WebDAV)')
   await expect(page.getByText('A normal folder on hardware you control')).toBeVisible()
   await expect(page.getByLabel('WebDAV endpoint')).toHaveAttribute('placeholder', 'https://storage.example.com/dav')
-  await expect(page.getByLabel('Folder')).toHaveValue('printhub')
+  await expect(page.getByLabel('Folder')).toHaveValue('stlquest')
   await screenshot(page, 'remote-folder-storage')
   await choose(page.getByLabel('Adapter'), 'Local folder')
   await page.getByRole('button', { name: 'Save storage' }).click()
@@ -292,7 +292,7 @@ test('health and protected routes expose security and correlation headers', asyn
 test('super admin routes redirect unauthenticated users', async ({ page }) => {
   await page.goto('/admin/integrations')
   await expect(page).toHaveURL(/\/$/)
-  await expect(page.getByRole('button', { name: /^(Set up PrintHub|Sign in)$/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^(Set up STL Quest|Sign in)$/ })).toBeVisible()
 })
 
 async function fillPrinter(printer: Locator, values: { name: string; printType: 'Resin' | 'Filament' }) {

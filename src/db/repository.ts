@@ -21,8 +21,9 @@ import {
   storedPrinterProfiles,
 } from '../core/printers'
 import { backupDatabase } from './backup'
-import { closeDatabase, databaseFile, openDatabase, type PrintHubDatabase } from './connection'
+import { closeDatabase, databaseFile, openDatabase, type STLQuestDatabase } from './connection'
 import { migrateDatabase } from './migrations'
+import { databasePath } from './paths'
 import {
   assetGenerationJobs,
   deploymentSettings,
@@ -40,16 +41,16 @@ import {
 import { mapAssetGenerationJob, mapRequest, type RequestRow } from './repository/mappers'
 import { requestConditions, requestOrderBy, requestSelection, type RequestFilterOptions } from './repository/requestQuery'
 
-type DatabaseTransaction = Parameters<Parameters<PrintHubDatabase['transaction']>[0]>[0]
-type DatabaseExecutor = PrintHubDatabase | DatabaseTransaction
+type DatabaseTransaction = Parameters<Parameters<STLQuestDatabase['transaction']>[0]>[0]
+type DatabaseExecutor = STLQuestDatabase | DatabaseTransaction
 
 export class DrizzleRepository implements Repository {
-  readonly database: PrintHubDatabase
+  readonly database: STLQuestDatabase
   readonly workspaceId?: string
   private readonly ownsDatabase: boolean
   private lastIntegrity = { integrity: 'unknown', checkedAt: 0 }
 
-  constructor(database: PrintHubDatabase, options: { workspaceId?: string; initialize?: boolean; ownsDatabase?: boolean } = {}) {
+  constructor(database: STLQuestDatabase, options: { workspaceId?: string; initialize?: boolean; ownsDatabase?: boolean } = {}) {
     this.database = database
     this.workspaceId = options.workspaceId
     this.ownsDatabase = options.ownsDatabase ?? true
@@ -117,7 +118,7 @@ export class DrizzleRepository implements Repository {
     const directory = path.join(path.dirname(file), 'backups')
     fs.mkdirSync(directory, { recursive: true })
     const timestamp = new Date().toISOString().replaceAll(':', '-')
-    this.database.run(sql`VACUUM INTO ${path.join(directory, `printhub-pre-migration-${timestamp}.sqlite`)}`)
+    this.database.run(sql`VACUUM INTO ${path.join(directory, `stlquest-pre-migration-${timestamp}.sqlite`)}`)
   }
 
   listRequests() {
@@ -1719,8 +1720,4 @@ function workspaceSlug(name: string) {
 
 function workspaceNameKey(name: string) {
   return name.trim().normalize('NFKC').toLocaleLowerCase('en-US')
-}
-
-export function databasePath() {
-  return path.join(path.resolve(process.env.DATA_DIR ?? '/data'), 'printhub.sqlite')
 }

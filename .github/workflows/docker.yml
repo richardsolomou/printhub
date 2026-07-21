@@ -40,7 +40,7 @@ jobs:
       matrix:
         include:
           - suite: journey
-            spec: e2e/printhub.spec.ts
+            spec: e2e/00-stlquest.spec.ts
           - suite: request ordering
             spec: e2e/request-ordering.spec.ts
     steps:

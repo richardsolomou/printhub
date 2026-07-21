@@ -22,7 +22,7 @@ import appCss from '../styles.css?url'
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
-    meta: [{ charSet: 'utf-8' }, { name: 'viewport', content: 'width=device-width, initial-scale=1' }, { title: 'PrintHub' }],
+    meta: [{ charSet: 'utf-8' }, { name: 'viewport', content: 'width=device-width, initial-scale=1' }, { title: 'STL Quest' }],
     links: [
       { rel: 'icon', type: 'image/svg+xml', href: faviconHref(__APP_VERSION__) },
       { rel: 'stylesheet', href: appCss },

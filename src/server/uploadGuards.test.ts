@@ -18,11 +18,11 @@ describe('upload guards', () => {
   })
 
   it('accepts uploads from the configured public origin behind a reverse proxy', () => {
-    vi.stubEnv('BETTER_AUTH_TRUSTED_ORIGINS', 'https://printhub.ras.sh')
+    vi.stubEnv('BETTER_AUTH_TRUSTED_ORIGINS', 'https://stlquest.ras.sh')
     expect(
       validSameOrigin(
         new Request('http://localhost:3000/api/upload', {
-          headers: { origin: 'https://printhub.ras.sh', 'sec-fetch-site': 'same-origin' },
+          headers: { origin: 'https://stlquest.ras.sh', 'sec-fetch-site': 'same-origin' },
         }),
       ),
     ).toBe(true)
@@ -33,9 +33,9 @@ describe('upload guards', () => {
       validSameOrigin(
         new Request('http://localhost:3000/api/upload', {
           headers: {
-            origin: 'https://printhub.ras.sh',
+            origin: 'https://stlquest.ras.sh',
             'sec-fetch-site': 'same-origin',
-            'x-forwarded-host': 'printhub.ras.sh',
+            'x-forwarded-host': 'stlquest.ras.sh',
             'x-forwarded-proto': 'https',
           },
         }),
@@ -48,8 +48,8 @@ describe('upload guards', () => {
       validSameOrigin(
         new Request('http://localhost:3000/api/upload', {
           headers: {
-            host: 'printhub.ras.sh',
-            origin: 'https://printhub.ras.sh',
+            host: 'stlquest.ras.sh',
+            origin: 'https://stlquest.ras.sh',
             'sec-fetch-site': 'same-origin',
             'x-forwarded-proto': 'https',
           },
@@ -64,8 +64,8 @@ describe('upload guards', () => {
         new Request('http://localhost:3000/api/upload/upload-id', {
           method: 'HEAD',
           headers: {
-            host: 'printhub.ras.sh',
-            referer: 'https://printhub.ras.sh/',
+            host: 'stlquest.ras.sh',
+            referer: 'https://stlquest.ras.sh/',
             'sec-fetch-site': 'same-origin',
             'x-forwarded-proto': 'https',
           },
@@ -92,7 +92,7 @@ describe('upload guards', () => {
           headers: {
             origin: 'https://evil.test',
             'sec-fetch-site': 'same-origin',
-            'x-forwarded-host': 'printhub.ras.sh',
+            'x-forwarded-host': 'stlquest.ras.sh',
             'x-forwarded-proto': 'https',
           },
         }),

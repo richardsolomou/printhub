@@ -12,10 +12,10 @@ describe('data directory safety', () => {
   })
 
   it('allows exactly one live process lease and releases it cleanly', async () => {
-    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-lock-'))
+    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-lock-'))
     const directory = temporary
     const lease = acquireDataDirectoryLease(directory)
-    expect(() => acquireDataDirectoryLease(directory)).toThrow('another PrintHub process')
+    expect(() => acquireDataDirectoryLease(directory)).toThrow('another STL Quest process')
     lease.release()
     const replacement = acquireDataDirectoryLease(temporary)
     replacement.release()
@@ -23,7 +23,7 @@ describe('data directory safety', () => {
   })
 
   it('releases the operating system lock idempotently', async () => {
-    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-lock-'))
+    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-lock-'))
     const lease = acquireDataDirectoryLease(temporary)
     lease.release()
     expect(() => lease.release()).not.toThrow()

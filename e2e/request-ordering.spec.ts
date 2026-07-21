@@ -108,7 +108,7 @@ test('requesters own queue priority while admins move work between stages', asyn
 
 async function enterAdminWorkspace(page: Page) {
   await page.goto('/')
-  const setupButton = page.getByRole('button', { name: 'Set up PrintHub' })
+  const setupButton = page.getByRole('button', { name: 'Set up STL Quest' })
   const signInButton = page.getByRole('button', { name: 'Sign in', exact: true })
   await expect(setupButton.or(signInButton)).toBeVisible()
   if (await signInButton.isVisible()) {

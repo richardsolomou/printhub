@@ -25,7 +25,7 @@ export function acquireDataDirectoryLease(dataDirectory = path.resolve(process.e
     database.run(sql`BEGIN EXCLUSIVE`)
   } catch (error) {
     closeDatabase(database)
-    throw new Error(`another PrintHub process is already using ${dataDirectory}`, { cause: error })
+    throw new Error(`another STL Quest process is already using ${dataDirectory}`, { cause: error })
   }
   let released = false
   return {

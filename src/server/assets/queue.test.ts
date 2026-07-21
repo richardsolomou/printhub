@@ -27,7 +27,7 @@ describe('asset generation queue', () => {
   let queue: AssetGenerationQueue
 
   beforeEach(async () => {
-    root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-assets-'))
+    root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-assets-'))
     repository = new DrizzleRepository(createDatabase(':memory:'))
     repository.database
       .insert(user)

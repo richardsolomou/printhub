@@ -1,6 +1,6 @@
 # Deployment guide
 
-Operational reference for self-hosting PrintHub. For a quick start, see the [README](../README.md).
+Operational reference for self-hosting STL Quest. For a quick start, see the [README](../README.md).
 
 ## Environment variables
 
@@ -10,8 +10,9 @@ Product configuration lives in the app (Workspace Settings and the Super Admin a
 | --------------------------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `DATA_DIR`                                                            | `/data`   | Database, pre-migration database snapshots, upload staging, and the generated integration encryption key.                       |
 | `PRINTS_DIR`                                                          | `/prints` | Default local model-storage root used until a workspace storage setting is saved.                                               |
-| `PRINTHUB_HOSTED`                                                     | `false`   | Enables hosted signup semantics, restricts tenant storage, and does not assign a super admin.                                   |
-| `BETTER_AUTH_URL`                                                     | —         | Public HTTP or HTTPS origin. Required when `PRINTHUB_HOSTED=true` and recommended behind any reverse proxy or custom domain.    |
+| `STLQUEST_HOSTED`                                                     | `false`   | Enables hosted signup semantics, restricts tenant storage, and does not assign a super admin.                                   |
+| `PRINTHUB_HOSTED`                                                     | —         | Deprecated compatibility alias for `STLQUEST_HOSTED`.                                                                           |
+| `BETTER_AUTH_URL`                                                     | —         | Public HTTP or HTTPS origin. Required when `STLQUEST_HOSTED=true` and recommended behind any reverse proxy or custom domain.    |
 | `BETTER_AUTH_TRUSTED_ORIGINS`                                         | —         | Additional trusted origins, comma-separated.                                                                                    |
 | `AUTH_PASSWORD_ENABLED`                                               | stored    | Overrides the Super Admin setting for password sign-in. Defaults to enabled when neither source has a value.                    |
 | `AUTH_PASSWORD_RECOVERY`                                              | `false`   | Forces password sign-in on regardless of stored settings or `AUTH_PASSWORD_ENABLED`; see [Account recovery](#account-recovery). |
@@ -24,7 +25,7 @@ Product configuration lives in the app (Workspace Settings and the Super Admin a
 | `INTEGRATIONS_ENCRYPTION_KEY`                                         | —         | Base64url-encoded 32-byte key used instead of the generated `/data/integration-secrets.key` file.                               |
 | `LOG_LEVEL`                                                           | `info`    | Pino log level.                                                                                                                 |
 
-Provider credentials are accepted only as complete client ID/client secret pairs, and SMTP authentication requires `SMTP_USER` and `SMTP_PASSWORD` together. If password sign-in is disabled, at least one social provider must remain enabled or startup fails. See `.env.example` for a Compose-oriented template; `DATA_HOST_DIR`, `PRINTS_HOST_DIR`, `PUID`, and `PGID` are Compose substitutions rather than variables read by PrintHub itself.
+Provider credentials are accepted only as complete client ID/client secret pairs, and SMTP authentication requires `SMTP_USER` and `SMTP_PASSWORD` together. If password sign-in is disabled, at least one social provider must remain enabled or startup fails. See `.env.example` for a Compose-oriented template; `DATA_HOST_DIR`, `PRINTS_HOST_DIR`, `PUID`, and `PGID` are Compose substitutions rather than variables read by STL Quest itself.
 
 ## Reverse proxy
 
@@ -38,7 +39,7 @@ nginx:
 
 ```nginx
 server {
-  server_name printhub.example.com;
+  server_name stlquest.example.com;
   client_max_body_size 64m;
 
   location / {
@@ -62,7 +63,7 @@ server {
 Caddy sets the forwarded headers, streams responses, and imposes no body limit by default:
 
 ```text
-printhub.example.com {
+stlquest.example.com {
   reverse_proxy 127.0.0.1:3010
 }
 ```
@@ -71,8 +72,8 @@ Traefik likewise needs no body-size or buffering overrides; route to the contain
 
 ```yaml
 labels:
-  - traefik.http.routers.printhub.rule=Host(`printhub.example.com`)
-  - traefik.http.services.printhub.loadbalancer.server.port=3000
+  - traefik.http.routers.stlquest.rule=Host(`stlquest.example.com`)
+  - traefik.http.services.stlquest.loadbalancer.server.port=3000
 ```
 
 ## Health checks
@@ -81,7 +82,7 @@ labels:
 
 ## Storage and secrets
 
-Dropbox uses scoped App folder access, Google Drive uses the limited `drive.file` scope, and OneDrive stores files in its application folder. Workspace storage settings, OAuth client secrets, and refresh tokens are encrypted in the database. By default PrintHub generates `/data/integration-secrets.key`; keep that file with database backups. When `INTEGRATIONS_ENCRYPTION_KEY` is set, the file is not used and the exact environment-provided key must be backed up separately and restored before starting PrintHub against the database.
+Dropbox uses scoped App folder access, Google Drive uses the limited `drive.file` scope, and OneDrive stores files in its application folder. Workspace storage settings, OAuth client secrets, and refresh tokens are encrypted in the database. By default STL Quest generates `/data/integration-secrets.key`; keep that file with database backups. When `INTEGRATIONS_ENCRYPTION_KEY` is set, the file is not used and the exact environment-provided key must be backed up separately and restored before starting STL Quest against the database.
 
 Keep `/data` on a local filesystem. SQLite WAL databases should not be placed on NFS, SMB, or CIFS.
 
@@ -94,7 +95,7 @@ Automatic migrations create a SQLite snapshot under `/data/backups` immediately 
 For a consistent database backup while the app is running, use the online backup command from a source checkout on the host (the container image does not ship it). It snapshots the live database through SQLite's backup API and copies `/data/integration-secrets.key` alongside when that file exists:
 
 ```sh
-DATA_DIR=/path/to/appdata pnpm backup --output /path/to/backups/printhub.sqlite
+DATA_DIR=/path/to/appdata pnpm backup --output /path/to/backups/stlquest.sqlite
 ```
 
 The command does not copy model storage. If `INTEGRATIONS_ENCRYPTION_KEY` supplies the key, store that secret in your backup system separately because there is no key file for the command to copy.
@@ -103,7 +104,7 @@ The command does not copy model storage. If `INTEGRATIONS_ENCRYPTION_KEY` suppli
 
 1. Stop the container.
 2. Restore the local storage root or the matching remote bucket/folder state from the same recovery point as the database.
-3. Replace `/data/printhub.sqlite` with the database backup, and delete any leftover `printhub.sqlite-wal` and `printhub.sqlite-shm` files so stale write-ahead state is not applied to the restored database.
+3. Replace `/data/stlquest.sqlite` with the database backup, and delete any leftover `stlquest.sqlite-wal` and `stlquest.sqlite-shm` files so stale write-ahead state is not applied to the restored database. Upgraded installations that still use `printhub.sqlite` should restore to that existing filename instead.
 4. Restore the matching `/data/integration-secrets.key`, or configure the exact backed-up `INTEGRATIONS_ENCRYPTION_KEY`, before startup. The wrong or missing key prevents encrypted storage and integration settings from being read.
 5. Start the container. If the backup predates the current version, migrations run automatically on boot.
 

@@ -1,1 +1,2 @@
-export { closeDatabase, createDatabase, databaseFile, openDatabase, type PrintHubDatabase } from './connection'
+export { closeDatabase, createDatabase, databaseFile, openDatabase, type STLQuestDatabase } from './connection'
+export { databasePath } from './paths'

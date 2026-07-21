@@ -12,7 +12,7 @@ import packageJson from './package.json'
 // header for API paths routes them like any other request. Production serves
 // everything through one handler and does not need this.
 const devApiImages: Plugin = {
-  name: 'printhub-dev-api-images',
+  name: 'stlquest-dev-api-images',
   configureServer(server) {
     server.middlewares.use((req, _res, next) => {
       if (req.url?.startsWith('/api/') && req.headers['sec-fetch-dest'] === 'image') delete req.headers['sec-fetch-dest']

@@ -9,13 +9,13 @@ export function Brand({ className, ...props }: ComponentProps<'span'>) {
       {...props}
     >
       <img src={faviconHref(__APP_VERSION__)} alt="" aria-hidden="true" className="size-[1.15em] shrink-0" />
-      PrintHub
+      STL Quest
     </span>
   )
 }
 
 export function RailBrand({ className, ...props }: ComponentProps<'img'>) {
-  return <img src={faviconHref(__APP_VERSION__)} alt="PrintHub" className={cn('size-8 shrink-0', className)} {...props} />
+  return <img src={faviconHref(__APP_VERSION__)} alt="STL Quest" className={cn('size-8 shrink-0', className)} {...props} />
 }
 
 export function AuthBrand() {

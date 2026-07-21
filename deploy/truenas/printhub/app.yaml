@@ -7,7 +7,7 @@ categories:
 changelog_url: https://github.com/richardsolomou/printhub/releases
 date_added: '2026-07-21'
 description: >-
-  PrintHub is a private, self-hosted 3D-print request and production queue for
+  STL Quest is a private, self-hosted 3D-print request and production queue for
   resin and filament printers. Accept STL requests, order work fairly, assign
   compatible models across mixed printer fleets, and track each copy while files
   stay on storage you control.
@@ -39,6 +39,6 @@ sources:
   - https://apps.truenas.com/catalog/printhub_community/
   - https://github.com/richardsolomou/printhub
   - https://github.com/richardsolomou/printhub/pkgs/container/printhub
-title: PrintHub
+title: STL Quest
 train: community
 version: 1.0.0

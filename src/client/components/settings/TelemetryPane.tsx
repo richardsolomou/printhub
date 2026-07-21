@@ -39,7 +39,7 @@ export function TelemetryPane() {
     <SettingsPage>
       <SettingsHeader
         title="Telemetry"
-        description="PrintHub sends anonymous usage events to help improve the app. Model geometry, request details, names, and email addresses are never included."
+        description="STL Quest sends anonymous usage events to help improve the app. Model geometry, request details, names, and email addresses are never included."
       />
       <SettingsSection>
         <Field orientation="horizontal">

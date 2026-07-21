@@ -12,7 +12,7 @@ ARG VITE_POSTHOG_PROJECT_TOKEN
 RUN pnpm build
 
 FROM node:24-alpine
-LABEL org.opencontainers.image.title="PrintHub" \
+LABEL org.opencontainers.image.title="STL Quest" \
       org.opencontainers.image.description="Self-hosted 3D print request queue" \
       org.opencontainers.image.source="https://github.com/richardsolomou/printhub" \
       org.opencontainers.image.licenses="MIT"

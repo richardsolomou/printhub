@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <Container version="2">
-  <Name>PrintHub</Name>
+  <Name>STL Quest</Name>
   <Repository>ghcr.io/richardsolomou/printhub:latest</Repository>
   <Registry>https://github.com/richardsolomou/printhub/pkgs/container/printhub</Registry>
   <Network>bridge</Network>
@@ -14,7 +14,7 @@
   <Category>Productivity: Tools:Utilities</Category>
   <WebUI>http://[IP]:[PORT:3000]/</WebUI>
   <Icon>https://raw.githubusercontent.com/richardsolomou/printhub/main/public/favicon.svg</Icon>
-  <Config Name="WebUI Port" Target="3000" Default="3010" Mode="tcp" Description="Port for the PrintHub web interface." Type="Port" Display="always" Required="true" Mask="false">3010</Config>
-  <Config Name="App data" Target="/data" Default="/mnt/user/appdata/printhub" Mode="rw" Description="PrintHub's database and settings. Keep on appdata." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/printhub</Config>
-  <Config Name="Print files" Target="/prints" Default="" Mode="rw" Description="Share where your private resin and filament STL files live. PrintHub keeps them as plain files organized by production stage." Type="Path" Display="always" Required="true" Mask="false"></Config>
+  <Config Name="WebUI Port" Target="3000" Default="3010" Mode="tcp" Description="Port for the STL Quest web interface." Type="Port" Display="always" Required="true" Mask="false">3010</Config>
+  <Config Name="App data" Target="/data" Default="/mnt/user/appdata/printhub" Mode="rw" Description="STL Quest's database and settings. Keep on appdata." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/printhub</Config>
+  <Config Name="Print files" Target="/prints" Default="" Mode="rw" Description="Share where your private resin and filament STL files live. STL Quest keeps them as plain files organized by production stage." Type="Path" Display="always" Required="true" Mask="false"></Config>
 </Container>

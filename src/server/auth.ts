@@ -5,7 +5,7 @@ import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { admin as superAdminPlugin, organization, twoFactor } from 'better-auth/plugins'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { sql } from 'drizzle-orm'
-import type { PrintHubDatabase } from '../db'
+import type { STLQuestDatabase } from '../db'
 import { schema, user as userTable } from '../db/schema'
 import { accessControl, accessRoles } from '../core/access'
 import type { AuthAdapterConfig } from '../core/auth'
@@ -13,6 +13,7 @@ import { PASSWORD_MIN_LENGTH } from '../core/security'
 import type { Invite } from '../core/types'
 import type { EmailDelivery } from '../adapters/email'
 import { authProvisioningAllowed, claimAuthInvite, claimedAuthInvite } from './authInvite'
+import { hostedDeployment } from './hosted'
 
 function passwordFromMutation(path: string, body: unknown) {
   if (!body || typeof body !== 'object') return undefined
@@ -23,7 +24,7 @@ function passwordFromMutation(path: string, body: unknown) {
 }
 
 export function createAuth(
-  database: PrintHubDatabase,
+  database: STLQuestDatabase,
   secret: string,
   options?: {
     onUserCreated?: () => void
@@ -82,9 +83,9 @@ export function createAuth(
         ? async ({ user, url }) => {
             await options.email!.send({
               to: user.email,
-              subject: 'Reset your PrintHub password',
-              text: `Reset your PrintHub password using this link: ${url}\n\nThis link expires in one hour.`,
-              html: `<p>Reset your PrintHub password using the link below.</p><p><a href="${url}">Reset password</a></p><p>This link expires in one hour.</p>`,
+              subject: 'Reset your STL Quest password',
+              text: `Reset your STL Quest password using this link: ${url}\n\nThis link expires in one hour.`,
+              html: `<p>Reset your STL Quest password using the link below.</p><p><a href="${url}">Reset password</a></p><p>This link expires in one hour.</p>`,
             })
           }
         : undefined,
@@ -110,7 +111,7 @@ export function createAuth(
             return { data: { ...user, role: 'requester' } }
           },
           after: async (user) => {
-            if (process.env.PRINTHUB_HOSTED !== 'true') claimInitialSuperAdmin()
+            if (!hostedDeployment()) claimInitialSuperAdmin()
             const invite = claimedAuthInvite()
             if (invite) options?.completeInvite?.(invite.id, user.id)
             options?.onUserCreated?.()
@@ -155,7 +156,7 @@ export function createAuth(
           },
         },
       }),
-      twoFactor({ issuer: 'PrintHub', allowPasswordless: true }),
+      twoFactor({ issuer: 'STL Quest', allowPasswordless: true }),
       tanstackStartCookies(),
     ],
   })

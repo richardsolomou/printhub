@@ -1,4 +1,4 @@
-import { Box, CircleDot, Code2 } from 'lucide-react'
+import { Box, CircleDot, Code2, Globe } from 'lucide-react'
 import { FieldDescription } from '@/components/ui/field'
 import { Item, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Brand } from '../Brand'
@@ -17,6 +17,22 @@ export function AboutPane() {
       </SettingsSection>
       <SettingsSection title="Project links">
         <ItemGroup>
+          <Item
+            variant="outline"
+            render={
+              <a href="https://stl.quest" target="_blank" rel="noreferrer">
+                Website
+              </a>
+            }
+          >
+            <ItemMedia variant="icon">
+              <Globe />
+            </ItemMedia>
+            <ItemContent>
+              <ItemTitle>stl.quest</ItemTitle>
+              <ItemDescription>Visit the official STL Quest website</ItemDescription>
+            </ItemContent>
+          </Item>
           <Item
             variant="outline"
             render={
@@ -68,7 +84,7 @@ export function AboutPane() {
         </ItemGroup>
       </SettingsSection>
       <FieldDescription>
-        PrintHub is open source under the MIT License. It has no hosted service or mandatory cloud account, and anonymous telemetry can be
+        STL Quest is open source under the MIT License. It has no hosted service or mandatory cloud account, and anonymous telemetry can be
         disabled at any time.
       </FieldDescription>
     </SettingsPage>

@@ -22,20 +22,20 @@ describe('tus upload transport', () => {
 
   afterEach(async () => {
     delete process.env.DATA_DIR
-    delete process.env.PRINTHUB_HOSTED
+    delete process.env.STLQUEST_HOSTED
     delete process.env.BETTER_AUTH_URL
-    const singleton = globalThis as typeof globalThis & { __printhub?: Promise<{ repository: { close(): void } }> }
-    const running = singleton.__printhub
-    delete singleton.__printhub
+    const singleton = globalThis as typeof globalThis & { __stlquest?: Promise<{ repository: { close(): void } }> }
+    const running = singleton.__stlquest
+    delete singleton.__stlquest
     if (running) (await running.catch(() => undefined))?.repository.close()
     vi.resetModules()
     if (temporary) await fs.promises.rm(temporary, { recursive: true, force: true })
   })
 
   it('rejects uploads to fallback local storage in hosted mode', async () => {
-    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-tus-hosted-'))
+    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-tus-hosted-'))
     process.env.DATA_DIR = path.join(temporary, 'data')
-    process.env.PRINTHUB_HOSTED = 'true'
+    process.env.STLQUEST_HOSTED = 'true'
     process.env.BETTER_AUTH_URL = 'http://print.test'
 
     const { app } = await import('./app')
@@ -68,11 +68,11 @@ describe('tus upload transport', () => {
   })
 
   it('creates, completes, and safely resumes an authenticated upload', async () => {
-    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-tus-'))
+    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-tus-'))
     process.env.DATA_DIR = path.join(temporary, 'data')
     const prints = path.join(temporary, 'prints')
     const { DrizzleRepository } = await import('../db/repository')
-    const repository = DrizzleRepository.open(path.join(process.env.DATA_DIR, 'printhub.sqlite'))
+    const repository = DrizzleRepository.open(path.join(process.env.DATA_DIR, 'stlquest.sqlite'))
     repository.setSetting('storage', { adapter: 'local', root: prints })
     repository.close()
 
@@ -131,10 +131,10 @@ describe('tus upload transport', () => {
   })
 
   it('rejects an in-flight upload after the active workspace changes', async () => {
-    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-tus-workspace-switch-'))
+    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-tus-workspace-switch-'))
     process.env.DATA_DIR = path.join(temporary, 'data')
     const { DrizzleRepository } = await import('../db/repository')
-    const repository = DrizzleRepository.open(path.join(process.env.DATA_DIR, 'printhub.sqlite'))
+    const repository = DrizzleRepository.open(path.join(process.env.DATA_DIR, 'stlquest.sqlite'))
     repository.setSetting('storage', { adapter: 'local', root: path.join(temporary, 'primary-prints') })
     repository.close()
 
@@ -183,11 +183,11 @@ describe('tus upload transport', () => {
   })
 
   it('automatically assigns uploads to a compatible printer', async () => {
-    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-tus-mixed-'))
+    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-tus-mixed-'))
     process.env.DATA_DIR = path.join(temporary, 'data')
     const prints = path.join(temporary, 'prints')
     const { DrizzleRepository } = await import('../db/repository')
-    const repository = DrizzleRepository.open(path.join(process.env.DATA_DIR, 'printhub.sqlite'))
+    const repository = DrizzleRepository.open(path.join(process.env.DATA_DIR, 'stlquest.sqlite'))
     repository.setSetting('storage', { adapter: 'local', root: prints })
     repository.setSetting('plate-planner-profiles', [
       {
@@ -269,10 +269,10 @@ describe('tus upload transport', () => {
   })
 
   it('removes incomplete TUS data and metadata when the owner account is deleted', async () => {
-    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-tus-delete-'))
+    temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-tus-delete-'))
     process.env.DATA_DIR = path.join(temporary, 'data')
     const { DrizzleRepository } = await import('../db/repository')
-    const repository = DrizzleRepository.open(path.join(process.env.DATA_DIR, 'printhub.sqlite'))
+    const repository = DrizzleRepository.open(path.join(process.env.DATA_DIR, 'stlquest.sqlite'))
     repository.setSetting('storage', { adapter: 'local', root: path.join(temporary, 'prints') })
     repository.close()
 

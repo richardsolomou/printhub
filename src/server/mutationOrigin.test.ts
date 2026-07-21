@@ -15,11 +15,11 @@ describe('cookie-auth mutation origin guard', () => {
   })
 
   it('accepts the configured public origin behind a reverse proxy', () => {
-    vi.stubEnv('BETTER_AUTH_URL', 'https://printhub.ras.sh')
+    vi.stubEnv('BETTER_AUTH_URL', 'https://stlquest.ras.sh')
     expect(() =>
       requireMutationOrigin(
         new Request('http://localhost:3000/_server', {
-          headers: { origin: 'https://printhub.ras.sh', 'sec-fetch-site': 'same-origin' },
+          headers: { origin: 'https://stlquest.ras.sh', 'sec-fetch-site': 'same-origin' },
         }),
       ),
     ).not.toThrow()
@@ -30,9 +30,9 @@ describe('cookie-auth mutation origin guard', () => {
       requireMutationOrigin(
         new Request('http://localhost:3000/_server', {
           headers: {
-            origin: 'https://printhub.ras.sh',
+            origin: 'https://stlquest.ras.sh',
             'sec-fetch-site': 'same-origin',
-            'x-forwarded-host': 'printhub.ras.sh',
+            'x-forwarded-host': 'stlquest.ras.sh',
             'x-forwarded-proto': 'https',
           },
         }),
@@ -45,8 +45,8 @@ describe('cookie-auth mutation origin guard', () => {
       requireMutationOrigin(
         new Request('http://localhost:3000/_server', {
           headers: {
-            host: 'printhub.ras.sh',
-            origin: 'https://printhub.ras.sh',
+            host: 'stlquest.ras.sh',
+            origin: 'https://stlquest.ras.sh',
             'sec-fetch-site': 'same-origin',
             'x-forwarded-proto': 'https',
           },

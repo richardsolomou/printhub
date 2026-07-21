@@ -9,7 +9,7 @@ import { resolveSmtpConfig } from '../adapters/email'
 
 const directories: string[] = []
 const environment = () => {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'printhub-integrations-'))
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'stlquest-integrations-'))
   directories.push(directory)
   return { DATA_DIR: directory }
 }

@@ -268,7 +268,7 @@ function WorkspaceSetupNotice({
       <CircleAlert />
       <AlertTitle>Finish setting up your workspace when you’re ready</AlertTitle>
       <AlertDescription>
-        You can explore PrintHub now and finish setup later.{' '}
+        You can explore STL Quest now and finish setup later.{' '}
         {(!storageConfigured || !storageReady) && (
           <>
             <Link to="/settings/$section" params={{ section: 'storage' }}>

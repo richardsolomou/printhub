@@ -14,8 +14,8 @@ describe('StorageMigrationCoordinator', () => {
   let source: LocalAssetStore
 
   beforeEach(async () => {
-    sourceRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-migration-source-'))
-    destinationRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-migration-destination-'))
+    sourceRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-migration-source-'))
+    destinationRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-migration-destination-'))
     source = new LocalAssetStore(sourceRoot)
     await source.initialize()
   })

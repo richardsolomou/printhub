@@ -14,12 +14,12 @@ import { UploadStaging } from './staging'
 type Harness = { store: AssetStore; staging: UploadStaging; cleanup: () => Promise<void> }
 
 const MINIO_URL = process.env.MINIO_TEST_URL
-const MINIO_BUCKET = 'printhub-contract-tests'
+const MINIO_BUCKET = 'stlquest-contract-tests'
 const WEBDAV_URL = process.env.WEBDAV_TEST_URL
 
 async function localHarness(): Promise<Harness> {
-  const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-contract-'))
-  const data = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-contract-data-'))
+  const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-contract-'))
+  const data = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-contract-data-'))
   const store = new LocalAssetStore(root)
   const staging = new UploadStaging(data)
   await Promise.all([store.initialize(), staging.initialize()])
@@ -52,7 +52,7 @@ async function s3Harness(): Promise<Harness> {
   await client.send(new CreateBucketCommand({ Bucket: MINIO_BUCKET })).catch((error: { name?: string }) => {
     if (error.name !== 'BucketAlreadyOwnedByYou' && error.name !== 'BucketAlreadyExists') throw error
   })
-  const data = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-contract-s3-'))
+  const data = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-contract-s3-'))
   const store = new S3AssetStore(config)
   const staging = new UploadStaging(data)
   await Promise.all([store.initialize(), staging.initialize()])
@@ -67,12 +67,12 @@ async function s3Harness(): Promise<Harness> {
 }
 
 async function webDAVHarness(): Promise<Harness> {
-  const root = `printhub-contract-${crypto.randomUUID()}`
+  const root = `stlquest-contract-${crypto.randomUUID()}`
   const username = process.env.WEBDAV_TEST_USERNAME ?? 'printhub'
   const password = process.env.WEBDAV_TEST_PASSWORD ?? 'printhub'
   const config = { adapter: 'webdav' as const, endpoint: WEBDAV_URL!, root, username, password }
   const client = createClient(config.endpoint, { username, password })
-  const data = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-contract-webdav-'))
+  const data = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-contract-webdav-'))
   const store = new WebDAVAssetStore(config)
   const staging = new UploadStaging(data)
   await Promise.all([store.initialize(), staging.initialize()])

@@ -12,8 +12,8 @@ describe('LocalAssetStore', () => {
   let staging: UploadStaging
 
   beforeEach(async () => {
-    root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-prints-'))
-    data = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-data-'))
+    root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-prints-'))
+    data = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-data-'))
     store = new LocalAssetStore(root)
     staging = new UploadStaging(data)
     await Promise.all([store.initialize(), staging.initialize()])
@@ -111,7 +111,7 @@ describe('UploadStaging', () => {
   let staging: UploadStaging
 
   beforeEach(async () => {
-    data = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-staging-'))
+    data = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-staging-'))
     staging = new UploadStaging(data)
     await staging.initialize()
   })

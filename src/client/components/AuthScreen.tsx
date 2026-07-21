@@ -88,7 +88,7 @@ export function AuthScreen({ setupRequired, hosted, auth }: { setupRequired: boo
                 <p className="mt-1">Anonymous usage telemetry is enabled by default and can be disabled in Settings.</p>
               </div>
               <Button type="button" className="self-end" disabled={!hydrated} onClick={() => setShowIntroduction(false)}>
-                Set up PrintHub
+                Set up STL Quest
               </Button>
             </CardContent>
           </Card>
@@ -239,7 +239,7 @@ export function AuthScreen({ setupRequired, hosted, auth }: { setupRequired: boo
                       setResetSent(false)
                     }}
                   >
-                    {creatingAccount ? 'Already have an account? Sign in' : 'New to PrintHub? Create an account'}
+                    {creatingAccount ? 'Already have an account? Sign in' : 'New to STL Quest? Create an account'}
                   </Button>
                 )}
               </form>

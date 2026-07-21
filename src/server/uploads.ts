@@ -11,7 +11,8 @@ import { UploadRequestLimiter, validSameOrigin } from './uploadGuards'
 import { assertUploadCapacity } from './operations'
 import { hostedStorageRequiresRemote } from './storagePolicy'
 
-const WORKSPACE_METADATA_KEY = 'printhubWorkspaceId'
+const WORKSPACE_METADATA_KEY = 'stlQuestWorkspaceId'
+const LEGACY_WORKSPACE_METADATA_KEY = 'printhubWorkspaceId'
 const uploadRequests = new UploadRequestLimiter()
 type UploadContext = Awaited<ReturnType<Awaited<ReturnType<typeof app>>['workspace']>>
 const requestContexts = new WeakMap<object, UploadContext>()
@@ -99,7 +100,7 @@ function serverFor(workspaceId: string) {
         const context = contextFor(request)
         if (request.method !== 'POST') {
           const upload = await store.getUpload(uploadId).catch(() => undefined)
-          if (upload?.metadata?.[WORKSPACE_METADATA_KEY] !== context.workspace.id) {
+          if (uploadWorkspaceId(upload?.metadata) !== context.workspace.id) {
             throw new Response('upload belongs to another workspace', { status: 409, statusText: 'workspace changed' })
           }
           context.repository.createUploadSession(uploadId, context.identity.id, Date.now() + UPLOAD_TTL, 3)
@@ -134,7 +135,7 @@ function serverFor(workspaceId: string) {
     onUploadFinish: async (request, upload) => {
       try {
         const context = contextFor(request)
-        if (upload.metadata?.[WORKSPACE_METADATA_KEY] !== context.workspace.id) {
+        if (uploadWorkspaceId(upload.metadata) !== context.workspace.id) {
           throw new Response('upload belongs to another workspace', { status: 409, statusText: 'workspace changed' })
         }
         if (!upload.storage?.path) throw new Error('completed upload has no staged file')
@@ -147,6 +148,10 @@ function serverFor(workspaceId: string) {
   })
   servers.set(workspaceId, server)
   return server
+}
+
+function uploadWorkspaceId(metadata: Record<string, string | null> | undefined) {
+  return metadata?.[WORKSPACE_METADATA_KEY] ?? metadata?.[LEGACY_WORKSPACE_METADATA_KEY]
 }
 
 export async function handleUpload(request: Request) {

@@ -1,4 +1,4 @@
-# PrintHub — Agent Guide
+# STL Quest — Agent Guide
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) first: it defines the layout (`src/core` isomorphic domain → `src/adapters`/`src/db` → `src/server`/`src/client`/`src/routes`), database rules, and release-note policy. This file adds the operational detail that isn't obvious from reading it.
 
@@ -6,7 +6,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) first: it defines the layout (`src/core`
 
 - `pnpm check` — the full local gate (format, lint, `db:check`, `catalog:check`, build, typecheck, unit tests, backup CLI smoke). The build runs **before** typecheck because it generates `src/routeTree.gen.ts`; on a fresh clone, typecheck fails until you build.
 - Dev server: `DATA_DIR=./data-dev PRINTS_DIR=./prints-dev BETTER_AUTH_URL=http://localhost:3000 pnpm dev` (create the two dirs first).
-- Unit tests: `pnpm test`. Vitest runs with `fileParallelism: false` because of the `globalThis.__printhub` app singleton and shared SQLite state — don't assume isolation across test files.
+- Unit tests: `pnpm test`. Vitest runs with `fileParallelism: false` because of the `globalThis.__stlquest` app singleton and shared SQLite state — don't assume isolation across test files.
 - E2E: `pnpm test:e2e` builds and tests the production server; `pnpm test:e2e:run` reruns the current build, and `pnpm test:e2e:trace` records a local trace (see the `extending-e2e` skill). Install Chromium once with `pnpm test:e2e:install`; set `PLAYWRIGHT_DEV_SERVER=1` only when debugging against Vite.
 - When optimizing E2E runtime, measure the default local command separately from CI and improve both paths.
 - Lint/format is oxlint + oxfmt (`pnpm lint`, `pnpm format`), not ESLint/Prettier. Warnings are denied in CI.
@@ -18,10 +18,10 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) first: it defines the layout (`src/core`
 - **Authorization lives in server functions**, not routes. Route `beforeLoad`/`useEffect` redirects are UX only.
 - **Workspace isolation is absolute**: every tenant table carries `workspace_id` with a composite FK to its parent; every `DrizzleRepository` (`src/db/repository.ts`) method filters via the scoped repository (`scoped(workspaceId)`). New tenant tables and queries must follow suit — there is no bypass path.
 - **Client queries**: `queryOptions` factories live in `src/client/queries.ts`, never inline. Workspace-scoped query keys must include `workspaceSlug` or data leaks across workspace switches. Invalidation is blanket via the global `/api/events` SSE listener — no bespoke invalidation needed.
-- **`AppEvent`** (`src/core/types.ts`) is a closed union treated as a public API: additions are fine, renames/removals are breaking. Server-side state changes publish one, and mutations go through `PrintHubService`, not the repository.
+- **`AppEvent`** (`src/core/types.ts`) is a closed union treated as a public API: additions are fine, renames/removals are breaking. Server-side state changes publish one, and mutations go through `STLQuestService`, not the repository.
 - **Settings, not env vars**: product configuration goes in the `settings` (workspace) or `deployment_settings` (global) tables. Env vars are reserved for filesystem paths, operational controls, recovery, and managed-deployment overrides. See the `adding-a-setting` skill.
 - **CSP is a hardcoded string in `vite.config.ts`** (under `nitro.routeRules`). Any new external image/script/connect source (OAuth avatar CDNs, telemetry hosts) requires editing it — easy to miss.
-- **`AssetStore` has a behavioral contract**: `src/adapters/storeContract.test.ts` runs the same suite against the local and S3 stores (S3 gated on `MINIO_TEST_*` env vars) — semantic changes must extend it so both stay equivalent. Crash recovery replays the operation journal (`PrintHubService.resumeOperation`); a new operation kind must extend that state machine and its recovery tests.
+- **`AssetStore` has a behavioral contract**: `src/adapters/storeContract.test.ts` runs the same suite against the local and S3 stores (S3 gated on `MINIO_TEST_*` env vars) — semantic changes must extend it so both stay equivalent. Crash recovery replays the operation journal (`STLQuestService.resumeOperation`); a new operation kind must extend that state machine and its recovery tests.
 - **The asset worker is bundled separately**: `pnpm build` runs `src/server/assets/worker.ts` through its own esbuild pass (not the Vite/Nitro bundle) to `assets-worker.mjs`. New imports there must survive standalone bundling; tests run the queue inline (`process.env.VITEST`), so worker-only breakage won't show in unit tests.
 - **Test-mode branches live in production code** on purpose: `NODE_ENV === 'test'` auto-creates a test workspace in the repository, `VITEST` disables worker threads. Don't remove them as dead code, and keep them in mind when touching those paths.
 - **`src/core` stays isomorphic** — no IO, no framework imports. Nothing enforces this mechanically; you are the enforcement.

@@ -1,6 +1,6 @@
 # TrueNAS catalog package
 
-Since TrueNAS 24.10, the Apps screen is fed by the official [truenas/apps](https://github.com/truenas/apps) catalog. This directory contains the PrintHub community-app package for submission as `ix-dev/community/printhub/`.
+Since TrueNAS 24.10, the Apps screen is fed by the official [truenas/apps](https://github.com/truenas/apps) catalog. This directory contains the STL Quest community-app package for submission as `ix-dev/community/printhub/`.
 
 Before submitting:
 

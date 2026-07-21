@@ -3,8 +3,9 @@ import { and, count, eq, sql as drizzleSql } from 'drizzle-orm'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DrizzleRepository } from './repository'
+import { databasePath } from './paths'
 import { createDatabase } from './connection'
 import type { AccountRole, PrinterProfile, WorkspaceRole } from '../core/types'
 import { member, requests, requestStatuses, uploadSessions, user } from './schema'
@@ -350,7 +351,7 @@ describe('DrizzleRepository contract', () => {
   })
 
   it('creates a consistent online backup', async () => {
-    const temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-backup-'))
+    const temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-backup-'))
     const source = path.join(temporary, 'source.sqlite')
     const destination = path.join(temporary, 'backups', 'copy.sqlite')
     const persisted = DrizzleRepository.open(source)
@@ -1099,7 +1100,7 @@ describe('DrizzleRepository contract', () => {
   })
 
   it('enforces incomplete-upload quotas after reopening the database', async () => {
-    const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-sqlite-'))
+    const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-sqlite-'))
     const file = path.join(directory, 'test.sqlite')
     const expires = Date.now() + 60_000
     const first = DrizzleRepository.open(file)
@@ -1120,5 +1121,24 @@ describe('DrizzleRepository contract', () => {
     )
     reopened.close()
     await fs.promises.rm(directory, { recursive: true, force: true })
+  })
+})
+
+describe('databasePath', () => {
+  afterEach(() => vi.unstubAllEnvs())
+
+  it('uses the STL Quest database name for new data directories', async () => {
+    const temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-database-'))
+    vi.stubEnv('DATA_DIR', temporary)
+
+    expect(databasePath()).toBe(path.join(temporary, 'stlquest.sqlite'))
+  })
+
+  it('keeps using an existing PrintHub database', async () => {
+    const temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-legacy-database-'))
+    vi.stubEnv('DATA_DIR', temporary)
+    await fs.promises.writeFile(path.join(temporary, 'printhub.sqlite'), '')
+
+    expect(databasePath()).toBe(path.join(temporary, 'printhub.sqlite'))
   })
 })

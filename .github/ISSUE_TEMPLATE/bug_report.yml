@@ -6,7 +6,7 @@ labels:
 body:
   - type: markdown
     attributes:
-      value: Thanks for helping improve PrintHub. Do not include secrets, private model files, or unredacted personal information.
+      value: Thanks for helping improve STL Quest. Do not include secrets, private model files, or unredacted personal information.
   - type: textarea
     id: description
     attributes:
@@ -19,7 +19,7 @@ body:
     attributes:
       label: How can we reproduce it?
       placeholder: |
-        1. Deploy PrintHub with…
+        1. Deploy STL Quest with…
         2. Open…
         3. Upload…
     validations:
@@ -27,7 +27,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: PrintHub version
+      label: STL Quest version
       description: Container tag, release version, or commit SHA.
       placeholder: v0.27.1
     validations:

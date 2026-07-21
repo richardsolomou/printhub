@@ -1,3 +1,3 @@
-# PrintHub
+# STL Quest
 
-[PrintHub](https://github.com/richardsolomou/printhub) is a private, self-hosted 3D-print request and production queue for resin and filament printers.
+[STL Quest](https://github.com/richardsolomou/printhub) is a private, self-hosted 3D-print request and production queue for resin and filament printers.

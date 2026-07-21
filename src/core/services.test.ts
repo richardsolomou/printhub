@@ -10,7 +10,7 @@ import { createDatabase } from '../db'
 import { DrizzleRepository } from '../db/repository'
 import { organization, requests, requestStatuses, user } from '../db/schema'
 import type { Identity, PrinterProfile, Telemetry } from './types'
-import { PrintHubService } from './services'
+import { STLQuestService } from './services'
 
 const telemetry: Telemetry = { capture: async () => undefined, exception: async () => undefined }
 const admin: Identity = { id: 'admin', email: 'op@example.com', name: 'Admin', role: 'admin' }
@@ -30,18 +30,18 @@ const filamentPrinter = {
   printType: 'filament',
 } satisfies PrinterProfile
 
-describe('PrintHubService crash recovery', () => {
+describe('STLQuestService crash recovery', () => {
   let root: string
   let data: string
   let repository: DrizzleRepository
   let assets: LocalAssetStore
   let staging: UploadStaging
   let removeTusUpload: Mock<(uploadId: string) => Promise<void>>
-  let service: PrintHubService
+  let service: STLQuestService
 
   beforeEach(async () => {
-    root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-service-'))
-    data = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'printhub-service-data-'))
+    root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-service-'))
+    data = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-service-data-'))
     repository = new DrizzleRepository(createDatabase(':memory:'))
     const now = new Date()
     for (const identity of [admin, requester, otherRequester]) {
@@ -62,7 +62,7 @@ describe('PrintHubService crash recovery', () => {
     staging = new UploadStaging(data)
     await Promise.all([assets.initialize(), staging.initialize()])
     removeTusUpload = vi.fn(async () => undefined)
-    service = new PrintHubService(repository, assets, staging, new LocalEventBus(), telemetry, { remove: removeTusUpload })
+    service = new STLQuestService(repository, assets, staging, new LocalEventBus(), telemetry, { remove: removeTusUpload })
   })
 
   afterEach(async () => {
@@ -541,7 +541,7 @@ describe('PrintHubService crash recovery', () => {
       },
       exception: async () => undefined,
     }
-    service = new PrintHubService(repository, assets, staging, new LocalEventBus(), rejecting, { remove: removeTusUpload })
+    service = new STLQuestService(repository, assets, staging, new LocalEventBus(), rejecting, { remove: removeTusUpload })
     const unhandled = vi.fn()
     process.on('unhandledRejection', unhandled)
     try {

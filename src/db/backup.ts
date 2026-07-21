@@ -2,9 +2,9 @@ import crypto from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import fs from 'node:fs'
 import path from 'node:path'
-import { closeDatabase, openDatabase, type PrintHubDatabase } from './connection'
+import { closeDatabase, openDatabase, type STLQuestDatabase } from './connection'
 
-export async function backupDatabase(database: PrintHubDatabase, destination: string) {
+export async function backupDatabase(database: STLQuestDatabase, destination: string) {
   fs.mkdirSync(path.dirname(destination), { recursive: true })
   const temporary = path.join(path.dirname(destination), `.${path.basename(destination)}.${crypto.randomUUID()}.tmp`)
   try {
