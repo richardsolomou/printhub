@@ -153,7 +153,7 @@ test('manages a fair print queue and assigns work to printers', async ({ page })
   await expect(page.getByText('1 selected', { exact: true })).toHaveCount(0)
   await page.locator('[data-status="todo"]').getByRole('button', { name: 'Select' }).click()
   await requestCard(page, 'first-model').click()
-  await page.locator('[data-status="todo"] header, [data-status="todo"] [data-slot="card-header"]').first().click()
+  await page.locator('[data-status="todo"][data-slot="column-header"]').first().click()
   await expect(page.getByText('1 selected', { exact: true })).toHaveCount(0)
 
   await page.setViewportSize({ width: 760, height: 480 })
