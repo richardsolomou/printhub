@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { app } from '../../server/app'
+import { secureResponseCookies } from '../../server/authCookies'
 import { withAuthInvite, withAuthProvisioning } from '../../server/authInvite'
 import { withRequestContext } from '../../server/requestContext'
 
@@ -21,10 +22,13 @@ const handle = (request: Request) =>
       const run = () => instance.auth.handler(request)
       const provisioning = new URL(request.url).pathname.endsWith('/admin/create-user')
       const response = await (provisioning ? withAuthProvisioning(run) : run())
-      if (!new URL(request.url).pathname.includes('/callback/')) return response
+      if (!new URL(request.url).pathname.includes('/callback/')) return secureResponseCookies(request, response)
       const headers = new Headers(response.headers)
       headers.append('set-cookie', `${INVITE_COOKIE}=; Path=/api/auth; HttpOnly; SameSite=Lax; Max-Age=0`)
-      return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
+      return secureResponseCookies(
+        request,
+        new Response(response.body, { status: response.status, statusText: response.statusText, headers }),
+      )
     }),
   )
 

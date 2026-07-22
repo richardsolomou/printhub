@@ -60,6 +60,7 @@ export function createAuth(
     database: drizzleAdapter(database, { provider: 'sqlite', schema }),
     secret,
     baseURL: options?.baseURL,
+    advanced: { useSecureCookies: false },
     rateLimit: {
       enabled: true,
       storage: 'database',
