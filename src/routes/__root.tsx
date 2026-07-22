@@ -68,7 +68,7 @@ function PostHogIdentify() {
 
 function RootComponent() {
   const {
-    data: { hosted, identity, serverVersion, telemetryEnabled },
+    data: { identity, serverVersion, telemetryEnabled },
   } = useSuspenseQuery(sessionQuery())
   const outlet = identity?.workspaceSlug ? (
     <WorkspaceProvider slug={identity.workspaceSlug}>
@@ -90,7 +90,7 @@ function RootComponent() {
       </head>
       <body>
         {identity && <LiveUpdates />}
-        <UpdateNotices identity={identity} hosted={hosted} serverVersion={serverVersion} />
+        <UpdateNotices serverVersion={serverVersion} />
         {telemetryEnabled && import.meta.env.VITE_POSTHOG_PROJECT_TOKEN ? (
           <PostHogProvider
             apiKey={import.meta.env.VITE_POSTHOG_PROJECT_TOKEN}

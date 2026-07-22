@@ -27,6 +27,7 @@ import {
 } from '../../../server/fns'
 import { cloudConnectionsQuery, sessionQuery, storageMigrationQuery, storageQuery } from '../../queries'
 import { retryQueries } from '../../queryState'
+import { LATEST_DOCUMENTATION_URL } from '../../sourceCode'
 import {
   cloudflareAccountId,
   inferS3Provider,
@@ -458,7 +459,16 @@ function StorageForm({
                 <AlertTitle>A normal folder on hardware you control</AlertTitle>
                 <AlertDescription>
                   Run a WebDAV server for the folder, then expose it through a stable HTTPS address. Cloudflare Tunnel or Tailscale Funnel
-                  can provide the encrypted connection without opening a router port. Files remain visible and movable on your machine.
+                  can provide the encrypted connection without opening a router port. Files remain visible and movable on your machine.{' '}
+                  <a
+                    className="inline-flex items-center gap-1 font-medium text-foreground underline underline-offset-3"
+                    href={`${LATEST_DOCUMENTATION_URL}/webdav-cloudflare-tunnel.md`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Set up Cloudflare Tunnel
+                    <ExternalLink className="size-3.5" />
+                  </a>
                 </AlertDescription>
               </Alert>
               <form.Field name="endpoint">

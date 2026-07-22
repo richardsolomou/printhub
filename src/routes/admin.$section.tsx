@@ -38,7 +38,7 @@ function SuperAdminPage() {
       <AppRail active="admin" isAdmin={identity!.role === 'admin'} isSuperAdmin navigationEnabled={hydrated} />
       <main className="min-w-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-5xl px-5 pt-7 pb-12">
-          <SuperAdminPanes section={validSection!} />
+          <SuperAdminPanes section={validSection!} hosted={session.hosted} />
         </div>
       </main>
     </div>

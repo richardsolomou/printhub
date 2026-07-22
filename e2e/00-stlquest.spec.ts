@@ -14,12 +14,13 @@ test.beforeAll(async () => {
 
 test('manages a fair print queue and assigns work to printers', async ({ page }) => {
   test.setTimeout(180_000)
+  const multipleSelectionModifier = process.platform === 'darwin' ? 'Meta' : 'Control'
   const printerName = 'Resin Station With A Long Descriptive Name'
   await optimizePageForE2E(page)
   await page.goto('/')
   await expect(page.getByRole('link', { name: 'Get source code' })).toHaveAttribute(
     'href',
-    /^https:\/\/github\.com\/richardsolomou\/stl\.quest\/tree\/v\d+\.\d+\.\d+$/,
+    'https://github.com/richardsolomou/stl.quest/tree/main',
   )
   await screenshot(page, 'auth-source-offer')
   await page.getByRole('button', { name: 'Set up STL Quest' }).click()
@@ -46,6 +47,10 @@ test('manages a fair print queue and assigns work to printers', async ({ page })
   await expect(page.getByText('A normal folder on hardware you control')).toBeVisible()
   await expect(page.getByLabel('WebDAV endpoint')).toHaveAttribute('placeholder', 'https://storage.example.com/dav')
   await expect(page.getByLabel('Folder')).toHaveValue('stlquest')
+  await expect(page.getByRole('link', { name: 'Set up Cloudflare Tunnel' })).toHaveAttribute(
+    'href',
+    'https://github.com/richardsolomou/stl.quest/blob/main/docs/webdav-cloudflare-tunnel.md',
+  )
   await screenshot(page, 'remote-folder-storage')
   await choose(page.getByLabel('Adapter'), 'Local folder')
   await page.getByRole('button', { name: 'Save storage' }).click()
@@ -87,30 +92,30 @@ test('manages a fair print queue and assigns work to printers', async ({ page })
   await upload(page, { name: 'bulk-move-single-b', printType: 'Resin', buffer: boxStl('bulk-move-single-b', 10, 10, 10) })
   await upload(page, { name: 'bulk-move-single-c', printType: 'Resin', buffer: boxStl('bulk-move-single-c', 10, 10, 10) })
 
-  await requestCard(page, 'bulk-move-a').click({ modifiers: ['Control'] })
+  await requestCard(page, 'bulk-move-a').click({ modifiers: [multipleSelectionModifier] })
   await requestCard(page, 'bulk-move-b').click({ modifiers: ['Shift'] })
   await expect(page.getByText('2 selected', { exact: true })).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(page.getByText('2 selected', { exact: true })).toHaveCount(0)
 
-  await requestCard(page, 'bulk-move-single-a').click({ modifiers: ['Control'] })
-  await requestCard(page, 'bulk-move-single-b').click({ modifiers: ['Control'] })
+  await requestCard(page, 'bulk-move-single-a').click({ modifiers: [multipleSelectionModifier] })
+  await requestCard(page, 'bulk-move-single-b').click({ modifiers: [multipleSelectionModifier] })
   await page.getByRole('button', { name: 'Move', exact: true }).click()
   await screenshot(page, 'bulk-move-single-destination')
   await page.getByRole('menuitem', { name: 'Up next' }).click()
   await expect(page.getByRole('dialog', { name: 'Move 2 selected requests' })).toHaveCount(0)
   await expect(page.locator('[data-status="up_next"] button.card').filter({ hasText: 'bulk-move-single-a' })).toBeVisible()
   await expect(page.locator('[data-status="up_next"] button.card').filter({ hasText: 'bulk-move-single-b' })).toBeVisible()
-  await requestCard(page, 'bulk-move-single-a').click({ modifiers: ['Control'] })
-  await requestCard(page, 'bulk-move-single-b').click({ modifiers: ['Control'] })
+  await requestCard(page, 'bulk-move-single-a').click({ modifiers: [multipleSelectionModifier] })
+  await requestCard(page, 'bulk-move-single-b').click({ modifiers: [multipleSelectionModifier] })
   await dragCard(page, 'bulk-move-single-a', 'up_next', 'todo')
   await expect(page.getByRole('dialog', { name: 'Move 2 selected requests' })).toHaveCount(0)
   await expect(page.locator('[data-status="todo"] button.card').filter({ hasText: 'bulk-move-single-a' })).toBeVisible()
   await expect(page.locator('[data-status="todo"] button.card').filter({ hasText: 'bulk-move-single-b' })).toBeVisible()
 
-  await requestCard(page, 'bulk-move-a').click({ modifiers: ['Control'] })
-  await requestCard(page, 'bulk-move-b').click({ modifiers: ['Control'] })
-  await requestCard(page, 'bulk-move-single-c').click({ modifiers: ['Control'] })
+  await requestCard(page, 'bulk-move-a').click({ modifiers: [multipleSelectionModifier] })
+  await requestCard(page, 'bulk-move-b').click({ modifiers: [multipleSelectionModifier] })
+  await requestCard(page, 'bulk-move-single-c').click({ modifiers: [multipleSelectionModifier] })
   await dragCard(page, 'bulk-move-a', 'todo', 'up_next')
   const batchMove = page.getByRole('dialog', { name: 'Move 3 selected requests' })
   await expect(batchMove.getByLabel('Instances of bulk-move-a to move')).toHaveValue('2')
@@ -129,8 +134,8 @@ test('manages a fair print queue and assigns work to printers', async ({ page })
 
   await upload(page, { name: 'bulk-delete-a', printType: 'Resin', buffer: boxStl('bulk-delete-a', 10, 10, 10) })
   await upload(page, { name: 'bulk-delete-b', printType: 'Resin', buffer: boxStl('bulk-delete-b', 10, 10, 10), quantity: 2 })
-  await requestCard(page, 'bulk-delete-a').click({ modifiers: ['Control'] })
-  await requestCard(page, 'bulk-delete-b').click({ modifiers: ['Control'] })
+  await requestCard(page, 'bulk-delete-a').click({ modifiers: [multipleSelectionModifier] })
+  await requestCard(page, 'bulk-delete-b').click({ modifiers: [multipleSelectionModifier] })
   await page.getByRole('button', { name: 'Delete', exact: true }).click()
   const batchDelete = page.getByRole('alertdialog', { name: 'Delete 2 selected requests?' })
   await expect(batchDelete).toContainText('3 affected instances')
@@ -274,7 +279,7 @@ test('manages a fair print queue and assigns work to printers', async ({ page })
   await expect(page.getByText('STL Quest is open source under the GNU Affero General Public License v3.0.')).toBeVisible()
   await expect(page.getByRole('link', { name: 'Source code' })).toHaveAttribute(
     'href',
-    /^https:\/\/github\.com\/richardsolomou\/stl\.quest\/tree\/v\d+\.\d+\.\d+$/,
+    'https://github.com/richardsolomou/stl.quest/tree/main',
   )
   await screenshot(page, 'about-agpl-source')
 
