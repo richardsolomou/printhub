@@ -19,7 +19,7 @@ test('manages a fair print queue and assigns work to printers', async ({ page })
   await page.goto('/')
   await expect(page.getByRole('link', { name: 'Get source code' })).toHaveAttribute(
     'href',
-    /^https:\/\/github\.com\/richardsolomou\/stl\.quest\/tree\/v\d+\.\d+\.\d+$/,
+    'https://github.com/richardsolomou/stl.quest/tree/main',
   )
   await screenshot(page, 'auth-source-offer')
   await page.getByRole('button', { name: 'Set up STL Quest' }).click()
@@ -46,6 +46,10 @@ test('manages a fair print queue and assigns work to printers', async ({ page })
   await expect(page.getByText('A normal folder on hardware you control')).toBeVisible()
   await expect(page.getByLabel('WebDAV endpoint')).toHaveAttribute('placeholder', 'https://storage.example.com/dav')
   await expect(page.getByLabel('Folder')).toHaveValue('stlquest')
+  await expect(page.getByRole('link', { name: 'Set up Cloudflare Tunnel' })).toHaveAttribute(
+    'href',
+    'https://github.com/richardsolomou/stl.quest/blob/main/docs/webdav-cloudflare-tunnel.md',
+  )
   await screenshot(page, 'remote-folder-storage')
   await choose(page.getByLabel('Adapter'), 'Local folder')
   await page.getByRole('button', { name: 'Save storage' }).click()

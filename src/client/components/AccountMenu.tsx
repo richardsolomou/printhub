@@ -14,6 +14,7 @@ import { createWorkspace, switchWorkspace } from '../../server/fns'
 import { authClient } from '../authClient'
 import { sessionQuery } from '../queries'
 import { reloadAfterWorkspaceChange, useWorkspaceSlug, WORKSPACE_CHANGED_KEY } from '../workspace'
+import { useReleaseUpdate } from './ReleaseUpdateNotice'
 import { UserAvatar } from './UserAvatar'
 
 export function AccountMenu({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
@@ -28,6 +29,7 @@ export function AccountMenu({ isSuperAdmin = false }: { isSuperAdmin?: boolean }
   const [name, setName] = useState('')
   const callCreate = useServerFn(createWorkspace)
   const callSwitch = useServerFn(switchWorkspace)
+  const releaseUpdate = useReleaseUpdate(isSuperAdmin)
   useEffect(() => {
     const refreshOtherTab = (event: StorageEvent) => {
       if (event.key === WORKSPACE_CHANGED_KEY) window.location.reload()
@@ -134,6 +136,12 @@ export function AccountMenu({ isSuperAdmin = false }: { isSuperAdmin?: boolean }
               >
                 <ShieldCheck />
                 Admin
+                {releaseUpdate && (
+                  <span
+                    className="ml-auto size-2 rounded-full bg-primary"
+                    aria-label={`STL Quest v${releaseUpdate.latestVersion} is available`}
+                  />
+                )}
               </Link>
             )}
             <Button

@@ -38,7 +38,7 @@ Run a WebDAV server for the chosen folder and give STL Quest a dedicated usernam
 
 ### Cloudflare Tunnel
 
-Create a tunnel on the storage machine and route one public HTTPS hostname to the local WebDAV service. The connector initiates the connection to Cloudflare, so no inbound router port is required. Expose only the WebDAV service, use dedicated WebDAV credentials, and do not route a NAS or server administration interface through the same hostname. Browser-based Cloudflare Access login is not compatible with background file operations; STL Quest authenticates directly to WebDAV.
+Create a tunnel on the storage machine and route one public HTTPS hostname to the local WebDAV service. The connector initiates the connection to Cloudflare, so no inbound router port is required. Expose only the WebDAV service, use dedicated WebDAV credentials, and do not route a NAS or server administration interface through the same hostname. Browser-based Cloudflare Access login is not compatible with background file operations; STL Quest authenticates directly to WebDAV. Follow the [step-by-step Cloudflare Tunnel guide](webdav-cloudflare-tunnel.md) to set up and test the complete connection.
 
 ### Tailscale
 
