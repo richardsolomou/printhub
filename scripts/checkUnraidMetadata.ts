@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs'
 
 const repositoryUrl = 'https://github.com/richardsolomou/stl.quest'
 const rawRepositoryUrl = 'https://raw.githubusercontent.com/richardsolomou/stl.quest/main'
+const containerImage = 'ghcr.io/richardsolomou/stl.quest:latest'
+const containerRegistry = `${repositoryUrl}/pkgs/container/stl.quest`
 const profile = readFileSync('ca_profile.xml', 'utf8')
 const template = readFileSync('deploy/unraid/stlquest.xml', 'utf8')
 
@@ -27,6 +29,8 @@ for (const tag of ['Registry', 'Support', 'Project', 'TemplateURL', 'ReadMe', 'I
   assertHttps(tag, requiredTag(template, tag))
 }
 assert.equal(requiredTag(template, 'Project'), repositoryUrl)
+assert.equal(requiredTag(template, 'Repository'), containerImage)
+assert.equal(requiredTag(template, 'Registry'), containerRegistry)
 assert.equal(requiredTag(template, 'TemplateURL'), `${rawRepositoryUrl}/deploy/unraid/stlquest.xml`)
 assert.equal(requiredTag(template, 'ReadMe'), `${rawRepositoryUrl}/README.md`)
 
