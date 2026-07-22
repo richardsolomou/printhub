@@ -23,29 +23,32 @@ A working WebDAV server normally returns `207 Multi-Status`. A `401` response me
 
 1. Create a dedicated dataset for STL Quest files. Do not reuse an application, system, or general NAS-administration dataset.
 2. Install a WebDAV app or custom app and mount the dataset read/write as its WebDAV root. Create a dedicated WebDAV account that can access only this dataset.
-3. Install `cloudflared` as a separate app. If both apps share a private container network, use the WebDAV app's container hostname and port as the tunnel service URL. Otherwise, use the TrueNAS private IP and the WebDAV app's published port, such as `http://192.168.1.20:8080/dav`.
-4. Open the TrueNAS **Shell** or use another machine on the same network and run the local `PROPFIND` check above before configuring the public hostname.
+3. When Cloudflare displays its connector installation command below, choose **Docker**, install `cloudflared` as a separate app, and configure it with the tunnel token from that command. Treat the token as a secret.
+4. If both apps share a private container network, use the WebDAV app's container hostname and port as the tunnel service URL. Otherwise, use the TrueNAS private IP and the WebDAV app's published port, such as `http://192.168.1.20:8080/dav`.
+5. Open the TrueNAS **Shell** or use another machine on the same network and run the local `PROPFIND` check above before configuring the public hostname.
 
 Dataset permissions must allow the user ID used by the WebDAV app to read, create, rename, and delete files. Keep the TrueNAS web interface on its existing private address; publish only the WebDAV app through the tunnel.
 
 ### Unraid
 
 1. Create a dedicated share for STL Quest files and keep its SMB export private or disabled unless you also need local file access.
-2. Install a WebDAV container and a Cloudflare Tunnel (`cloudflared`) container from Community Apps. Map the dedicated share read/write to the WebDAV container's data directory and configure a unique WebDAV username and password.
-3. Put both containers on the same custom Docker network. Use the WebDAV container name and its internal port as the tunnel service URL, such as `http://webdav:8080/dav`. Alternatively, use the Unraid private IP and the WebDAV container's published port.
-4. Open the Unraid terminal or use another machine on the same network and run the local `PROPFIND` check above.
+2. Install a WebDAV container from Community Apps. Map the dedicated share read/write to the container's data directory and configure a unique WebDAV username and password.
+3. When Cloudflare displays its connector installation command below, choose **Docker**, install a Cloudflare Tunnel (`cloudflared`) container from Community Apps, and configure it with the tunnel token from that command. Treat the token as a secret.
+4. Put both containers on the same custom Docker network. Use the WebDAV container name and its internal port as the tunnel service URL, such as `http://webdav:8080/dav`. Alternatively, use the Unraid private IP and the WebDAV container's published port.
+5. Open the Unraid terminal or use another machine on the same network and run the local `PROPFIND` check above.
 
 Do not publish the Unraid web interface through this tunnel. Back up the share with the STL Quest database because the database contains references to these files, not the files themselves.
 
 ## Create the tunnel
 
-1. Open the [Cloudflare Zero Trust dashboard](https://one.dash.cloudflare.com/), then go to **Networks → Connectors → Cloudflare Tunnels** and choose **Create a tunnel**. Cloudflare sometimes shortens this navigation to **Networks → Tunnels**.
-2. Choose **Cloudflared**, name the tunnel (for example, `stlquest-storage`), and save it.
-3. Select the operating system of the computer or NAS that will run the connector. Copy and run the installation command Cloudflare displays. It contains a tunnel token, so do not share or save that command in a public file.
-4. Wait until the connector shows **Healthy**. If WebDAV runs on a NAS that cannot run `cloudflared`, install the connector on another always-on computer on the same private network.
-5. Add a **Published application** or **Public hostname** to the tunnel. Choose a dedicated hostname such as `storage.example.com`.
-6. Set the service type and URL to the local WebDAV address. Use `HTTP` with a loopback address when WebDAV and `cloudflared` are on the same machine. If the connector reaches a different device over the network, prefer `HTTPS` with a certificate the connector trusts.
-7. Save the hostname. Cloudflare creates the DNS record and TLS certificate automatically; it may take a minute before the public address responds.
+1. Open the [Cloudflare dashboard's Tunnels page](https://dash.cloudflare.com/?to=/:account/tunnels) under **Networking → Tunnels**, then select **Create a tunnel**.
+2. Name the tunnel (for example, `stlquest-storage`) and select **Create Tunnel**.
+3. Choose the operating system of the computer or NAS that will run the connector. Copy and run the installation command Cloudflare displays. For TrueNAS or Unraid, choose **Docker** and configure the `cloudflared` app or container with the token from the displayed command. The token is a secret, so do not share it or save the command in a public file.
+4. Wait for the connector to connect, then select **Continue**. If WebDAV runs on a NAS that cannot run `cloudflared`, install the connector on another always-on computer on the same private network.
+5. Return to **Networking → Tunnels**, select the tunnel, open the **Routes** tab, then select **Add route → Published application**.
+6. Enter a dedicated subdomain such as `storage`, select the domain, and add the WebDAV path only if the public URL needs one.
+7. In **Service URL**, enter the local WebDAV protocol and address. Use `HTTP` with a loopback address when WebDAV and `cloudflared` run on the same machine. If the connector reaches a different device over the network, prefer `HTTPS` with a certificate the connector trusts.
+8. Select **Save**. Cloudflare creates the DNS record and TLS certificate automatically; it may take a minute before the public address responds. The tunnel should show **Healthy** on **Networking → Tunnels**.
 
 Cloudflare's [tunnel setup documentation](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/get-started/create-remote-tunnel/) has current installation steps for each supported operating system.
 
