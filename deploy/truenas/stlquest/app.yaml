@@ -5,7 +5,7 @@ capabilities: []
 categories:
   - productivity
 changelog_url: https://github.com/richardsolomou/stl.quest/releases
-date_added: '2026-07-21'
+date_added: '2026-07-22'
 description: >-
   STL Quest is a private, self-hosted 3D-print request and production queue for
   resin and filament printers. Accept STL requests, order work fairly, assign
@@ -38,7 +38,7 @@ screenshots: []
 sources:
   - https://apps.truenas.com/catalog/stlquest_community/
   - https://github.com/richardsolomou/stl.quest
-  - https://github.com/richardsolomou/stl.quest/pkgs/container/stlquest
+  - https://github.com/richardsolomou/stl.quest/pkgs/container/stl.quest
 title: STL Quest
 train: community
 version: 1.0.0

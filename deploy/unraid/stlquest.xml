@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>STL Quest</Name>
-  <Repository>ghcr.io/richardsolomou/stlquest:latest</Repository>
-  <Registry>https://github.com/richardsolomou/stl.quest/pkgs/container/stlquest</Registry>
+  <Repository>ghcr.io/richardsolomou/stl.quest:latest</Repository>
+  <Registry>https://github.com/richardsolomou/stl.quest/pkgs/container/stl.quest</Registry>
   <Network>bridge</Network>
   <Shell>sh</Shell>
   <Privileged>false</Privileged>
