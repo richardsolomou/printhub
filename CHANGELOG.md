@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.5
+
+### Patch Changes
+
+- c0018f1: Allow sign-in over direct HTTP connections used by local TrueNAS and other self-hosted installations.
+
 ## 1.1.4
 
 ### Patch Changes
