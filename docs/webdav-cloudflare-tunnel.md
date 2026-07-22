@@ -19,6 +19,24 @@ curl --user 'stlquest:your-password' --request PROPFIND --header 'Depth: 0' --in
 
 A working WebDAV server normally returns `207 Multi-Status`. A `401` response means the credentials are wrong; `404` or `405` usually means the URL does not point to the WebDAV endpoint.
 
+### TrueNAS SCALE
+
+1. Create a dedicated dataset for STL Quest files. Do not reuse an application, system, or general NAS-administration dataset.
+2. Install a WebDAV app or custom app and mount the dataset read/write as its WebDAV root. Create a dedicated WebDAV account that can access only this dataset.
+3. Install `cloudflared` as a separate app. If both apps share a private container network, use the WebDAV app's container hostname and port as the tunnel service URL. Otherwise, use the TrueNAS private IP and the WebDAV app's published port, such as `http://192.168.1.20:8080/dav`.
+4. Open the TrueNAS **Shell** or use another machine on the same network and run the local `PROPFIND` check above before configuring the public hostname.
+
+Dataset permissions must allow the user ID used by the WebDAV app to read, create, rename, and delete files. Keep the TrueNAS web interface on its existing private address; publish only the WebDAV app through the tunnel.
+
+### Unraid
+
+1. Create a dedicated share for STL Quest files and keep its SMB export private or disabled unless you also need local file access.
+2. Install a WebDAV container and a Cloudflare Tunnel (`cloudflared`) container from Community Apps. Map the dedicated share read/write to the WebDAV container's data directory and configure a unique WebDAV username and password.
+3. Put both containers on the same custom Docker network. Use the WebDAV container name and its internal port as the tunnel service URL, such as `http://webdav:8080/dav`. Alternatively, use the Unraid private IP and the WebDAV container's published port.
+4. Open the Unraid terminal or use another machine on the same network and run the local `PROPFIND` check above.
+
+Do not publish the Unraid web interface through this tunnel. Back up the share with the STL Quest database because the database contains references to these files, not the files themselves.
+
 ## Create the tunnel
 
 1. Open the [Cloudflare Zero Trust dashboard](https://one.dash.cloudflare.com/), then go to **Networks → Connectors → Cloudflare Tunnels** and choose **Create a tunnel**. Cloudflare sometimes shortens this navigation to **Networks → Tunnels**.
