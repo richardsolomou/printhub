@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.14
+
+### Patch Changes
+
+- 4178f9d: Keep replacement sessions active when impersonating users over HTTPS.
+- 67750b6: Keep authentication cookies secure and user impersonation active on HTTPS deployments.
+
 ## 1.1.13
 
 ### Patch Changes
