@@ -3,6 +3,8 @@ allowBuilds:
   better-sqlite3: true
   core-js: true
   esbuild: true
+  sharp: false
+  workerd: true
 
 minimumReleaseAge: 10080
 minimumReleaseAgeExclude:
