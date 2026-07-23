@@ -16,6 +16,7 @@ import { sessionQuery } from '../queries'
 import { reloadAfterWorkspaceChange, useWorkspaceSlug, WORKSPACE_CHANGED_KEY } from '../workspace'
 import { useReleaseUpdate } from './ReleaseUpdateNotice'
 import { UserAvatar } from './UserAvatar'
+import { ProtectedEmail } from './ProtectedEmail'
 
 export function AccountMenu({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
   const workspaceSlug = useWorkspaceSlug()
@@ -66,18 +67,20 @@ export function AccountMenu({ isSuperAdmin = false }: { isSuperAdmin?: boolean }
           <UserAvatar name={identity.name} image={identity.image} />
         </PopoverTrigger>
         <PopoverContent side="top" align="start" sideOffset={12} className="w-72 max-w-[calc(100vw-1rem)] gap-2 p-2">
-          <Link
-            to="/account"
-            className="flex min-w-0 items-center gap-3 rounded-lg px-2 py-1.5 text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-            aria-label="Account settings"
-            onClick={() => setMenuOpen(false)}
-          >
+          <div className="flex min-w-0 items-center gap-3 rounded-lg px-2 py-1.5 text-foreground">
             <UserAvatar name={identity.name} image={identity.image} />
             <div className="min-w-0">
-              <p className="truncate font-medium">{identity.name}</p>
-              <p className="truncate text-xs text-muted-foreground">{identity.email}</p>
+              <Link
+                to="/account"
+                className="block truncate rounded-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                aria-label="Account settings"
+                onClick={() => setMenuOpen(false)}
+              >
+                {identity.name}
+              </Link>
+              <ProtectedEmail email={identity.email} className="block text-xs text-muted-foreground" />
             </div>
-          </Link>
+          </div>
           <Separator />
           <div className="px-2 pt-1 font-heading text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
             Workspaces

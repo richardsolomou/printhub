@@ -21,6 +21,7 @@ import { retryQueries } from '../../queryState'
 import { AuthMethodIcon } from '../AuthMethodIcon'
 import { DialogShell } from '../DialogShell'
 import { QueryState } from '../QueryState'
+import { ProtectedEmail } from '../ProtectedEmail'
 import { UserAvatar } from '../UserAvatar'
 import { SettingsHeader, SettingsPage, SettingsSection } from './SettingsLayout'
 
@@ -63,7 +64,7 @@ export function AccountPane({ me }: { me: Identity }) {
           <UserAvatar name={me.name} image={me.image} size="lg" />
           <div>
             <h3 className="font-medium">{me.name}</h3>
-            <p className="text-sm text-muted-foreground">{me.email}</p>
+            <ProtectedEmail email={me.email} className="block text-sm text-muted-foreground" />
           </div>
           <Button type="button" variant="outline" className="ml-auto" onClick={() => setEditingProfile(true)}>
             Edit profile
