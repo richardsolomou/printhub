@@ -12,7 +12,7 @@ One-time setup on the Dokploy server:
 
 - Create (or reuse) a Dokploy project and pick an environment in it to host previews. The environment ID is in the environment page URL: `/dashboard/project/<projectId>/environment/<environmentId>`.
 - Generate an API key in Dokploy under Settings → Profile → API/CLI.
-- Point a wildcard DNS record for the preview domain at the Dokploy server, for example `*.preview.example.com`.
+- Point a wildcard DNS record for the preview domain at the Dokploy server, for example `*.stl.quest`.
 - Configure a Let's Encrypt certificate email in Dokploy's Settings → Server so Traefik can issue certificates for preview domains.
 
 The repository needs these GitHub Actions secrets:
@@ -20,7 +20,7 @@ The repository needs these GitHub Actions secrets:
 - `DOKPLOY_URL`: the base URL of the Dokploy instance, for example `https://dokploy.example.com`.
 - `DOKPLOY_API_KEY`: the API key generated above.
 - `DOKPLOY_ENVIRONMENT_ID`: the environment that hosts the preview applications.
-- `PREVIEW_DOMAIN`: the parent domain for previews; each preview is served at `stlquest-pr-<number>.<PREVIEW_DOMAIN>`.
+- `PREVIEW_DOMAIN`: the parent domain for previews; each preview is served at `pr-<number>.<PREVIEW_DOMAIN>`, so `PREVIEW_DOMAIN=stl.quest` serves pull request 123 at `pr-123.stl.quest`.
 - `PREVIEW_BASIC_AUTH_USERNAME` and `PREVIEW_BASIC_AUTH_PASSWORD`: the shared credentials Traefik requires before any preview is reachable.
 - `PREVIEW_REGISTRY_USERNAME` and `PREVIEW_REGISTRY_PASSWORD` (optional): credentials Dokploy uses to pull the preview image, for example a GitHub username and a personal access token with `read:packages`. Leave both unset once the `stl.quest-preview` package is public.
 

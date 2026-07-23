@@ -70,9 +70,10 @@ async function waitForHealth(url: string, username: string, password: string) {
 }
 
 async function deploy() {
-  const name = `stlquest-pr-${requirePrNumber()}`
+  const prNumber = requirePrNumber()
+  const name = `stlquest-pr-${prNumber}`
   const image = requireEnv('PREVIEW_IMAGE')
-  const host = `${name}.${requireEnv('PREVIEW_DOMAIN')}`
+  const host = `pr-${prNumber}.${requireEnv('PREVIEW_DOMAIN')}`
   const username = requireEnv('PREVIEW_BASIC_AUTH_USERNAME')
   const password = requireEnv('PREVIEW_BASIC_AUTH_PASSWORD')
   const registryUsername = process.env.PREVIEW_REGISTRY_USERNAME?.trim() || null
