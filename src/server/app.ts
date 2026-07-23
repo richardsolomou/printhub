@@ -156,7 +156,7 @@ async function createApp() {
     telemetry = appTelemetry
     await appTelemetry.start()
     setTelemetryExporters({
-      exception: (error) => void appTelemetry.exception(error),
+      exception: (error, properties) => void appTelemetry.exception(error, properties),
       log: (record) => void appTelemetry.log(record),
     })
     const storedIntegrations = getStoredIntegrationConfig(settings)
@@ -198,10 +198,10 @@ async function createApp() {
       trustedOrigins: authUrl ? [new URL(authUrl).origin] : undefined,
       onError: (error) => {
         const request = currentRequest()
-        void appTelemetry.exception(error, {
-          action: 'better_auth',
-          path: request ? new URL(request.url).pathname : undefined,
-        })
+        logger.error(
+          { err: error, action: 'better_auth', path: request ? new URL(request.url).pathname : undefined },
+          'authentication failed',
+        )
       },
     })
 

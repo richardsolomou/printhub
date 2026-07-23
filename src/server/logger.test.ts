@@ -18,7 +18,7 @@ describe('server logger telemetry', () => {
 
     logger.error({ err: failure }, 'request failed')
 
-    expect(exception).toHaveBeenCalledWith(failure)
+    expect(exception).toHaveBeenCalledWith(failure, {})
     output.mockRestore()
   })
 
@@ -28,9 +28,25 @@ describe('server logger telemetry', () => {
     logger.level = 'error'
     setTelemetryExporters({ exception: vi.fn(), log })
 
-    logger.error({ password: 'secret', requestId: 'request-id' }, 'request failed')
+    logger.error(
+      {
+        password: 'secret',
+        requestId: 'request-id',
+        err: { config: { headers: { authorization: 'Bearer nested-secret' }, refreshToken: 'nested-token' } },
+      },
+      'request failed',
+    )
 
-    expect(log).toHaveBeenCalledWith(expect.objectContaining({ password: '[Redacted]', requestId: 'request-id', msg: 'request failed' }))
+    expect(log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        password: '[Redacted]',
+        requestId: 'request-id',
+        err: { config: { headers: { authorization: '[Redacted]' }, refreshToken: '[Redacted]' } },
+        msg: 'request failed',
+      }),
+    )
+    expect(output).not.toHaveBeenCalledWith(expect.stringContaining('nested-secret'))
+    expect(output).not.toHaveBeenCalledWith(expect.stringContaining('nested-token'))
     output.mockRestore()
   })
 })
