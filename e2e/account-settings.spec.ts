@@ -28,8 +28,18 @@ test('manages profile details through the protected account surface', async ({ p
     await expect(page.getByRole('button', { name: 'Open account menu' })).toBeVisible()
   }
 
+  await page.getByRole('button', { name: 'Open account menu' }).click()
+  await page.getByRole('button', { name: 'Reveal email address' }).click()
+  await expect(page.getByRole('button', { name: 'owner@example.com' })).toBeVisible()
+  await expect(page).not.toHaveURL(/\/account$/)
+
   await page.goto('/account')
   await expect(page.getByRole('heading', { name: 'Account' })).toBeVisible()
+  const protectedEmail = page.getByRole('button', { name: 'Reveal email address' })
+  await expect(protectedEmail.locator('span')).toHaveCSS('filter', /blur\(5px\)/)
+  if (captureScreenshots) await page.screenshot({ path: path.join(screenshots, 'account-email-protected.png'), fullPage: true })
+  await protectedEmail.click()
+  await expect(page.getByRole('button', { name: 'owner@example.com' }).locator('span')).toHaveCSS('filter', 'none')
   await expect(page.getByRole('button', { name: 'Remove password' })).toBeDisabled()
   await page.getByRole('button', { name: 'Edit profile' }).click()
   const profileDialog = page.getByRole('dialog', { name: 'Edit profile' })

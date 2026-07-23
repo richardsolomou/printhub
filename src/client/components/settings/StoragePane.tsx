@@ -38,6 +38,7 @@ import {
   type S3Provider,
 } from '../../storageProviders'
 import { ConfirmDialog } from '../ConfirmDialog'
+import { ProtectedEmail } from '../ProtectedEmail'
 import { QueryState } from '../QueryState'
 import { ServerFolderPicker } from '../ServerFolderPicker'
 import { StorageAdapterIcon } from '../StorageAdapterIcon'
@@ -570,11 +571,25 @@ function StorageForm({
                         ? `${cloudProviderLabel(adapter)} connected`
                         : `Connect ${cloudProviderLabel(adapter)}`}
                     </p>
-                    <p className="mt-1 text-muted-foreground">
-                      {cloudConnections[adapter].connected
-                        ? `Signed in${cloudConnections[adapter].accountName ? ` as ${cloudConnections[adapter].accountName}` : ''}${cloudConnections[adapter].accountEmail ? ` (${cloudConnections[adapter].accountEmail})` : ''}.`
-                        : CLOUD_HELP[adapter].intro}
-                    </p>
+                    <div className="mt-1 text-muted-foreground">
+                      {cloudConnections[adapter].connected ? (
+                        <p className="flex flex-wrap items-center gap-x-1">
+                          <span>
+                            Signed in{cloudConnections[adapter].accountName ? ` as ${cloudConnections[adapter].accountName}` : ''}
+                          </span>
+                          {cloudConnections[adapter].accountEmail ? (
+                            <span className="inline-flex">
+                              (<ProtectedEmail email={cloudConnections[adapter].accountEmail} />
+                              ).
+                            </span>
+                          ) : (
+                            '.'
+                          )}
+                        </p>
+                      ) : (
+                        <p>{CLOUD_HELP[adapter].intro}</p>
+                      )}
+                    </div>
                     <a
                       className="mt-2 inline-flex items-center gap-1 font-medium text-foreground underline underline-offset-3"
                       href={CLOUD_HELP[adapter].consoleUrl}

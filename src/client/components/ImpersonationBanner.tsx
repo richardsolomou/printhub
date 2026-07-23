@@ -3,6 +3,7 @@ import { LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { Identity } from '../../core/types'
 import { authClient } from '../authClient'
+import { ProtectedEmail } from './ProtectedEmail'
 
 export function ImpersonationBanner({ identity }: { identity: Identity }) {
   const mutation = useMutation({
@@ -22,7 +23,7 @@ export function ImpersonationBanner({ identity }: { identity: Identity }) {
       <div className="flex items-center gap-3 p-3">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium">Viewing as {identity.name}</p>
-          <p className="truncate text-xs text-muted-foreground">{identity.email}</p>
+          <ProtectedEmail email={identity.email} className="block text-xs text-muted-foreground" />
         </div>
         <Button type="button" size="sm" variant="outline" disabled={mutation.isPending} onClick={() => mutation.mutate()}>
           <LogOut />

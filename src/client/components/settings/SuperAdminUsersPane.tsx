@@ -19,6 +19,7 @@ import { accountsQuery, sessionQuery } from '../../queries'
 import { retryQueries } from '../../queryState'
 import { DialogShell } from '../DialogShell'
 import { QueryState } from '../QueryState'
+import { ProtectedEmail } from '../ProtectedEmail'
 import { UserAvatar } from '../UserAvatar'
 import { SettingsActions, SettingsHeader, SettingsPage, SettingsSection } from './SettingsLayout'
 
@@ -115,12 +116,12 @@ function userColumns({
           <UserAvatar name={row.original.name} image={row.original.image} size="sm" />
           <div className="min-w-0 max-w-28 sm:max-w-none">
             <span className="block truncate">{row.original.name}</span>
-            <span className="block truncate text-xs text-muted-foreground sm:hidden">{row.original.email}</span>
+            <ProtectedEmail email={row.original.email} className="block text-xs text-muted-foreground sm:hidden" />
           </div>
         </div>
       ),
     }),
-    columnHelper.accessor('email', { header: 'Email' }),
+    columnHelper.accessor('email', { header: 'Email', cell: ({ getValue }) => <ProtectedEmail email={getValue()} /> }),
     columnHelper.accessor('role', { header: 'Role', cell: ServerRoleCell }),
     columnHelper.display({
       id: 'actions',
@@ -184,7 +185,7 @@ function UserSummary({ user }: { user: Account }) {
       <UserAvatar name={user.name} image={user.image} />
       <div className="min-w-0">
         <p className="font-medium">{user.name}</p>
-        <p className="truncate text-sm text-muted-foreground">{user.email}</p>
+        <ProtectedEmail email={user.email} className="block text-sm text-muted-foreground" />
       </div>
       <Badge variant="secondary" className="ml-auto">
         {user.role === 'super_admin' ? 'Super admin' : 'User'}
