@@ -4,7 +4,7 @@ STL Quest sends anonymous usage telemetry by default to help improve the app. Th
 
 ## What is sent
 
-Events go through the app's own `/ingest` route, which reverse-proxies to PostHog. Events are keyed by the internal, randomly generated user ID — never an email address, name, or other profile data. Server-side error reports and storage migration outcomes use the fixed identifier `server`.
+Events go through the app's own `/ingest` route, which reverse-proxies to PostHog. Events are keyed by the internal, randomly generated user ID — never an email address, name, or other profile data. Server-side error reports and storage migration outcomes use the fixed identifier `server`. Structured server logs are sent to PostHog Logs with their severity, message, request ID, and structured context. Password, token, authorization, and cookie fields are redacted before local or remote logging.
 
 | Event                         | Property keys                                          |
 | ----------------------------- | ------------------------------------------------------ |
@@ -36,7 +36,7 @@ Page navigation within the app is also captured, along with the standard analyti
 
 Error reports:
 
-- Server-side asset errors send the error message only — no stack trace, file names, or paths — with `action` (`assets_read`, `assets_write`, or `assets_generate`) and `print_type`.
+- Server-side exceptions use PostHog Error Tracking and can include the error message, stack trace, source file names and paths, and explicit structured context. Uncaught exceptions, unhandled promise rejections, and errors written through the server logger are captured.
 - Browser-side exceptions use PostHog's exception capture, which can include the error message, stack trace, browser metadata, and in-app page URL. Explicit context keys are `action`, `print_type`, `from`, `to`, `count`, and `status` for board or request mutations; `action` and `file_size_bytes` for uploads; and `area` and `showing_preview` for the STL viewer. Unhandled render errors are also captured by the application error boundary.
 
 ## What is never sent
@@ -45,4 +45,4 @@ Model files and geometry, request names and notes, file names, email addresses, 
 
 ## Disabling telemetry
 
-Open the Super Admin area's Telemetry tab and turn off "Share anonymous usage data". The setting is stored deployment-wide and gates both server and browser events.
+Open the Super Admin area's Telemetry tab and turn off "Share anonymous usage data". The setting is stored deployment-wide and gates server events, server logs, and browser events.

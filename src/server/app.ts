@@ -20,7 +20,7 @@ import { AssetGenerationQueue } from './assets/queue'
 import { createAuth } from './auth'
 import { hostedDeployment } from './hosted'
 import type { BoardConfig, Identity, Repository, StorageConfig, TelemetryConfig, WorkspaceSummary } from '../core/types'
-import { logger } from './logger'
+import { logger, setTelemetryExporters } from './logger'
 import { diagnostics } from './operations'
 import {
   decryptSetting,
@@ -153,6 +153,11 @@ async function createApp() {
     const settings = deploymentSettings(repository)
     const appTelemetry = new OptionalPostHogTelemetry(() => resolveTelemetryConfig(settings).enabled)
     telemetry = appTelemetry
+    await appTelemetry.start()
+    setTelemetryExporters({
+      exception: (error) => void appTelemetry.exception(error),
+      log: (record) => void appTelemetry.log(record),
+    })
     const storedIntegrations = getStoredIntegrationConfig(settings)
     const authConfig = resolveAuthAdapterConfig(storedIntegrations)
     const smtpConfig = resolveSmtpConfig(storedIntegrations)
@@ -324,6 +329,7 @@ async function createApp() {
         try {
           await appTelemetry.shutdown()
         } finally {
+          setTelemetryExporters(undefined)
           repository?.close()
           lease.release()
         }
@@ -358,6 +364,7 @@ async function createApp() {
     try {
       await telemetry?.shutdown()
     } finally {
+      setTelemetryExporters(undefined)
       repository?.close()
       lease.release()
     }
