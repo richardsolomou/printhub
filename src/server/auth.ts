@@ -76,7 +76,8 @@ export function createAuth(
     },
     trustedOrigins:
       options?.trustedOrigins ??
-      ((request) => (request ? [new URL(request.url).origin, forwardedOrigin(request)].filter((origin): origin is string => Boolean(origin)) : [])),
+      ((request) =>
+        request ? [new URL(request.url).origin, forwardedOrigin(request)].filter((origin): origin is string => Boolean(origin)) : []),
     disabledPaths: ['/change-email', '/unlink-account'],
     onAPIError: {
       onError: (error) => {
