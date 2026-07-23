@@ -51,7 +51,6 @@ export default defineConfig(({ mode }) => {
     define: { __APP_VERSION__: JSON.stringify(packageJson.version) },
     plugins: [
       devApiImages,
-      tailwindcss(),
       tanstackStart(),
       nitro({
         routeRules: {
@@ -73,6 +72,7 @@ export default defineConfig(({ mode }) => {
         },
       }),
       viteReact(),
+      tailwindcss(),
     ],
   }
 })

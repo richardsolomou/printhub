@@ -18,12 +18,15 @@ import { UpdateNotices } from '../client/components/UpdateNotices'
 import { preloadSessionQueries, sessionQuery } from '../client/queries'
 import { WorkspaceProvider } from '../client/workspace'
 import { faviconHref } from '../favicon'
-import '../styles.css'
+import appCss from '../styles.css?url'
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
     meta: [{ charSet: 'utf-8' }, { name: 'viewport', content: 'width=device-width, initial-scale=1' }, { title: 'STL Quest' }],
-    links: [{ rel: 'icon', type: 'image/svg+xml', href: faviconHref(__APP_VERSION__) }],
+    links: [
+      { rel: 'icon', type: 'image/svg+xml', href: faviconHref(__APP_VERSION__) },
+      { rel: 'stylesheet', href: appCss },
+    ],
   }),
   // Seeds the query cache for SSR; afterwards the session lives in
   // react-query like all other server state, so SSE invalidation reaches it.
