@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.6
+
+### Patch Changes
+
+- cc0f2b9: Capture unexpected server errors and structured logs in PostHog so that production failures can be diagnosed.
+
 ## 1.1.5
 
 ### Patch Changes
