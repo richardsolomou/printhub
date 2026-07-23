@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.12
+
+### Patch Changes
+
+- 04750f6: Load the application stylesheet reliably after deployments so that refreshed pages do not briefly appear unstyled.
+
 ## 1.1.11
 
 ### Patch Changes
