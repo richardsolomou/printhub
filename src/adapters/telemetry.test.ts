@@ -1,20 +1,49 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { OptionalPostHogTelemetry } from './telemetry'
 
-const { capture, shutdown, construct } = vi.hoisted(() => ({
+const { capture, captureException, shutdown, construct, emit, logShutdown, exporterConstruct, providerConstruct } = vi.hoisted(() => ({
   capture: vi.fn(),
+  captureException: vi.fn(),
   shutdown: vi.fn(async () => undefined),
   construct: vi.fn(),
+  emit: vi.fn(),
+  logShutdown: vi.fn(async () => undefined),
+  exporterConstruct: vi.fn(),
+  providerConstruct: vi.fn(),
 }))
 
 vi.mock('posthog-node', () => ({
   PostHog: class {
     capture = capture
+    captureException = captureException
     shutdown = shutdown
 
     constructor(...args: unknown[]) {
       construct(...args)
     }
+  },
+}))
+
+vi.mock('@opentelemetry/exporter-logs-otlp-http', () => ({
+  OTLPLogExporter: function OTLPLogExporter(...args: unknown[]) {
+    exporterConstruct(...args)
+  },
+}))
+
+vi.mock('@opentelemetry/resources', () => ({ resourceFromAttributes: (attributes: unknown) => attributes }))
+
+vi.mock('@opentelemetry/sdk-logs', () => ({
+  BatchLogRecordProcessor: function BatchLogRecordProcessor() {},
+  LoggerProvider: class {
+    constructor(...args: unknown[]) {
+      providerConstruct(...args)
+    }
+
+    getLogger() {
+      return { emit }
+    }
+
+    shutdown = logShutdown
   },
 }))
 
@@ -57,6 +86,42 @@ describe('OptionalPostHogTelemetry', () => {
     expect(capture).toHaveBeenCalledOnce()
   })
 
+  it('uses the error tracking API for server exceptions', async () => {
+    const telemetry = new OptionalPostHogTelemetry(() => true)
+    const failure = new Error('database unavailable')
+
+    await telemetry.exception(failure, { action: 'sign_in' })
+
+    expect(captureException).toHaveBeenCalledWith(failure, 'server', { action: 'sign_in' })
+  })
+
+  it('starts exception autocapture and OTLP logging eagerly', async () => {
+    const telemetry = new OptionalPostHogTelemetry(() => true)
+
+    await telemetry.start()
+
+    expect(construct).toHaveBeenCalledOnce()
+    expect(exporterConstruct).toHaveBeenCalledWith({
+      url: 'https://posthog.test/i/v1/logs',
+      headers: { Authorization: 'Bearer test-token' },
+    })
+    expect(providerConstruct).toHaveBeenCalledOnce()
+  })
+
+  it('exports structured Pino records as OpenTelemetry logs', async () => {
+    const telemetry = new OptionalPostHogTelemetry(() => true)
+
+    await telemetry.log({ level: 50, time: 1_234, msg: 'request failed', requestId: 'request-id', err: { type: 'Error' } })
+
+    expect(emit).toHaveBeenCalledWith({
+      body: 'request failed',
+      timestamp: 1_234,
+      severityNumber: 17,
+      severityText: 'error',
+      attributes: { requestId: 'request-id', err: '{"type":"Error"}' },
+    })
+  })
+
   it('does not construct a client when telemetry remains disabled', async () => {
     const telemetry = new OptionalPostHogTelemetry(() => false)
 
@@ -65,6 +130,7 @@ describe('OptionalPostHogTelemetry', () => {
 
     expect(construct).not.toHaveBeenCalled()
     expect(shutdown).not.toHaveBeenCalled()
+    expect(logShutdown).not.toHaveBeenCalled()
   })
 
   it('silently no-ops when the PostHog environment variables are unset', async () => {

@@ -20,7 +20,7 @@ import { AssetGenerationQueue } from './assets/queue'
 import { createAuth } from './auth'
 import { hostedDeployment } from './hosted'
 import type { BoardConfig, Identity, Repository, StorageConfig, TelemetryConfig, WorkspaceSummary } from '../core/types'
-import { logger } from './logger'
+import { logger, setTelemetryExporters } from './logger'
 import { diagnostics } from './operations'
 import {
   decryptSetting,
@@ -36,6 +36,7 @@ import { userImage } from './avatar'
 import { acquireDataDirectoryLease, networkFilesystem } from './dataSafety'
 import { LEGACY_STORAGE_NAMESPACE_SETTING, StorageMigrationCoordinator } from './storageMigration'
 import { organization } from '../db/schema'
+import { currentRequest } from './requestContext'
 
 const workflowVersion = workflow.statuses.map((status) => status.id).join(':')
 const singleton = globalThis as typeof globalThis & {
@@ -153,6 +154,11 @@ async function createApp() {
     const settings = deploymentSettings(repository)
     const appTelemetry = new OptionalPostHogTelemetry(() => resolveTelemetryConfig(settings).enabled)
     telemetry = appTelemetry
+    await appTelemetry.start()
+    setTelemetryExporters({
+      exception: (error, properties) => void appTelemetry.exception(error, properties),
+      log: (record) => void appTelemetry.log(record),
+    })
     const storedIntegrations = getStoredIntegrationConfig(settings)
     const authConfig = resolveAuthAdapterConfig(storedIntegrations)
     const smtpConfig = resolveSmtpConfig(storedIntegrations)
@@ -190,6 +196,13 @@ async function createApp() {
       email,
       baseURL: authUrl,
       trustedOrigins: authUrl ? [new URL(authUrl).origin] : undefined,
+      onError: (error) => {
+        const request = currentRequest()
+        logger.error(
+          { err: error, action: 'better_auth', path: request ? new URL(request.url).pathname : undefined },
+          'authentication failed',
+        )
+      },
     })
 
     const requireIdentity = async (headers: Headers) => {
@@ -318,17 +331,30 @@ async function createApp() {
     const close = async () => {
       if (closed) return
       closed = true
+      logger.info({ event: 'application_stopping', activeWorkspaces: runtimes.size }, 'application stopping')
       try {
         await Promise.all([...runtimes.values()].map((workspaceRuntime) => workspaceRuntime.close()))
       } finally {
         try {
           await appTelemetry.shutdown()
         } finally {
+          setTelemetryExporters(undefined)
           repository?.close()
           lease.release()
         }
       }
     }
+
+    logger.info(
+      {
+        event: 'application_started',
+        workspaces: repository.listWorkspaces().length,
+        passwordAuth: authConfig.password,
+        socialProviders: authConfig.socialProviders.length,
+        telemetryEnabled: resolveTelemetryConfig(settings).enabled,
+      },
+      'application started',
+    )
 
     return {
       repository,
@@ -355,9 +381,11 @@ async function createApp() {
       close,
     }
   } catch (error) {
+    logger.error({ err: error, event: 'application_start_failed' }, 'application startup failed')
     try {
       await telemetry?.shutdown()
     } finally {
+      setTelemetryExporters(undefined)
       repository?.close()
       lease.release()
     }
