@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.15
+
+### Patch Changes
+
+- 3b943a8: Allow moving a request between columns when it already has copies in the destination.
+
 ## 1.1.14
 
 ### Patch Changes
