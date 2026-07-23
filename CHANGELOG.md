@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.11
+
+### Patch Changes
+
+- 5827c72: Create a personal workspace only when a user signs in without any existing workspace memberships.
+- 0b5463b: Blur email addresses until clicked so that private details stay hidden during screen sharing.
+
 ## 1.1.10
 
 ### Patch Changes
