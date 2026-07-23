@@ -17,9 +17,9 @@ The repository needs these GitHub Actions secrets:
 
 The Cloudflare account must have the Workers Paid plan with Containers enabled and a `workers.dev` subdomain. Configure Access for Workers preview URLs with an identity policy for the team and a service-token policy for the GitHub workflow.
 
-Create a protected GitHub environment named `pr-previews`, require approval from a maintainer, and restrict deployment branches to protected branches and selected repository branches. The environment approval keeps unreviewed pull-request code from receiving the Cloudflare and Access credentials.
+In the repository's Actions settings, require approval for workflows from all outside collaborators. Maintainer-authored workflows run automatically, while a maintainer must approve workflows submitted by external contributors.
 
-The workflow names Workers `stlquest-pr-<number>`. Pull requests from forks run normal CI but do not receive previews because GitHub does not expose deployment secrets to forked code.
+The workflow names Workers `stlquest-pr-<number>`. Pull requests from forks do not receive previews after approval because the workflow only deploys branches in this repository and GitHub does not expose deployment secrets to forked code.
 
 To redeploy, push another commit or rerun the workflow. To remove a preview manually, run:
 
