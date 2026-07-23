@@ -68,6 +68,41 @@ describe('better-auth integration', () => {
   let cleanup: (() => void) | undefined
   afterEach(() => cleanup?.())
 
+  it('reports internal handler errors without reporting expected API errors', async () => {
+    const repository = new DrizzleRepository(createDatabase(':memory:'))
+    cleanup = () => repository.close()
+    const failure = new Error('user hook failed')
+    const errors: unknown[] = []
+    const auth = createAuth(repository.database, SECRET, {
+      baseURL: 'http://localhost',
+      trustedOrigins: ['http://localhost'],
+      onUserCreated: () => {
+        throw failure
+      },
+      onError: (error) => errors.push(error),
+    })
+    const body = JSON.stringify({ email: 'user@example.com', password: 'password1234', name: 'User' })
+
+    const internal = await auth.handler(
+      new Request('http://localhost/api/auth/sign-up/email', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: 'http://localhost' },
+        body,
+      }),
+    )
+    const invalidCredentials = await auth.handler(
+      new Request('http://localhost/api/auth/sign-in/email', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: 'http://localhost' },
+        body: JSON.stringify({ email: 'missing@example.com', password: 'wrong-password' }),
+      }),
+    )
+
+    expect(internal.status).toBe(500)
+    expect(invalidCredentials.status).toBe(401)
+    expect(errors).toEqual([failure])
+  })
+
   it('only allows different-email identities through explicit account linking', async () => {
     const { repository, auth } = build()
     cleanup = () => repository.close()

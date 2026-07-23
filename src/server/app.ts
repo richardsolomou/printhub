@@ -36,6 +36,7 @@ import { userImage } from './avatar'
 import { acquireDataDirectoryLease, networkFilesystem } from './dataSafety'
 import { LEGACY_STORAGE_NAMESPACE_SETTING, StorageMigrationCoordinator } from './storageMigration'
 import { organization } from '../db/schema'
+import { currentRequest } from './requestContext'
 
 const workflowVersion = workflow.statuses.map((status) => status.id).join(':')
 const singleton = globalThis as typeof globalThis & {
@@ -195,6 +196,13 @@ async function createApp() {
       email,
       baseURL: authUrl,
       trustedOrigins: authUrl ? [new URL(authUrl).origin] : undefined,
+      onError: (error) => {
+        const request = currentRequest()
+        void appTelemetry.exception(error, {
+          action: 'better_auth',
+          path: request ? new URL(request.url).pathname : undefined,
+        })
+      },
     })
 
     const requireIdentity = async (headers: Headers) => {

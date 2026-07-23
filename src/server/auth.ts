@@ -1,7 +1,7 @@
 import argon2 from 'argon2'
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { APIError, createAuthMiddleware } from 'better-auth/api'
+import { APIError, createAuthMiddleware, isAPIError } from 'better-auth/api'
 import { admin as superAdminPlugin, organization, twoFactor } from 'better-auth/plugins'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import PQueue from 'p-queue'
@@ -36,6 +36,7 @@ export function createAuth(
     email?: EmailDelivery
     baseURL?: string
     trustedOrigins?: string[]
+    onError?: (error: unknown) => void
   },
 ) {
   const accountMutationQueues = new Map<string, PQueue>()
@@ -75,6 +76,11 @@ export function createAuth(
     },
     trustedOrigins: options?.trustedOrigins ?? ((request) => (request ? [new URL(request.url).origin] : [])),
     disabledPaths: ['/change-email', '/unlink-account'],
+    onAPIError: {
+      onError: (error) => {
+        if (!isAPIError(error) || error.status === 'INTERNAL_SERVER_ERROR') options?.onError?.(error)
+      },
+    },
     emailAndPassword: {
       enabled: auth.password,
       minPasswordLength: 8,
