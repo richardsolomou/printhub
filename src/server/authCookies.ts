@@ -1,5 +1,40 @@
+import { getRequest, setCookie } from '@tanstack/react-start/server'
+import { createAuthMiddleware } from 'better-auth/api'
+import { parseSetCookieHeader, toCookieOptions } from 'better-auth/cookies'
+
 const SECURE_PREFIX = '__Secure-'
 const AUTH_PREFIX = 'better-auth.'
+
+export function stlQuestCookies() {
+  return {
+    id: 'stlquest-cookies',
+    hooks: {
+      after: [
+        {
+          matcher: () => true,
+          handler: createAuthMiddleware(async (ctx) => {
+            if ('_flag' in ctx && ctx._flag === 'router') return
+            const setCookies = ctx.context.responseHeaders?.get('set-cookie')
+            if (!setCookies) return
+            try {
+              const request = getRequest()
+              const secure = requestProtocol(request) === 'https'
+              for (const [name, attributes] of parseSetCookieHeader(setCookies)) {
+                const options = toCookieOptions(attributes)
+                if (secure && name.startsWith(AUTH_PREFIX)) {
+                  setCookie(name, '', { ...options, maxAge: 0, secure: true })
+                  setCookie(`${SECURE_PREFIX}${name}`, attributes.value, { ...options, secure: true })
+                } else {
+                  setCookie(name, attributes.value, { ...options, secure })
+                }
+              }
+            } catch {}
+          }),
+        },
+      ],
+    },
+  }
+}
 
 export function prepareAuthRequest(request: Request) {
   if (requestProtocol(request) !== 'https') return request
@@ -13,15 +48,21 @@ export function prepareAuthRequest(request: Request) {
 export function normalizeAuthHeaders(headers: Headers) {
   const cookies = headers.get('cookie')
   if (!cookies?.includes(`${SECURE_PREFIX}${AUTH_PREFIX}`)) return headers
+  const parts = cookies.split(';').map((cookie) => cookie.trim())
+  const secureNames = new Set(
+    parts
+      .filter((cookie) => cookie.startsWith(`${SECURE_PREFIX}${AUTH_PREFIX}`))
+      .map((cookie) => cookie.slice(SECURE_PREFIX.length).split('=', 1)[0]),
+  )
   const normalized = new Headers(headers)
   normalized.set(
     'cookie',
-    cookies
-      .split(';')
-      .map((cookie) => {
-        const trimmed = cookie.trim()
-        return trimmed.startsWith(`${SECURE_PREFIX}${AUTH_PREFIX}`) ? trimmed.slice(SECURE_PREFIX.length) : trimmed
+    parts
+      .filter((cookie) => {
+        const name = cookie.split('=', 1)[0]
+        return cookie.startsWith(SECURE_PREFIX) || !secureNames.has(name)
       })
+      .map((cookie) => (cookie.startsWith(`${SECURE_PREFIX}${AUTH_PREFIX}`) ? cookie.slice(SECURE_PREFIX.length) : cookie))
       .join('; '),
   )
   return normalized
@@ -35,9 +76,16 @@ export function secureResponseCookies(request: Request, response: Response) {
   headers.delete('set-cookie')
   for (const cookie of cookies) {
     const authCookie = cookie.startsWith(AUTH_PREFIX) ? `${SECURE_PREFIX}${cookie}` : cookie
+    if (authCookie !== cookie) headers.append('set-cookie', expireUnprefixedCookie(cookie))
     headers.append('set-cookie', /;\s*secure(?:;|$)/i.test(authCookie) ? authCookie : `${authCookie}; Secure`)
   }
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
+}
+
+function expireUnprefixedCookie(cookie: string) {
+  const [name, ...attributes] = cookie.split(';')
+  const suffix = attributes.filter((attribute) => !/^\s*(expires|max-age)=/i.test(attribute)).join(';')
+  return `${name.split('=', 1)[0]}=;${suffix}; Max-Age=0; Secure`
 }
 
 function requestProtocol(request: Request) {

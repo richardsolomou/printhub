@@ -1,7 +1,16 @@
-import { describe, expect, it } from 'vitest'
-import { normalizeAuthHeaders, prepareAuthRequest, secureResponseCookies } from './authCookies'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { normalizeAuthHeaders, prepareAuthRequest, secureResponseCookies, stlQuestCookies } from './authCookies'
+
+const { getRequestMock, setCookieMock } = vi.hoisted(() => ({
+  getRequestMock: vi.fn(),
+  setCookieMock: vi.fn(),
+}))
+
+vi.mock('@tanstack/react-start/server', () => ({ getRequest: getRequestMock, setCookie: setCookieMock }))
 
 describe('auth response cookies', () => {
+  beforeEach(() => vi.clearAllMocks())
+
   it('secures cookies when a reverse proxy forwards HTTPS', () => {
     const response = new Response(null, { headers: { 'set-cookie': 'better-auth.session_token=token; Path=/; HttpOnly; SameSite=Lax' } })
     const secured = secureResponseCookies(
@@ -9,7 +18,10 @@ describe('auth response cookies', () => {
       response,
     )
 
-    expect(secured.headers.getSetCookie()).toEqual(['__Secure-better-auth.session_token=token; Path=/; HttpOnly; SameSite=Lax; Secure'])
+    expect(secured.headers.getSetCookie()).toEqual([
+      'better-auth.session_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure',
+      '__Secure-better-auth.session_token=token; Path=/; HttpOnly; SameSite=Lax; Secure',
+    ])
   })
 
   it('leaves cookies usable over direct HTTP', () => {
@@ -17,6 +29,40 @@ describe('auth response cookies', () => {
     const unchanged = secureResponseCookies(new Request('http://nas.local/api/auth/sign-in/email'), response)
 
     expect(unchanged.headers.getSetCookie()).toEqual(['better-auth.session_token=token; Path=/; HttpOnly; SameSite=Lax'])
+  })
+
+  it('secures auth cookies written by server functions and expires unprefixed copies', async () => {
+    getRequestMock.mockReturnValue(new Request('http://container:3000/_server', { headers: { origin: 'https://print.example.com' } }))
+    const plugin = stlQuestCookies()
+
+    await plugin.hooks.after[0].handler({
+      context: {
+        responseHeaders: new Headers({
+          'set-cookie': 'better-auth.session_token=token; Path=/; HttpOnly; SameSite=Lax; Max-Age=3600',
+        }),
+      },
+    } as never)
+
+    expect(setCookieMock.mock.calls).toEqual([
+      ['better-auth.session_token', '', { httpOnly: true, maxAge: 0, path: '/', sameSite: 'lax', secure: true }],
+      ['__Secure-better-auth.session_token', 'token', { httpOnly: true, maxAge: 3600, path: '/', sameSite: 'lax', secure: true }],
+    ])
+  })
+
+  it('keeps server-function auth cookies unprefixed over direct HTTP', async () => {
+    getRequestMock.mockReturnValue(new Request('http://nas.local/_server'))
+    const plugin = stlQuestCookies()
+
+    await plugin.hooks.after[0].handler({
+      context: { responseHeaders: new Headers({ 'set-cookie': 'better-auth.session_token=token; Path=/; HttpOnly; SameSite=Lax' }) },
+    } as never)
+
+    expect(setCookieMock).toHaveBeenCalledWith('better-auth.session_token', 'token', {
+      httpOnly: true,
+      path: '/',
+      sameSite: 'lax',
+      secure: false,
+    })
   })
 
   it('normalizes secure auth cookies without consuming the request body', async () => {
@@ -41,6 +87,17 @@ describe('auth response cookies', () => {
     const headers = normalizeAuthHeaders(new Headers({ cookie: '__Secure-better-auth.session_token=token; stlquest_invite=invite' }))
 
     expect(headers.get('cookie')).toBe('better-auth.session_token=token; stlquest_invite=invite')
+  })
+
+  it('prefers secure auth cookies over stale unprefixed copies', () => {
+    const headers = normalizeAuthHeaders(
+      new Headers({
+        cookie:
+          '__Secure-better-auth.session_token=impersonated; better-auth.session_token=admin; better-auth.admin_session=stale; __Secure-better-auth.admin_session=current',
+      }),
+    )
+
+    expect(headers.get('cookie')).toBe('better-auth.session_token=impersonated; better-auth.admin_session=current')
   })
 
   it('normalizes server function headers after the request body was consumed', async () => {
