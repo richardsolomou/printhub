@@ -3,7 +3,6 @@ import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { APIError, createAuthMiddleware, isAPIError } from 'better-auth/api'
 import { admin as superAdminPlugin, organization, twoFactor } from 'better-auth/plugins'
-import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import PQueue from 'p-queue'
 import { and, eq, ne, sql } from 'drizzle-orm'
 import type { STLQuestDatabase } from '../db'
@@ -14,6 +13,7 @@ import { PASSWORD_MIN_LENGTH } from '../core/security'
 import type { Invite } from '../core/types'
 import type { EmailDelivery } from '../adapters/email'
 import { authProvisioningAllowed, claimAuthInvite, claimedAuthInvite } from './authInvite'
+import { stlQuestCookies } from './authCookies'
 import { hostedDeployment } from './hosted'
 
 function passwordFromMutation(path: string, body: unknown) {
@@ -185,7 +185,7 @@ export function createAuth(
         },
       }),
       twoFactor({ issuer: 'STL Quest', allowPasswordless: true }),
-      tanstackStartCookies(),
+      stlQuestCookies(),
     ],
   })
   const serializeAccountMutation = async <T>(userId: string, mutation: () => Promise<T>) => {
