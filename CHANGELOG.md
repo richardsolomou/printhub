@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.18
+
+### Patch Changes
+
+- 40492ae: Keep uploaded models at stable paths so that board moves remain fast and reliable across every storage provider.
+
 ## 1.1.17
 
 ### Patch Changes
