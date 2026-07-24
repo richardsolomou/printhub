@@ -37,7 +37,7 @@ import { acquireDataDirectoryLease, networkFilesystem } from './dataSafety'
 import { LEGACY_STORAGE_NAMESPACE_SETTING, STORAGE_MIGRATION_SETTING, StorageMigrationCoordinator } from './storageMigration'
 import { organization } from '../db/schema'
 import { currentRequest } from './requestContext'
-import { migrateAssetLayout } from './assetLayoutMigration'
+import { ASSET_LAYOUT_SETTING, ASSET_LAYOUT_VERSION, migrateAssetLayout } from './assetLayoutMigration'
 
 const workflowVersion = workflow.statuses.map((status) => status.id).join(':')
 const singleton = globalThis as typeof globalThis & {
@@ -48,11 +48,9 @@ const singleton = globalThis as typeof globalThis & {
 
 export function resolveStorageConfig(repository: Repository): StorageConfig {
   const encrypted = repository.getSetting<EncryptedSetting>('storageEncrypted')
-  if (encrypted) return decryptSetting<StorageConfig>(encrypted)
-  const configured = repository.getSetting<StorageConfig>('storage')
-  if (configured) return configured
-  const root = path.resolve(process.env.PRINTS_DIR ?? '/prints')
-  return { adapter: 'local', root }
+  const configured = encrypted ? decryptSetting<StorageConfig>(encrypted) : repository.getSetting<StorageConfig>('storage')
+  if (configured?.adapter !== 'local') return configured ?? { adapter: 'local', root: path.resolve(process.env.PRINTS_DIR ?? '/prints') }
+  return { adapter: 'local', root: path.resolve(process.env.PRINTS_DIR_OVERRIDE?.trim() || configured.root) }
 }
 
 export function resolveTelemetryConfig(repository: { getSetting<T>(key: string): T | undefined }): TelemetryConfig {
@@ -235,6 +233,20 @@ async function createApp() {
     await staging.sweepUploads(activeUploadIds)
     const { cleanExpiredTusUploads } = await import('./uploads')
     await cleanExpiredTusUploads()
+    for (const workspace of repository.listWorkspaces()) {
+      const scopedRepository = repository.scoped(workspace.id)
+      if (
+        scopedRepository.getSetting(ASSET_LAYOUT_SETTING) === ASSET_LAYOUT_VERSION ||
+        scopedRepository.listRequests().length > 0 ||
+        scopedRepository.listOperations().length > 0
+      )
+        continue
+      const storage = resolveStorageConfig(scopedRepository)
+      const assets = buildAssetStore(storage, scopedRepository, workspace.id)
+      await migrateAssetLayout(scopedRepository, assets).catch((error) => {
+        logger.warn({ err: error, workspaceId: workspace.id }, 'empty workspace asset layout cleanup failed')
+      })
+    }
     const workspaceMembership = async (headers: Headers, workspaceSlug?: string) => {
       headers = normalizeAuthHeaders(headers)
       const session = await auth.api.getSession({ headers })

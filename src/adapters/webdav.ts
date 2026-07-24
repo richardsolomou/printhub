@@ -112,6 +112,10 @@ export class WebDAVAssetStore implements AssetStore {
     }
   }
 
+  async removeDirectory(relativePath: string) {
+    await this.remove(relativePath)
+  }
+
   async trash(relativePath: string) {
     if (!(await this.stat(relativePath))) return undefined
     const next = `.stlquest/trash/${crypto.randomUUID()}__${path.posix.basename(relativePath)}`

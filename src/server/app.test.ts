@@ -268,6 +268,29 @@ describe('app initialization', () => {
     expect(resolveStorageConfig(repository as never)).toEqual({ adapter: 'local', root: path.resolve('./local/prints') })
   })
 
+  it('uses PRINTS_DIR_OVERRIDE instead of an encrypted local storage path', async () => {
+    vi.stubEnv('PRINTS_DIR_OVERRIDE', './restored/prints')
+    vi.stubEnv('INTEGRATIONS_ENCRYPTION_KEY', Buffer.alloc(32).toString('base64url'))
+    const { encryptSetting } = await import('./integrations')
+    const encrypted = encryptSetting({ adapter: 'local', root: '/original/prints' })
+    const repository = { getSetting: (key: string) => (key === 'storageEncrypted' ? encrypted : undefined) }
+    const { resolveStorageConfig } = await import('./app')
+
+    expect(resolveStorageConfig(repository as never)).toEqual({ adapter: 'local', root: path.resolve('./restored/prints') })
+  })
+
+  it('keeps encrypted remote storage when PRINTS_DIR_OVERRIDE is set', async () => {
+    vi.stubEnv('PRINTS_DIR_OVERRIDE', './restored/prints')
+    vi.stubEnv('INTEGRATIONS_ENCRYPTION_KEY', Buffer.alloc(32).toString('base64url'))
+    const { encryptSetting } = await import('./integrations')
+    const storage = { adapter: 'webdav', endpoint: 'https://storage.example.com', root: 'models', username: 'user', password: 'secret' }
+    const encrypted = encryptSetting(storage)
+    const repository = { getSetting: (key: string) => (key === 'storageEncrypted' ? encrypted : undefined) }
+    const { resolveStorageConfig } = await import('./app')
+
+    expect(resolveStorageConfig(repository as never)).toEqual(storage)
+  })
+
   it('inherits storage when creating a workspace', async () => {
     temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'stlquest-app-workspace-storage-'))
     process.env.DATA_DIR = path.join(temporary, 'data')

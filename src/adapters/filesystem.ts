@@ -168,6 +168,10 @@ export class LocalAssetStore implements AssetStore {
     await fs.promises.rm(this.absolute(relativePath), { force: true })
   }
 
+  async removeDirectory(relativePath: string) {
+    await fs.promises.rm(this.absolute(relativePath), { recursive: true, force: true })
+  }
+
   async trash(relativePath: string) {
     const source = this.absolute(relativePath)
     const trashPath = `.stlquest/trash/${crypto.randomUUID()}__${path.basename(relativePath)}`

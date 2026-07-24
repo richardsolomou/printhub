@@ -124,6 +124,14 @@ export class OneDriveAssetStore implements AssetStore {
     if (item) await this.deleteItem(item.id)
   }
 
+  async removeDirectory(relativePath: string) {
+    const folder = await this.folderItem(relativePath, false).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT') return undefined
+      throw error
+    })
+    if (folder) await this.deleteItem(folder.id)
+  }
+
   async trash(relativePath: string) {
     if (!(await this.item(relativePath))) return undefined
     const next = `.stlquest/trash/${crypto.randomUUID()}__${fileName(relativePath)}`

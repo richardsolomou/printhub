@@ -311,6 +311,7 @@ export interface AssetStore {
   read(relativePath: string): Promise<{ stream: ReadableStream; size: number }>
   stat(relativePath: string): Promise<{ size: number } | undefined>
   remove(relativePath: string): Promise<void>
+  removeDirectory(relativePath: string): Promise<void>
   trash(relativePath: string): Promise<string | undefined>
   purgeTrash(trashPath: string): Promise<void>
   ensureMoved(sourcePath: string, destinationPath: string): Promise<void>

@@ -151,6 +151,11 @@ export class GoogleDriveAssetStore implements AssetStore {
     if (file) await this.deleteFile(file.id)
   }
 
+  async removeDirectory(relativePath: string) {
+    const folder = await this.folder(relativePath)
+    if (folder) await this.deleteFile(folder.id)
+  }
+
   async trash(relativePath: string) {
     if (!(await this.file(relativePath))) return undefined
     const next = `.stlquest/trash/${crypto.randomUUID()}__${fileName(relativePath)}`

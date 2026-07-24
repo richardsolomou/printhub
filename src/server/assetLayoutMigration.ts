@@ -4,6 +4,7 @@ import { logger } from './logger'
 
 export const ASSET_LAYOUT_SETTING = 'asset-layout-version'
 export const ASSET_LAYOUT_VERSION = 1
+const LEGACY_MODEL_DIRECTORIES = ['todo', 'up-next', 'in-progress', 'post-processing', 'done']
 
 type AssetLayoutRepository = Pick<Repository, 'getRequest' | 'getSetting' | 'listRequests' | 'setSetting' | 'updateRequestFilePath'>
 
@@ -22,6 +23,7 @@ export async function migrateAssetLayout(repository: AssetLayoutRepository, asse
     migrated++
   }
 
+  for (const directory of LEGACY_MODEL_DIRECTORIES) await assets.removeDirectory(directory)
   repository.setSetting(ASSET_LAYOUT_SETTING, ASSET_LAYOUT_VERSION)
   logger.info({ migrated }, 'stable asset layout migration completed')
 }

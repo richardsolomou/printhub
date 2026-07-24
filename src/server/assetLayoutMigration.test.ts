@@ -33,6 +33,7 @@ describe('stable asset layout migration', () => {
     expect(await assets.exists(destination)).toBe(true)
     expect(repository.getRequest(requestId)?.filePath).toBe(destination)
     expect(repository.getSetting(ASSET_LAYOUT_SETTING)).toBe(ASSET_LAYOUT_VERSION)
+    await expect(fs.promises.stat(path.join(root, 'in-progress'))).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
   it('resumes after the model moved but before its database path changed', async () => {
@@ -68,6 +69,7 @@ describe('stable asset layout migration', () => {
 
     expect(repository.getRequest(requestId)?.filePath).toBe(legacyPath)
     expect(repository.getSetting(ASSET_LAYOUT_SETTING)).toBeUndefined()
+    await expect(fs.promises.stat(path.join(root, 'todo'))).resolves.toBeDefined()
   })
 })
 
