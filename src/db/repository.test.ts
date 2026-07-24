@@ -72,6 +72,20 @@ describe('DrizzleRepository contract', () => {
     expect(repository.getRequest(id)?.counts).toEqual({ todo: 1, up_next: 0, in_progress: 2, post_processing: 0, done: 0 })
   })
 
+  it('compare-and-swaps a request asset path', () => {
+    const id = repository.createRequest({
+      name: 'Bracket',
+      fileName: 'bracket.stl',
+      filePath: 'todo/bracket.stl',
+      quantity: 1,
+      ownerUserId: 'maker',
+    })
+
+    expect(repository.updateRequestFilePath(id, 'done/bracket.stl', 'models/bracket.stl')).toBe(false)
+    expect(repository.updateRequestFilePath(id, 'todo/bracket.stl', 'models/bracket.stl')).toBe(true)
+    expect(repository.getRequest(id)?.filePath).toBe('models/bracket.stl')
+  })
+
   it('tracks thumbnail and preview generation as durable stages', () => {
     const id = repository.createRequest({
       name: 'Stages',

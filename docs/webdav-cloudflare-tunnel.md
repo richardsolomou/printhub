@@ -77,7 +77,7 @@ Save the settings. STL Quest checks the connection before switching storage.
 - Expose only WebDAV on this hostname. Do not route your NAS dashboard, router, SSH server, or other administration interface through it.
 - Do not put a Cloudflare Access browser login in front of the hostname. STL Quest is a background service and cannot complete an interactive login; it authenticates directly with WebDAV instead.
 - Restrict the WebDAV account to its dedicated folder and use a unique password. Anyone with the public URL and credentials can access that folder.
-- Keep the connector, WebDAV server, and storage device running. STL Quest cannot upload, download, or move files while any of them is offline.
+- Keep the connector, WebDAV server, and storage device running. STL Quest cannot upload, download, generate previews, or delete files while any of them is offline.
 - Cloudflare limits the size of a single proxied upload. The documented limit is 100 MB on Free and Pro plans, 200 MB on Business, and 500+ MB on Enterprise. Files above your plan's limit cannot be stored through this tunnel; use another storage provider if your STL files exceed it. Check Cloudflare's [current upload limits](https://developers.cloudflare.com/cache/concepts/default-cache-behavior/#customization-options-and-limits).
 
 To revoke access, delete the tunnel's public hostname in Cloudflare and rotate the dedicated WebDAV password.

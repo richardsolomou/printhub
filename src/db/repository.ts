@@ -344,6 +344,16 @@ export class DrizzleRepository implements Repository {
     )
   }
 
+  updateRequestFilePath(id: string, previousPath: string, nextPath: string) {
+    return (
+      this.database
+        .update(requests)
+        .set({ filePath: nextPath })
+        .where(and(eq(requests.workspaceId, this.workspace()), eq(requests.id, id), eq(requests.filePath, previousPath)))
+        .run().changes === 1
+    )
+  }
+
   moveCopies(
     input: { id: string; from: string; to: string; count: number; filePath: string; order?: number; movedAt?: number },
     database?: DatabaseExecutor,

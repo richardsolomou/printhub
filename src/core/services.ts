@@ -4,7 +4,6 @@ import type {
   DeleteOperation,
   EventBus,
   Identity,
-  MoveOperation,
   NewPrintRequest,
   PendingOperation,
   PrintRequest,
@@ -132,12 +131,13 @@ export class STLQuestService {
       ...target,
     }
     const printType = request.printerId ? printerPrintType(this.printer(request.printerId)!) : request.requestedPrintType
-    const filePath = this.assets.createPath(request.fileName)
+    const requestId = crypto.randomUUID()
+    const filePath = this.assets.createPath(requestId, request.fileName)
     const operation: UploadOperation = {
       kind: 'upload',
       uploadId,
       ownerId: identity.id,
-      requestId: crypto.randomUUID(),
+      requestId,
       partPath,
       destinationPath: filePath,
       request,
@@ -177,32 +177,7 @@ export class STLQuestService {
     ) {
       throw new Response('invalid move', { status: 409 })
     }
-    const counts = {
-      ...request.counts,
-      [input.from]: request.counts[input.from] - input.count,
-      [input.to]: request.counts[input.to] + input.count,
-    }
-    const target = workflow.statuses.find((status) => counts[status.id] > 0)?.id ?? workflow.statuses.at(-1)!.id
-    const current = workflow.statuses.find((status) => request.counts[status.id] > 0)?.id ?? initialStatus().id
-    const filePath = target === current ? request.filePath : this.assets.destinationPath(request.filePath, target)
-    if (filePath !== request.filePath) {
-      const operationId = crypto.randomUUID()
-      const operation: MoveOperation = {
-        kind: 'move',
-        requestId: input.id,
-        fromStatus: input.from,
-        toStatus: input.to,
-        count: input.count,
-        order: input.order,
-        movedAt,
-        sourcePath: request.filePath,
-        destinationPath: filePath,
-      }
-      this.repository.beginOperation(operationId, operation)
-      await this.resumeOperation({ id: operationId, state: 'prepared', payload: operation })
-    } else {
-      this.repository.moveCopies({ ...input, filePath, movedAt })
-    }
+    this.repository.moveCopies({ ...input, filePath: request.filePath, movedAt })
     this.changed('request.copiesMoved')
     this.capture(identity.id, 'request_copies_moved', {
       print_type: this.requestPrintType(request),
@@ -234,32 +209,9 @@ export class STLQuestService {
       ) {
         throw new Response('invalid batch move', { status: 409 })
       }
-      const counts = {
-        ...request.counts,
-        [input.from]: request.counts[input.from] - input.count,
-        [input.to]: request.counts[input.to] + input.count,
-      }
-      const target = workflow.statuses.find((status) => counts[status.id] > 0)?.id ?? workflow.statuses.at(-1)!.id
-      const current = workflow.statuses.find((status) => request.counts[status.id] > 0)?.id ?? initialStatus().id
-      const filePath = target === current ? request.filePath : this.assets.destinationPath(request.filePath, target)
-      return { input, request, sourcePath: request.filePath, filePath }
+      return { input, request }
     })
-
-    const moved: { sourcePath: string; filePath: string }[] = []
-    try {
-      for (const plan of plans) {
-        if (plan.filePath === plan.sourcePath) continue
-        await this.assets.ensureMoved(plan.sourcePath, plan.filePath)
-        moved.push(plan)
-      }
-      this.repository.moveCopiesBatch(plans.map(({ input, filePath }) => ({ ...input, filePath, movedAt })))
-    } catch (error) {
-      for (let index = moved.length - 1; index >= 0; index--) {
-        const plan = moved[index]
-        await this.assets.ensureMoved(plan.filePath, plan.sourcePath)
-      }
-      throw error
-    }
+    this.repository.moveCopiesBatch(plans.map(({ input, request }) => ({ ...input, filePath: request.filePath, movedAt })))
 
     this.changed('request.copiesMoved')
     for (const { input, request } of plans) {

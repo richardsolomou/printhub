@@ -3,9 +3,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { Readable } from 'node:stream'
 import { AuthType, createClient, type FileStat, type WebDAVClient, type WebDAVClientError } from 'webdav'
-import { createAssetKey, destinationKey, previewKey, trashKey } from '../core/assetKeys'
+import { createAssetKey, previewKey, trashKey } from '../core/assetKeys'
 import type { AssetStore, StorageConfig } from '../core/types'
-import { workflow } from '../core/workflow'
 
 type WebDAVConfig = Extract<StorageConfig, { adapter: 'webdav' }>
 
@@ -21,12 +20,12 @@ export class WebDAVAssetStore implements AssetStore {
   }
 
   async initialize() {
-    const folders = [...workflow.statuses.map((status) => status.folder), '.stlquest/previews', '.stlquest/thumbnails', '.stlquest/trash']
+    const folders = ['models', '.stlquest/previews', '.stlquest/thumbnails', '.stlquest/trash']
     for (const folder of folders) await this.createFolder(folder)
   }
 
-  createPath(originalFileName: string) {
-    return createAssetKey(originalFileName)
+  createPath(requestId: string, originalFileName: string) {
+    return createAssetKey(requestId, originalFileName)
   }
 
   previewPath(originalRelativePath: string) {
@@ -86,12 +85,6 @@ export class WebDAVAssetStore implements AssetStore {
     }
   }
 
-  async move(relativePath: string, statusId: string) {
-    const next = this.destinationPath(relativePath, statusId)
-    await this.ensureMoved(relativePath, next)
-    return next
-  }
-
   async ensureMoved(sourcePath: string, destinationPath: string) {
     if (sourcePath === destinationPath) return
     const [source, destination] = await Promise.all([this.stat(sourcePath), this.stat(destinationPath)])
@@ -128,10 +121,6 @@ export class WebDAVAssetStore implements AssetStore {
 
   async purgeTrash(trashPath: string) {
     await this.remove(trashPath)
-  }
-
-  destinationPath(relativePath: string, statusId: string) {
-    return destinationKey(relativePath, statusId)
   }
 
   trashPath(operationId: string, relativePath: string) {

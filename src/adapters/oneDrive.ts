@@ -2,9 +2,8 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import { Readable } from 'node:stream'
 import type { OneDriveConnectionConfig } from '../core/auth'
-import { createAssetKey, destinationKey, previewKey, trashKey } from '../core/assetKeys'
+import { createAssetKey, previewKey, trashKey } from '../core/assetKeys'
 import type { AssetStore } from '../core/types'
-import { workflow } from '../core/workflow'
 import { cloudFetch } from './cloudFetch'
 import { streamChunks } from './streamChunks'
 
@@ -29,18 +28,13 @@ export class OneDriveAssetStore implements AssetStore {
 
   async initialize() {
     await this.rootItem(true)
-    for (const folder of [
-      ...workflow.statuses.map((status) => status.folder),
-      '.stlquest/previews',
-      '.stlquest/thumbnails',
-      '.stlquest/trash',
-    ]) {
+    for (const folder of ['models', '.stlquest/previews', '.stlquest/thumbnails', '.stlquest/trash']) {
       await this.folderItem(folder, true)
     }
   }
 
-  createPath(originalFileName: string) {
-    return createAssetKey(originalFileName)
+  createPath(requestId: string, originalFileName: string) {
+    return createAssetKey(requestId, originalFileName)
   }
 
   previewPath(originalRelativePath: string) {
@@ -106,12 +100,6 @@ export class OneDriveAssetStore implements AssetStore {
     return item && !item.folder ? { size: item.size ?? 0 } : undefined
   }
 
-  async move(relativePath: string, statusId: string) {
-    const next = this.destinationPath(relativePath, statusId)
-    await this.ensureMoved(relativePath, next)
-    return next
-  }
-
   async ensureMoved(sourcePath: string, destinationPath: string) {
     if (sourcePath === destinationPath) return
     const [source, destination] = await Promise.all([this.item(sourcePath), this.item(destinationPath)])
@@ -145,10 +133,6 @@ export class OneDriveAssetStore implements AssetStore {
 
   async purgeTrash(trashPath: string) {
     await this.remove(trashPath)
-  }
-
-  destinationPath(relativePath: string, statusId: string) {
-    return destinationKey(relativePath, statusId)
   }
 
   trashPath(operationId: string, relativePath: string) {

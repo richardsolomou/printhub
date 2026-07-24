@@ -18,7 +18,7 @@ import { STLQuestService } from '../core/services'
 import { workflow } from '../core/workflow'
 import { AssetGenerationQueue } from './assets/queue'
 import { createAuth } from './auth'
-import type { BoardConfig, Identity, Repository, StorageConfig, TelemetryConfig, WorkspaceSummary } from '../core/types'
+import type { BoardConfig, Identity, Repository, StorageConfig, StorageMigration, TelemetryConfig, WorkspaceSummary } from '../core/types'
 import { logger, setTelemetryExporters } from './logger'
 import { diagnostics } from './operations'
 import {
@@ -34,9 +34,10 @@ import {
 import { userImage } from './avatar'
 import { normalizeAuthHeaders } from './authCookies'
 import { acquireDataDirectoryLease, networkFilesystem } from './dataSafety'
-import { LEGACY_STORAGE_NAMESPACE_SETTING, StorageMigrationCoordinator } from './storageMigration'
+import { LEGACY_STORAGE_NAMESPACE_SETTING, STORAGE_MIGRATION_SETTING, StorageMigrationCoordinator } from './storageMigration'
 import { organization } from '../db/schema'
 import { currentRequest } from './requestContext'
+import { migrateAssetLayout } from './assetLayoutMigration'
 
 const workflowVersion = workflow.statuses.map((status) => status.id).join(':')
 const singleton = globalThis as typeof globalThis & {
@@ -414,6 +415,8 @@ async function createWorkspaceRuntime(
       try {
         await assets.initialize()
         await service.recoverOperations()
+        const migration = repository.getSetting<StorageMigration>(STORAGE_MIGRATION_SETTING)
+        if (migration?.state !== 'running') await migrateAssetLayout(repository, assets)
         await assets.sweepTrash()
         storageReady = true
         assetQueue?.backfill()

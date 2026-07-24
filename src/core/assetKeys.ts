@@ -1,17 +1,17 @@
 import crypto from 'node:crypto'
-import { initialStatus, statusById } from './workflow'
 
 // Keys are storage-agnostic, '/'-separated paths shared by every AssetStore.
 const baseName = (key: string) => key.split('/').pop() ?? key
 
-export function createAssetKey(originalFileName: string) {
+export function createAssetKey(requestId: string, originalFileName: string) {
+  if (!/^[a-f0-9-]{36}$/i.test(requestId)) throw new Error('invalid request id')
   const base =
     baseName(originalFileName)
       .replace(/\.stl$/i, '')
       .replace(/[^\w.\- ]+/g, '_')
       .trim()
       .slice(0, 120) || 'model'
-  return `${initialStatus().folder}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}__${base}.stl`
+  return `models/${requestId}__${base}.stl`
 }
 
 export function previewKey(originalKey: string) {
@@ -29,10 +29,6 @@ export function thumbnailKey(originalKey: string, mime: string) {
 export function thumbnailMime(key: string) {
   const extension = key.split('.').pop()
   return Object.entries(THUMBNAIL_EXTENSIONS).find(([, value]) => value === extension)?.[0] ?? 'image/png'
-}
-
-export function destinationKey(key: string, statusId: string) {
-  return `${statusById(statusId).folder}/${baseName(key)}`
 }
 
 export function trashKey(operationId: string, key: string) {

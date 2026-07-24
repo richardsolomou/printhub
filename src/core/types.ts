@@ -229,6 +229,7 @@ export interface Repository {
   uploadIdsOwnedBy(ownerId: string): string[]
   deleteUploadSessions(ownerId: string): void
   getCompletedUpload(uploadId: string, ownerId: string): string | undefined
+  updateRequestFilePath(id: string, previousPath: string, nextPath: string): boolean
   moveCopies(input: { id: string; from: string; to: string; count: number; filePath: string; order?: number; movedAt?: number }): void
   moveCopiesBatch(
     inputs: { id: string; from: string; to: string; count: number; filePath: string; order?: number; movedAt?: number }[],
@@ -302,18 +303,16 @@ export interface Repository {
 // (ensureMoved truth table, idempotent finalizeUpload, retryable purge).
 export interface AssetStore {
   initialize(): Promise<void>
-  createPath(originalFileName: string): string
+  createPath(requestId: string, originalFileName: string): string
   previewPath(originalRelativePath: string): string
   finalizeUpload(stagedPath: string, relativePath: string): Promise<void>
   write(relativePath: string, bytes: Uint8Array): Promise<void>
   writeStream(relativePath: string, stream: ReadableStream, size: number): Promise<void>
   read(relativePath: string): Promise<{ stream: ReadableStream; size: number }>
   stat(relativePath: string): Promise<{ size: number } | undefined>
-  move(relativePath: string, statusId: string): Promise<string>
   remove(relativePath: string): Promise<void>
   trash(relativePath: string): Promise<string | undefined>
   purgeTrash(trashPath: string): Promise<void>
-  destinationPath(relativePath: string, statusId: string): string
   ensureMoved(sourcePath: string, destinationPath: string): Promise<void>
   exists(relativePath: string): Promise<boolean>
   trashPath(operationId: string, relativePath: string): string

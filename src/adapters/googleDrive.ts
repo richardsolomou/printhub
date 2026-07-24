@@ -2,9 +2,8 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import { Readable } from 'node:stream'
 import type { GoogleDriveConnectionConfig } from '../core/auth'
-import { createAssetKey, destinationKey, previewKey, trashKey } from '../core/assetKeys'
+import { createAssetKey, previewKey, trashKey } from '../core/assetKeys'
 import type { AssetStore } from '../core/types'
-import { workflow } from '../core/workflow'
 import { cloudFetch } from './cloudFetch'
 import { streamChunks } from './streamChunks'
 
@@ -31,18 +30,13 @@ export class GoogleDriveAssetStore implements AssetStore {
   }
 
   async initialize() {
-    for (const folder of [
-      ...workflow.statuses.map((status) => status.folder),
-      '.stlquest/previews',
-      '.stlquest/thumbnails',
-      '.stlquest/trash',
-    ]) {
+    for (const folder of ['models', '.stlquest/previews', '.stlquest/thumbnails', '.stlquest/trash']) {
       await this.folderId(folder, true)
     }
   }
 
-  createPath(originalFileName: string) {
-    return createAssetKey(originalFileName)
+  createPath(requestId: string, originalFileName: string) {
+    return createAssetKey(requestId, originalFileName)
   }
 
   previewPath(originalRelativePath: string) {
@@ -130,12 +124,6 @@ export class GoogleDriveAssetStore implements AssetStore {
     return file ? { size: Number(file.size ?? 0) } : undefined
   }
 
-  async move(relativePath: string, statusId: string) {
-    const next = this.destinationPath(relativePath, statusId)
-    await this.ensureMoved(relativePath, next)
-    return next
-  }
-
   async ensureMoved(sourcePath: string, destinationPath: string) {
     if (sourcePath === destinationPath) return
     const [source, destination] = await Promise.all([this.file(sourcePath), this.file(destinationPath)])
@@ -172,10 +160,6 @@ export class GoogleDriveAssetStore implements AssetStore {
 
   async purgeTrash(trashPath: string) {
     await this.remove(trashPath)
-  }
-
-  destinationPath(relativePath: string, statusId: string) {
-    return destinationKey(relativePath, statusId)
   }
 
   trashPath(operationId: string, relativePath: string) {
