@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.1.18
+
+### Patch Changes
+
+- 40492ae: Keep uploaded models at stable paths so that board moves remain fast and reliable across every storage provider.
+
+## 1.1.17
+
+### Patch Changes
+
+- 277c9d5: Move files reliably through proxied WebDAV servers so that TrueNAS storage works behind Cloudflare Tunnel without custom proxy rules.
+
+## 1.1.16
+
+### Patch Changes
+
+- 9fce1fc: Allow printers to be added during onboarding from non-secure local network addresses.
+
+## 1.1.15
+
+### Patch Changes
+
+- 3b943a8: Allow moving a request between columns when it already has copies in the destination.
+
 ## 1.1.14
 
 ### Patch Changes

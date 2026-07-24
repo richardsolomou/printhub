@@ -21,13 +21,44 @@ describe('WebDAVAssetStore', () => {
     expect(Buffer.from(await new Response(asset.stream).arrayBuffer()).toString()).toBe('mesh')
     await expect(store.exists('../outside')).rejects.toMatchObject({ status: 400 })
   })
+
+  it('falls back to streaming a file when the server rejects MOVE', async () => {
+    const remote = fakeWebDAV()
+    remote.client.moveFile = async () => {
+      throw Object.assign(new Error('bad gateway'), { status: 502 })
+    }
+    const store = new WebDAVAssetStore(
+      { adapter: 'webdav', endpoint: 'https://storage.example.com/dav', root: 'visible', username: 'user', password: 'secret' },
+      remote.client,
+    )
+
+    await store.write('todo/model.stl', new TextEncoder().encode('mesh'))
+    await store.ensureMoved('todo/model.stl', 'done/model.stl')
+
+    expect(remote.files.has('/visible/todo/model.stl')).toBe(false)
+    expect(remote.files.get('/visible/done/model.stl')?.toString()).toBe('mesh')
+  })
+
+  it('uses canonical collection paths while creating folders', async () => {
+    const remote = fakeWebDAV()
+    const store = new WebDAVAssetStore(
+      { adapter: 'webdav', endpoint: 'https://storage.example.com/dav', root: 'visible', username: 'user', password: 'secret' },
+      remote.client,
+    )
+
+    await store.initialize()
+
+    expect(remote.directoryRequests.every((path) => path.endsWith('/'))).toBe(true)
+  })
 })
 
 function fakeWebDAV() {
   const files = new Map<string, Buffer>()
   const directories = new Set<string>()
+  const directoryRequests: string[] = []
   const client = {
     createDirectory: async (path: string) => {
+      directoryRequests.push(path)
       directories.add(path)
     },
     putFileContents: async (path: string, data: string | BufferLike | Readable) => {
@@ -54,7 +85,7 @@ function fakeWebDAV() {
       directories.delete(path)
     },
   } as unknown as WebDAVClient
-  return { client, files }
+  return { client, files, directoryRequests }
 }
 
 async function toBuffer(data: string | BufferLike | Readable) {

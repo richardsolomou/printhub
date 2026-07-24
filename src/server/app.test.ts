@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createAssetKey } from '../core/assetKeys'
 import { member, organization, user } from '../db/schema'
 
 describe('app initialization', () => {
@@ -187,7 +188,7 @@ describe('app initialization', () => {
       .insert(member)
       .values({ id: 'legacy-owner', organizationId: 'legacy-workspace', userId: 'owner', role: 'owner', createdAt: now })
       .run()
-    seed.scoped('legacy-workspace').createRequest({
+    const requestId = seed.scoped('legacy-workspace').createRequest({
       name: 'Model',
       fileName: 'model.stl',
       filePath: 'todo/model.stl',
@@ -200,13 +201,15 @@ describe('app initialization', () => {
     const instance = await app()
     const runtime = await instance.defaultWorkspaceRuntime()
     await runtime.storageMigration.waitForIdle()
-    const destinationPath = path.join(process.env.PRINTS_DIR, 'legacy-workspace', 'todo', 'model.stl')
+    const stablePath = createAssetKey(requestId, 'model.stl')
+    const destinationPath = path.join(process.env.PRINTS_DIR, 'legacy-workspace', stablePath)
     const migrated = await app()
     const repository = migrated.repository.scoped('legacy-workspace')
 
     expect(repository.getSetting('legacy-storage-namespace')).toBe(true)
     await expect(fs.promises.readFile(destinationPath, 'utf8')).resolves.toBe('model')
-    await expect(fs.promises.readFile(sourcePath, 'utf8')).resolves.toBe('model')
+    await expect(fs.promises.stat(sourcePath)).rejects.toMatchObject({ code: 'ENOENT' })
+    expect(repository.getRequest(requestId)?.filePath).toBe(stablePath)
     expect(repository.getSetting('storage')).toEqual({
       adapter: 'local',
       root: process.env.PRINTS_DIR,
@@ -263,6 +266,29 @@ describe('app initialization', () => {
     const repository = { getSetting: () => undefined }
 
     expect(resolveStorageConfig(repository as never)).toEqual({ adapter: 'local', root: path.resolve('./local/prints') })
+  })
+
+  it('uses PRINTS_DIR_OVERRIDE instead of an encrypted local storage path', async () => {
+    vi.stubEnv('PRINTS_DIR_OVERRIDE', './restored/prints')
+    vi.stubEnv('INTEGRATIONS_ENCRYPTION_KEY', Buffer.alloc(32).toString('base64url'))
+    const { encryptSetting } = await import('./integrations')
+    const encrypted = encryptSetting({ adapter: 'local', root: '/original/prints' })
+    const repository = { getSetting: (key: string) => (key === 'storageEncrypted' ? encrypted : undefined) }
+    const { resolveStorageConfig } = await import('./app')
+
+    expect(resolveStorageConfig(repository as never)).toEqual({ adapter: 'local', root: path.resolve('./restored/prints') })
+  })
+
+  it('keeps encrypted remote storage when PRINTS_DIR_OVERRIDE is set', async () => {
+    vi.stubEnv('PRINTS_DIR_OVERRIDE', './restored/prints')
+    vi.stubEnv('INTEGRATIONS_ENCRYPTION_KEY', Buffer.alloc(32).toString('base64url'))
+    const { encryptSetting } = await import('./integrations')
+    const storage = { adapter: 'webdav', endpoint: 'https://storage.example.com', root: 'models', username: 'user', password: 'secret' }
+    const encrypted = encryptSetting(storage)
+    const repository = { getSetting: (key: string) => (key === 'storageEncrypted' ? encrypted : undefined) }
+    const { resolveStorageConfig } = await import('./app')
+
+    expect(resolveStorageConfig(repository as never)).toEqual(storage)
   })
 
   it('inherits storage when creating a workspace', async () => {

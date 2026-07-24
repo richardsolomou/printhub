@@ -2,9 +2,8 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import { Readable } from 'node:stream'
 import type { DropboxConnectionConfig } from '../core/auth'
-import { createAssetKey, destinationKey, previewKey, trashKey } from '../core/assetKeys'
+import { createAssetKey, previewKey, trashKey } from '../core/assetKeys'
 import type { AssetStore } from '../core/types'
-import { workflow } from '../core/workflow'
 import { cloudFetch } from './cloudFetch'
 import { streamChunks } from './streamChunks'
 
@@ -29,12 +28,12 @@ export class DropboxAssetStore implements AssetStore {
   }
 
   async initialize() {
-    const folders = [...workflow.statuses.map((status) => status.folder), '.stlquest/previews', '.stlquest/thumbnails', '.stlquest/trash']
+    const folders = ['models', '.stlquest/previews', '.stlquest/thumbnails', '.stlquest/trash']
     for (const folder of folders) await this.createFolder(folder)
   }
 
-  createPath(originalFileName: string) {
-    return createAssetKey(originalFileName)
+  createPath(requestId: string, originalFileName: string) {
+    return createAssetKey(requestId, originalFileName)
   }
 
   previewPath(originalRelativePath: string) {
@@ -97,12 +96,6 @@ export class DropboxAssetStore implements AssetStore {
     }
   }
 
-  async move(relativePath: string, statusId: string) {
-    const next = this.destinationPath(relativePath, statusId)
-    await this.ensureMoved(relativePath, next)
-    return next
-  }
-
   async ensureMoved(sourcePath: string, destinationPath: string) {
     if (sourcePath === destinationPath) return
     const [source, destination] = await Promise.all([this.stat(sourcePath), this.stat(destinationPath)])
@@ -133,6 +126,18 @@ export class DropboxAssetStore implements AssetStore {
     }
   }
 
+  async removeEmptyDirectory(relativePath: string) {
+    try {
+      const result = await this.rpc<{ entries: DropboxMetadata[] }>('/files/list_folder', { path: this.path(relativePath), limit: 1 })
+      if (result.entries.length > 0) return false
+      await this.remove(relativePath)
+      return true
+    } catch (error) {
+      if (isDropboxNotFound(error)) return true
+      throw error
+    }
+  }
+
   async trash(relativePath: string) {
     if (!(await this.stat(relativePath))) return undefined
     const next = `.stlquest/trash/${crypto.randomUUID()}__${relativePath.split('/').pop()}`
@@ -142,10 +147,6 @@ export class DropboxAssetStore implements AssetStore {
 
   async purgeTrash(trashPath: string) {
     await this.remove(trashPath)
-  }
-
-  destinationPath(relativePath: string, statusId: string) {
-    return destinationKey(relativePath, statusId)
   }
 
   trashPath(operationId: string, relativePath: string) {

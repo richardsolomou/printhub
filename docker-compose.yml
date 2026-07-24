@@ -11,6 +11,7 @@ services:
     ports:
       - '3010:3000'
     environment:
+      PRINTS_DIR_OVERRIDE: ${PRINTS_DIR_OVERRIDE:-}
       STLQUEST_HOSTED: ${STLQUEST_HOSTED:-}
       # Password authentication is enabled by default. Set false only after
       # configuring at least one social provider below.

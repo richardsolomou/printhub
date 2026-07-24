@@ -27,7 +27,7 @@ pnpm test:e2e
 
 Run `pnpm test:e2e:screenshots` when you need the manual inspection screenshots under `test-results/`, or `pnpm test:e2e:trace` when debugging with a Playwright trace; regular local runs skip both.
 
-Pull requests from repository branches receive a disposable, seeded Cloudflare preview after the preview workflow is configured. See [Pull request previews](docs/pr-previews.md) for lifecycle, access, and account setup.
+Pull requests from repository branches receive a disposable, seeded preview on the team's Dokploy server after the preview workflow is configured. See [Pull request previews](docs/pr-previews.md) for lifecycle, access, and server setup.
 
 The storage contract tests run against a real S3 endpoint when `MINIO_TEST_URL`, `MINIO_TEST_ACCESS_KEY`, and `MINIO_TEST_SECRET_KEY` are set; they skip otherwise. CI runs this contract weekly and on manual workflow dispatch against the pinned MinIO image.
 
@@ -53,6 +53,10 @@ pnpm db:check
 ```
 
 Commit the generated files under `drizzle/`. Never edit a migration that may already have been applied.
+
+## Asset migrations
+
+Changes to stored model paths or provider folders use the append-only registry in `src/server/assetMigrations/`. Add a numbered migration and append it to the registry; never edit, reorder, rename, or remove a released migration. Each workspace journals completed migration IDs only after the filesystem operation and database checkpoint succeed, so upgrades run every missing migration in order even when releases are skipped.
 
 ## Layout
 

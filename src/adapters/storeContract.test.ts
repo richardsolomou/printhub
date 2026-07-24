@@ -101,14 +101,15 @@ function contractSuite(name: string, harness: () => Promise<Harness>, enabled: b
 
     it('publishes a staged upload, reads it back, and replays finalize quietly', async () => {
       const part = staging.uploadPart('contract-upload-1')
+      const modelPath = store.createPath('00000000-0000-4000-8000-000000000001', 'model.stl')
       await staging.writeUploadPart(part, new TextEncoder().encode('stl payload'))
-      await store.finalizeUpload(part, 'todo/model.stl')
-      expect(await store.exists('todo/model.stl')).toBe(true)
-      const asset = await store.read('todo/model.stl')
+      await store.finalizeUpload(part, modelPath)
+      expect(await store.exists(modelPath)).toBe(true)
+      const asset = await store.read(modelPath)
       expect(asset.size).toBe(11)
       expect(Buffer.from(await new Response(asset.stream).arrayBuffer()).toString()).toBe('stl payload')
-      await store.finalizeUpload(part, 'todo/model.stl')
-      expect(await store.exists('todo/model.stl')).toBe(true)
+      await store.finalizeUpload(part, modelPath)
+      expect(await store.exists(modelPath)).toBe(true)
     })
 
     it('honors the ensureMoved truth table', async () => {
@@ -131,6 +132,15 @@ function contractSuite(name: string, harness: () => Promise<Harness>, enabled: b
       await store.purgeTrash(trashPath)
       await store.purgeTrash(trashPath)
       expect(await store.exists(trashPath)).toBe(false)
+    })
+
+    it('removes only empty legacy directories and does so idempotently', async () => {
+      await store.write('todo/orphaned.stl', new TextEncoder().encode('bytes'))
+      expect(await store.removeEmptyDirectory('todo')).toBe(false)
+      expect(await store.exists('todo/orphaned.stl')).toBe(true)
+      await store.remove('todo/orphaned.stl')
+      expect(await store.removeEmptyDirectory('todo')).toBe(true)
+      expect(await store.removeEmptyDirectory('todo')).toBe(true)
     })
 
     it('rejects traversal in keys and passes the writable probe', async () => {

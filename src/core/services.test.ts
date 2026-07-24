@@ -470,7 +470,7 @@ describe('STLQuestService crash recovery', () => {
       ),
     ).rejects.toThrow('database full')
     expect(repository.listOperations()).toHaveLength(1)
-    expect(await fs.promises.readdir(assets.absolute('todo'))).toHaveLength(1)
+    expect(await fs.promises.readdir(assets.absolute('models'))).toHaveLength(1)
     failure.mockRestore()
     const retried = await service.createUploadedRequest(
       'metadata-failure-upload',
@@ -487,25 +487,14 @@ describe('STLQuestService crash recovery', () => {
     expect(repository.listOperations()).toHaveLength(0)
   })
 
-  it('durably rejects concurrent move and delete operations for one request', async () => {
+  it('moves copies without touching the stored model', async () => {
     const id = await request()
-    let release!: () => void
-    const blocked = new Promise<void>((resolve) => {
-      release = resolve
-    })
-    const original = assets.ensureMoved.bind(assets)
-    vi.spyOn(assets, 'ensureMoved').mockImplementationOnce(async (...args) => {
-      await blocked
-      return original(...args)
-    })
-    const moving = service.moveCopies({ id, from: 'todo', to: 'in_progress', count: 1 }, admin)
-    await vi.waitFor(() => expect(repository.listOperations()).toHaveLength(1))
-    await expect(service.moveCopies({ id, from: 'todo', to: 'done', count: 1 }, admin)).rejects.toMatchObject({ status: 409 })
-    await expect(service.remove(id, admin)).rejects.toMatchObject({ status: 409 })
-    expect(() => service.update(id, { quantity: 2 }, admin)).toThrow(expect.objectContaining({ status: 409 }))
-    release()
-    await moving
-    expect(repository.getRequest(id)).toMatchObject({ counts: { todo: 0, in_progress: 1 }, filePath: 'in-progress/model.stl' })
+    const moveAsset = vi.spyOn(assets, 'ensureMoved')
+
+    await service.moveCopies({ id, from: 'todo', to: 'in_progress', count: 1 }, admin)
+
+    expect(moveAsset).not.toHaveBeenCalled()
+    expect(repository.getRequest(id)).toMatchObject({ counts: { todo: 0, in_progress: 1 }, filePath: 'todo/model.stl' })
     expect(repository.listOperations()).toHaveLength(0)
   })
 

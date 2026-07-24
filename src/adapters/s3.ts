@@ -11,13 +11,13 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3'
 import type { AssetStore, StorageConfig } from '../core/types'
-import { createAssetKey, destinationKey, previewKey, trashKey } from '../core/assetKeys'
+import { createAssetKey, previewKey, trashKey } from '../core/assetKeys'
 import pRetry, { AbortError } from 'p-retry'
 
 type S3Config = Extract<StorageConfig, { adapter: 's3' }>
 
 // Object storage has no atomic rename, so moves are copy-then-delete. Asset
-// keys embed a timestamp and UUID and are never reused for different content,
+// keys embed a request UUID and are never reused for different content,
 // which lets replay treat "source and destination both present with equal
 // sizes" as an interrupted move/publish to finish, not a conflict.
 export class S3AssetStore implements AssetStore {
@@ -38,16 +38,12 @@ export class S3AssetStore implements AssetStore {
 
   async initialize() {}
 
-  createPath(originalFileName: string) {
-    return createAssetKey(originalFileName)
+  createPath(requestId: string, originalFileName: string) {
+    return createAssetKey(requestId, originalFileName)
   }
 
   previewPath(originalRelativePath: string) {
     return previewKey(originalRelativePath)
-  }
-
-  destinationPath(relativePath: string, statusId: string) {
-    return destinationKey(relativePath, statusId)
   }
 
   trashPath(operationId: string, relativePath: string) {
@@ -106,12 +102,6 @@ export class S3AssetStore implements AssetStore {
     return this.head(relativePath)
   }
 
-  async move(relativePath: string, statusId: string) {
-    const next = this.destinationPath(relativePath, statusId)
-    await this.ensureMoved(relativePath, next)
-    return next
-  }
-
   async ensureMoved(sourcePath: string, destinationPath: string) {
     if (sourcePath === destinationPath) return
     const [source, destination] = await Promise.all([this.head(sourcePath), this.head(destinationPath)])
@@ -138,6 +128,16 @@ export class S3AssetStore implements AssetStore {
 
   async remove(relativePath: string) {
     await retryS3(() => this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: this.key(relativePath) })))
+  }
+
+  async removeEmptyDirectory(relativePath: string) {
+    const prefix = `${this.key(relativePath)}/`
+    const page = await retryS3(() => this.client.send(new ListObjectsV2Command({ Bucket: this.bucket, Prefix: prefix, MaxKeys: 2 })))
+    const contents = page.Contents ?? []
+    if (contents.some((object) => object.Key !== prefix)) return false
+    if (contents.some((object) => object.Key === prefix))
+      await retryS3(() => this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: prefix })))
+    return true
   }
 
   async trash(relativePath: string) {
