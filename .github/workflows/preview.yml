@@ -59,16 +59,16 @@ jobs:
       - name: Deploy preview
         id: deploy
         env:
-          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
-          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
-          DOKPLOY_ENVIRONMENT_ID: ${{ secrets.DOKPLOY_ENVIRONMENT_ID }}
+          PREVIEW_PROVIDER_URL: ${{ secrets.PREVIEW_PROVIDER_URL }}
+          PREVIEW_PROVIDER_API_KEY: ${{ secrets.PREVIEW_PROVIDER_API_KEY }}
+          PREVIEW_PROVIDER_ENVIRONMENT_ID: ${{ secrets.PREVIEW_PROVIDER_ENVIRONMENT_ID }}
           PREVIEW_DOMAIN: ${{ secrets.PREVIEW_DOMAIN }}
           PREVIEW_BASIC_AUTH_USERNAME: ${{ secrets.PREVIEW_BASIC_AUTH_USERNAME }}
           PREVIEW_BASIC_AUTH_PASSWORD: ${{ secrets.PREVIEW_BASIC_AUTH_PASSWORD }}
           PREVIEW_REGISTRY_USERNAME: ${{ secrets.PREVIEW_REGISTRY_USERNAME }}
           PREVIEW_REGISTRY_PASSWORD: ${{ secrets.PREVIEW_REGISTRY_PASSWORD }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: pnpm exec tsx scripts/dokployPreview.ts deploy
+        run: pnpm exec tsx scripts/previewDeploy.ts deploy
       - name: Install preview browser
         run: pnpm exec playwright install --with-deps chromium
       - name: Verify seeded preview
@@ -109,11 +109,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Delete preview
         env:
-          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
-          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
-          DOKPLOY_ENVIRONMENT_ID: ${{ secrets.DOKPLOY_ENVIRONMENT_ID }}
+          PREVIEW_PROVIDER_URL: ${{ secrets.PREVIEW_PROVIDER_URL }}
+          PREVIEW_PROVIDER_API_KEY: ${{ secrets.PREVIEW_PROVIDER_API_KEY }}
+          PREVIEW_PROVIDER_ENVIRONMENT_ID: ${{ secrets.PREVIEW_PROVIDER_ENVIRONMENT_ID }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: pnpm exec tsx scripts/dokployPreview.ts delete
+        run: pnpm exec tsx scripts/previewDeploy.ts delete
       - name: Mark preview as deleted
         env:
           GH_TOKEN: ${{ github.token }}
