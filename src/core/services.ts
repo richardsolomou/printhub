@@ -43,8 +43,14 @@ export class STLQuestService {
     })
     const profiles = storedPrinterProfiles(this.repository)
     const printers = new Map(profiles.map(({ id, name, printType }) => [id, { id, name, printType }] as const))
+    const visibleRequestIds = new Set(result.requests.map((request) => request.id))
+    const batches = this.repository
+      .listBatches()
+      .map((batch) => ({ ...batch, items: batch.items.filter((item) => visibleRequestIds.has(item.requestId)) }))
+      .filter((batch) => batch.items.length > 0)
     return {
       facets: result.facets,
+      batches,
       requests: result.requests.map(
         ({
           fileName: _fileName,
@@ -86,6 +92,10 @@ export class STLQuestService {
             requestedPrintType,
             printer,
             fitState,
+            batches: batches.flatMap((batch) => {
+              const item = batch.items.find((candidate) => candidate.requestId === request.id)
+              return item ? [{ id: batch.id, name: batch.name, status: batch.status, count: item.count }] : []
+            }),
             hasPreview: !!previewPath,
             canEdit: admin || (mine && !started),
             canDelete: admin || (mine && !started),
@@ -173,7 +183,7 @@ export class STLQuestService {
       input.from === input.to ||
       !Number.isInteger(input.count) ||
       input.count < 1 ||
-      request.counts[input.from] < input.count
+      request.counts[input.from] - this.batchedCount(input.id, input.from) < input.count
     ) {
       throw new Response('invalid move', { status: 409 })
     }
@@ -205,7 +215,7 @@ export class STLQuestService {
         input.from === input.to ||
         !Number.isInteger(input.count) ||
         input.count < 1 ||
-        request.counts[input.from] < input.count
+        request.counts[input.from] - this.batchedCount(input.id, input.from) < input.count
       ) {
         throw new Response('invalid batch move', { status: 409 })
       }
@@ -222,6 +232,64 @@ export class STLQuestService {
         to_status: input.to,
       })
     }
+  }
+
+  createBatch(input: { name: string; status: string; items: { requestId: string; count: number }[] }, identity: Identity) {
+    this.requireAdmin(identity)
+    statusById(input.status)
+    const name = input.name.trim()
+    if (
+      !name ||
+      name.length > 80 ||
+      input.items.length === 0 ||
+      new Set(input.items.map((item) => item.requestId)).size !== input.items.length
+    ) {
+      throw new Response('invalid batch', { status: 400 })
+    }
+    for (const item of input.items) {
+      const request = this.requiredRequest(item.requestId)
+      if (
+        !Number.isInteger(item.count) ||
+        item.count < 1 ||
+        (request.counts[input.status] ?? 0) - this.batchedCount(item.requestId, input.status) < item.count
+      ) {
+        throw new Response('invalid batch', { status: 409 })
+      }
+    }
+    const id = this.repository.createBatch(name, input.status, input.items)
+    this.changed('board.changed')
+    return id
+  }
+
+  async moveBatch(id: string, to: string, identity: Identity) {
+    this.assertAssetsMutable()
+    this.requireAdmin(identity)
+    statusById(to)
+    const batch = this.repository.getBatch(id)
+    if (!batch) throw new Response('batch not found', { status: 404 })
+    statusById(batch.status)
+    if (batch.status === to) throw new Response('invalid batch move', { status: 409 })
+    const movedAt = Date.now()
+    const plans = batch.items.map((item) => {
+      const request = this.requiredRequest(item.requestId)
+      if ((request.counts[batch.status] ?? 0) < item.count) throw new Response('invalid batch move', { status: 409 })
+      return { request, input: { id: item.requestId, from: batch.status, to, count: item.count } }
+    })
+    this.repository.moveBatch(
+      id,
+      to,
+      plans.map(({ input, request }) => ({ ...input, filePath: request.filePath, movedAt })),
+    )
+    this.changed('request.copiesMoved')
+  }
+
+  private batchedCount(requestId: string, status: string) {
+    return this.repository
+      .listBatches()
+      .filter((batch) => batch.status === status)
+      .flatMap((batch) => batch.items)
+      .filter((item) => item.requestId === requestId)
+      .reduce((sum, item) => sum + item.count, 0)
   }
 
   reorder(id: string, status: string, order: number, identity: Identity) {
