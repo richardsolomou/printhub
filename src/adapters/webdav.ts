@@ -10,6 +10,7 @@ import { workflow } from '../core/workflow'
 type WebDAVConfig = Extract<StorageConfig, { adapter: 'webdav' }>
 
 export class WebDAVAssetStore implements AssetStore {
+  private directories = new Set<string>()
   private folders = new Map<string, Promise<void>>()
   private root: string
   private client: WebDAVClient
@@ -99,7 +100,11 @@ export class WebDAVAssetStore implements AssetStore {
     if (destination && destination.size !== source.size) throw new Error(`asset destination already exists: ${destinationPath}`)
     if (destination) return this.remove(sourcePath)
     await this.ensureParent(destinationPath)
-    await this.client.moveFile(this.remotePath(sourcePath), this.remotePath(destinationPath), { overwrite: false })
+    try {
+      await this.client.moveFile(this.remotePath(sourcePath), this.remotePath(destinationPath), { overwrite: false })
+    } catch {
+      await this.moveByStreaming(sourcePath, destinationPath, source.size)
+    }
   }
 
   async exists(relativePath: string) {
@@ -135,7 +140,9 @@ export class WebDAVAssetStore implements AssetStore {
 
   async sweepTrash() {
     await this.remove('.stlquest/trash')
-    this.folders.delete(this.remotePath('.stlquest/trash'))
+    const trash = this.remotePath('.stlquest/trash')
+    this.directories.delete(trash)
+    this.folders.delete(trash)
     await this.createFolder('.stlquest/trash')
   }
 
@@ -161,11 +168,25 @@ export class WebDAVAssetStore implements AssetStore {
     if (parent) await this.createFolder(parent)
   }
 
+  private async moveByStreaming(sourcePath: string, destinationPath: string, sourceSize: number) {
+    const [source, destination] = await Promise.all([this.stat(sourcePath), this.stat(destinationPath)])
+    if (!source && destination?.size === sourceSize) return
+    if (!source) throw Object.assign(new Error(`asset missing: ${sourcePath}`), { code: 'ENOENT' })
+    if (destination && destination.size !== source.size) throw new Error(`asset destination already exists: ${destinationPath}`)
+    if (!destination) {
+      await this.client.putFileContents(this.remotePath(destinationPath), this.client.createReadStream(this.remotePath(sourcePath)), {
+        contentLength: source.size,
+        overwrite: false,
+      })
+    }
+    await this.remove(sourcePath)
+  }
+
   private async createFolder(relativePath: string) {
     const remotePath = this.remotePath(relativePath)
     let request = this.folders.get(remotePath)
     if (!request) {
-      request = this.client.createDirectory(remotePath, { recursive: true })
+      request = this.createDirectories(remotePath)
       this.folders.set(remotePath, request)
     }
     try {
@@ -173,6 +194,29 @@ export class WebDAVAssetStore implements AssetStore {
     } catch (error) {
       this.folders.delete(remotePath)
       throw error
+    }
+  }
+
+  private async createDirectories(remotePath: string) {
+    let directory = ''
+    for (const segment of remotePath.split('/').filter(Boolean)) {
+      directory += `/${segment}`
+      if (this.directories.has(directory)) continue
+      const collectionPath = `${directory}/`
+      try {
+        const stat = (await this.client.stat(collectionPath)) as FileStat
+        if (stat.type !== 'directory') throw new Error(`path includes a file: ${directory}`)
+        this.directories.add(directory)
+        continue
+      } catch (error) {
+        if (!isNotFound(error)) throw error
+      }
+      try {
+        await this.client.createDirectory(collectionPath)
+      } catch (error) {
+        if ((error as WebDAVClientError).status !== 405) throw error
+      }
+      this.directories.add(directory)
     }
   }
 }
