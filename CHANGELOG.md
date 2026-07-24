@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.17
+
+### Patch Changes
+
+- 277c9d5: Move files reliably through proxied WebDAV servers so that TrueNAS storage works behind Cloudflare Tunnel without custom proxy rules.
+
 ## 1.1.16
 
 ### Patch Changes
