@@ -10,6 +10,7 @@ Product configuration lives in the app (Workspace Settings and the Super Admin a
 | --------------------------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `DATA_DIR`                                                            | `/data`   | Database, pre-migration database snapshots, upload staging, and the generated integration encryption key.                       |
 | `PRINTS_DIR`                                                          | `/prints` | Default local model-storage root used until a workspace storage setting is saved.                                               |
+| `PRINTS_DIR_OVERRIDE`                                                 | —         | Recovery override for saved local storage paths. Remote storage providers are unaffected.                                       |
 | `STLQUEST_HOSTED`                                                     | `false`   | Enables hosted signup semantics, restricts tenant storage, and does not assign a super admin.                                   |
 | `BETTER_AUTH_URL`                                                     | —         | Optional public HTTP or HTTPS origin override for reverse proxies and custom domains.                                           |
 | `BETTER_AUTH_TRUSTED_ORIGINS`                                         | —         | Additional trusted origins, comma-separated.                                                                                    |
@@ -109,7 +110,7 @@ The command does not copy model storage. If `INTEGRATIONS_ENCRYPTION_KEY` suppli
 
 ## Upgrading
 
-Pull the new image and recreate the container. Database migrations run automatically before the server accepts requests. Back up `/data` and the active model store together before upgrading so they can be restored to the same recovery point if a rollback is needed.
+Pull the new image and recreate the container. Database migrations run automatically before the server accepts requests. Numbered asset migrations then run every missing step in order for each workspace and journal completion in the database, including when releases were skipped. Back up `/data` and the active model store together before upgrading so they can be restored to the same recovery point if a rollback is needed.
 
 The default Compose host directory is `./stlquest-data`; set `DATA_HOST_DIR` to use a different location.
 

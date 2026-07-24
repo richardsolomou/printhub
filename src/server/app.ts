@@ -18,7 +18,7 @@ import { STLQuestService } from '../core/services'
 import { workflow } from '../core/workflow'
 import { AssetGenerationQueue } from './assets/queue'
 import { createAuth } from './auth'
-import type { BoardConfig, Identity, Repository, StorageConfig, TelemetryConfig, WorkspaceSummary } from '../core/types'
+import type { BoardConfig, Identity, Repository, StorageConfig, StorageMigration, TelemetryConfig, WorkspaceSummary } from '../core/types'
 import { logger, setTelemetryExporters } from './logger'
 import { diagnostics } from './operations'
 import {
@@ -34,9 +34,10 @@ import {
 import { userImage } from './avatar'
 import { normalizeAuthHeaders } from './authCookies'
 import { acquireDataDirectoryLease, networkFilesystem } from './dataSafety'
-import { LEGACY_STORAGE_NAMESPACE_SETTING, StorageMigrationCoordinator } from './storageMigration'
+import { LEGACY_STORAGE_NAMESPACE_SETTING, STORAGE_MIGRATION_SETTING, StorageMigrationCoordinator } from './storageMigration'
 import { organization } from '../db/schema'
 import { currentRequest } from './requestContext'
+import { pendingAssetMigrations, runAssetMigrations } from './assetMigrations'
 
 const workflowVersion = workflow.statuses.map((status) => status.id).join(':')
 const singleton = globalThis as typeof globalThis & {
@@ -47,11 +48,9 @@ const singleton = globalThis as typeof globalThis & {
 
 export function resolveStorageConfig(repository: Repository): StorageConfig {
   const encrypted = repository.getSetting<EncryptedSetting>('storageEncrypted')
-  if (encrypted) return decryptSetting<StorageConfig>(encrypted)
-  const configured = repository.getSetting<StorageConfig>('storage')
-  if (configured) return configured
-  const root = path.resolve(process.env.PRINTS_DIR ?? '/prints')
-  return { adapter: 'local', root }
+  const configured = encrypted ? decryptSetting<StorageConfig>(encrypted) : repository.getSetting<StorageConfig>('storage')
+  if (configured?.adapter !== 'local') return configured ?? { adapter: 'local', root: path.resolve(process.env.PRINTS_DIR ?? '/prints') }
+  return { adapter: 'local', root: path.resolve(process.env.PRINTS_DIR_OVERRIDE?.trim() || configured.root) }
 }
 
 export function resolveTelemetryConfig(repository: { getSetting<T>(key: string): T | undefined }): TelemetryConfig {
@@ -234,6 +233,20 @@ async function createApp() {
     await staging.sweepUploads(activeUploadIds)
     const { cleanExpiredTusUploads } = await import('./uploads')
     await cleanExpiredTusUploads()
+    for (const workspace of repository.listWorkspaces()) {
+      const scopedRepository = repository.scoped(workspace.id)
+      if (
+        !pendingAssetMigrations(scopedRepository) ||
+        scopedRepository.listRequests().length > 0 ||
+        scopedRepository.listOperations().length > 0
+      )
+        continue
+      const storage = resolveStorageConfig(scopedRepository)
+      const assets = buildAssetStore(storage, scopedRepository, workspace.id)
+      await runAssetMigrations(scopedRepository, assets).catch((error) => {
+        logger.warn({ err: error, workspaceId: workspace.id }, 'empty workspace asset layout cleanup failed')
+      })
+    }
     const workspaceMembership = async (headers: Headers, workspaceSlug?: string) => {
       headers = normalizeAuthHeaders(headers)
       const session = await auth.api.getSession({ headers })
@@ -414,6 +427,8 @@ async function createWorkspaceRuntime(
       try {
         await assets.initialize()
         await service.recoverOperations()
+        const migration = repository.getSetting<StorageMigration>(STORAGE_MIGRATION_SETTING)
+        if (migration?.state !== 'running') await runAssetMigrations(repository, assets)
         await assets.sweepTrash()
         storageReady = true
         assetQueue?.backfill()

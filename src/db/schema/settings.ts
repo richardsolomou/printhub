@@ -21,6 +21,18 @@ export const deploymentSettings = sqliteTable('deployment_settings', {
   updatedAt: integer('updated_at').notNull(),
 })
 
+export const assetMigrations = sqliteTable(
+  'asset_migrations',
+  {
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    id: text().notNull(),
+    appliedAt: integer('applied_at').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.workspaceId, table.id] })],
+)
+
 export const invites = sqliteTable(
   'invites',
   {

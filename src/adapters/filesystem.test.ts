@@ -27,13 +27,12 @@ describe('LocalAssetStore', () => {
     expect(store.absolute('todo/model.stl')).toBe(path.join(root, 'todo/model.stl'))
   })
 
-  it('finalizes and moves logical assets through workflow folders', async () => {
+  it('finalizes and relocates logical assets', async () => {
     const part = staging.uploadPart('valid-upload-id')
     await fs.promises.writeFile(part, 'stl')
     await store.finalizeUpload(part, 'todo/model.stl')
-    const moved = await store.move('todo/model.stl', 'done')
-    expect(moved).toBe('done/model.stl')
-    expect(await fs.promises.readFile(store.absolute(moved), 'utf8')).toBe('stl')
+    await store.ensureMoved('todo/model.stl', 'archive/model.stl')
+    expect(await fs.promises.readFile(store.absolute('archive/model.stl'), 'utf8')).toBe('stl')
   })
 
   it('streams assets back with their size', async () => {
