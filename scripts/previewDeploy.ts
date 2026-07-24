@@ -1,8 +1,9 @@
-// Deploys PR previews by driving the Dokploy API. The CLI contract is provider-agnostic:
-// a replacement backend only has to implement deploy/delete/prune against the same
-// PREVIEW_* env vars and emit the preview-url output.
+// Deploys PR previews by driving the Dokploy API. A replacement backend only has to
+// implement deploy/delete/prune and emit the preview-url output.
 import fs from 'node:fs'
 import { setTimeout as sleep } from 'node:timers/promises'
+
+const previewDomain = 'stl.quest'
 
 interface EnvironmentApplication {
   applicationId: string
@@ -22,13 +23,13 @@ function requirePrNumber(): string {
 }
 
 async function api<T = unknown>(procedure: string, options: { query?: Record<string, string>; body?: unknown } = {}): Promise<T> {
-  const url = new URL(`${requireEnv('PREVIEW_PROVIDER_URL').replace(/\/$/, '')}/api/${procedure}`)
+  const url = new URL(`${requireEnv('DOKPLOY_URL').replace(/\/$/, '')}/api/${procedure}`)
   for (const [key, value] of Object.entries(options.query ?? {})) url.searchParams.set(key, value)
   console.log(`→ ${procedure}`)
   const response = await fetch(url, {
     method: options.body === undefined ? 'GET' : 'POST',
     headers: {
-      'x-api-key': requireEnv('PREVIEW_PROVIDER_API_KEY'),
+      'x-api-key': requireEnv('DOKPLOY_API_KEY'),
       ...(options.body !== undefined && { 'content-type': 'application/json' }),
     },
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
@@ -45,10 +46,9 @@ async function api<T = unknown>(procedure: string, options: { query?: Record<str
 
 async function listApplications() {
   const environment = await api<{ applications?: EnvironmentApplication[] } | undefined>('environment.one', {
-    query: { environmentId: requireEnv('PREVIEW_PROVIDER_ENVIRONMENT_ID') },
+    query: { environmentId: requireEnv('DOKPLOY_ENVIRONMENT_ID') },
   })
-  if (!environment)
-    throw new Error('environment.one returned an empty response; check PREVIEW_PROVIDER_URL and PREVIEW_PROVIDER_ENVIRONMENT_ID')
+  if (!environment) throw new Error('environment.one returned an empty response; check DOKPLOY_URL and DOKPLOY_ENVIRONMENT_ID')
   return environment.applications ?? []
 }
 
@@ -95,7 +95,7 @@ async function deploy() {
   const prNumber = requirePrNumber()
   const name = `stlquest-pr-${prNumber}`
   const image = requireEnv('PREVIEW_IMAGE')
-  const host = `pr-${prNumber}.${requireEnv('PREVIEW_DOMAIN')}`
+  const host = `pr-${prNumber}.${previewDomain}`
   const username = requireEnv('PREVIEW_BASIC_AUTH_USERNAME')
   const password = requireEnv('PREVIEW_BASIC_AUTH_PASSWORD')
   const registryUsername = process.env.PREVIEW_REGISTRY_USERNAME?.trim() || null
@@ -103,7 +103,7 @@ async function deploy() {
 
   let application = await findApplication(name)
   if (!application) {
-    await api('application.create', { body: { name, appName: name, environmentId: requireEnv('PREVIEW_PROVIDER_ENVIRONMENT_ID') } })
+    await api('application.create', { body: { name, appName: name, environmentId: requireEnv('DOKPLOY_ENVIRONMENT_ID') } })
     application = await findApplication(name)
     if (!application) throw new Error(`Dokploy did not report ${name} after creating it`)
   }

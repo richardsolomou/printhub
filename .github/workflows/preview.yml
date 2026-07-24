@@ -31,7 +31,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          PREVIEW_DOMAIN: ${{ vars.PREVIEW_DOMAIN }}
           COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
         run: pnpm exec tsx scripts/previewComment.ts building
       - uses: docker/setup-buildx-action@v4
@@ -59,10 +58,9 @@ jobs:
       - name: Deploy preview
         id: deploy
         env:
-          PREVIEW_PROVIDER_URL: ${{ secrets.PREVIEW_PROVIDER_URL }}
-          PREVIEW_PROVIDER_API_KEY: ${{ secrets.PREVIEW_PROVIDER_API_KEY }}
-          PREVIEW_PROVIDER_ENVIRONMENT_ID: ${{ secrets.PREVIEW_PROVIDER_ENVIRONMENT_ID }}
-          PREVIEW_DOMAIN: ${{ vars.PREVIEW_DOMAIN }}
+          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+          DOKPLOY_ENVIRONMENT_ID: ${{ secrets.DOKPLOY_ENVIRONMENT_ID }}
           PREVIEW_BASIC_AUTH_USERNAME: ${{ secrets.PREVIEW_BASIC_AUTH_USERNAME }}
           PREVIEW_BASIC_AUTH_PASSWORD: ${{ secrets.PREVIEW_BASIC_AUTH_PASSWORD }}
           PREVIEW_REGISTRY_USERNAME: ${{ secrets.PREVIEW_REGISTRY_USERNAME }}
@@ -81,7 +79,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          PREVIEW_DOMAIN: ${{ vars.PREVIEW_DOMAIN }}
           COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
         run: pnpm exec tsx scripts/previewComment.ts ready
       - name: Mark preview as failed
@@ -89,7 +86,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          PREVIEW_DOMAIN: ${{ vars.PREVIEW_DOMAIN }}
           COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
         run: pnpm exec tsx scripts/previewComment.ts failed
 
@@ -109,9 +105,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Delete preview
         env:
-          PREVIEW_PROVIDER_URL: ${{ secrets.PREVIEW_PROVIDER_URL }}
-          PREVIEW_PROVIDER_API_KEY: ${{ secrets.PREVIEW_PROVIDER_API_KEY }}
-          PREVIEW_PROVIDER_ENVIRONMENT_ID: ${{ secrets.PREVIEW_PROVIDER_ENVIRONMENT_ID }}
+          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+          DOKPLOY_ENVIRONMENT_ID: ${{ secrets.DOKPLOY_ENVIRONMENT_ID }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: pnpm exec tsx scripts/previewDeploy.ts delete
       - name: Mark preview as deleted

@@ -15,15 +15,11 @@ One-time setup on the Dokploy server:
 - Point a wildcard DNS record for the preview domain at the Dokploy server, for example `*.stl.quest`.
 - Configure a Let's Encrypt certificate email in Dokploy's Settings → Server so Traefik can issue certificates for preview domains.
 
-The repository needs this GitHub Actions variable (variables print unmasked in public workflow logs, so only already-public values belong here):
+Each preview is served at `pr-<number>.stl.quest`; the parent domain is hardcoded in `scripts/previewDeploy.ts` and `scripts/previewComment.ts`. The repository needs these GitHub Actions secrets:
 
-- `PREVIEW_DOMAIN`: the parent domain for previews; each preview is served at `pr-<number>.<PREVIEW_DOMAIN>`, so `PREVIEW_DOMAIN=stl.quest` serves pull request 123 at `pr-123.stl.quest`.
-
-And these GitHub Actions secrets:
-
-- `PREVIEW_PROVIDER_URL`: the base URL of the Dokploy instance, for example `https://dokploy.example.com`.
-- `PREVIEW_PROVIDER_API_KEY`: the API key generated above.
-- `PREVIEW_PROVIDER_ENVIRONMENT_ID`: the environment that hosts the preview applications.
+- `DOKPLOY_URL`: the base URL of the Dokploy instance, for example `https://dokploy.example.com`.
+- `DOKPLOY_API_KEY`: the API key generated above.
+- `DOKPLOY_ENVIRONMENT_ID`: the environment that hosts the preview applications.
 - `PREVIEW_BASIC_AUTH_USERNAME` and `PREVIEW_BASIC_AUTH_PASSWORD`: the shared credentials Traefik requires before any preview is reachable.
 - `PREVIEW_REGISTRY_USERNAME` and `PREVIEW_REGISTRY_PASSWORD` (optional): credentials Dokploy uses to pull the preview image, for example a GitHub username and a personal access token with `read:packages`. Leave both unset once the `stl.quest-preview` package is public.
 
@@ -36,5 +32,5 @@ The workflow names Dokploy applications `stlquest-pr-<number>`. Pull requests fr
 To redeploy, push another commit or rerun the workflow. To remove a preview manually, delete the `stlquest-pr-<number>` application in the Dokploy dashboard, or run:
 
 ```sh
-PREVIEW_PROVIDER_URL=… PREVIEW_PROVIDER_API_KEY=… PREVIEW_PROVIDER_ENVIRONMENT_ID=… PR_NUMBER=123 pnpm exec tsx scripts/previewDeploy.ts delete
+DOKPLOY_URL=… DOKPLOY_API_KEY=… DOKPLOY_ENVIRONMENT_ID=… PR_NUMBER=123 pnpm exec tsx scripts/previewDeploy.ts delete
 ```

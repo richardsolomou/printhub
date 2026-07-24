@@ -1,5 +1,6 @@
 import process from 'node:process'
 
+const previewDomain = 'stl.quest'
 const marker = '<!-- stlquest-preview -->'
 const access =
   'Sign in with `preview@stl.quest` / `preview-preview-preview`. The URL is behind the shared preview basic-auth credentials. Preview data is disposable and resets on every deployment.'
@@ -34,12 +35,14 @@ async function github<T = unknown>(path: string, init?: { method: string; body: 
 function commentBody(state: string, prNumber: string): string {
   if (state === 'deleted') return `${marker}\n🗑️ Preview deleted because this pull request was closed.`
   const sha = requireEnv('COMMIT_SHA').slice(0, 7)
-  const url = `https://pr-${prNumber}.${requireEnv('PREVIEW_DOMAIN')}`
-  const heading = {
-    building: `🔄 Deploying commit \`${sha}\` — the preview below is stale until this finishes.`,
-    ready: `✅ Preview is up to date with commit \`${sha}\`.`,
-    failed: `❌ Deploying commit \`${sha}\` failed ([workflow run](${requireEnv('GITHUB_SERVER_URL')}/${requireEnv('GITHUB_REPOSITORY')}/actions/runs/${requireEnv('GITHUB_RUN_ID')})) — the preview below may be stale or unavailable.`,
-  }[state]
+  const url = `https://pr-${prNumber}.${previewDomain}`
+  const headings: Record<string, () => string> = {
+    building: () => `🔄 Deploying commit \`${sha}\` — the preview below is stale until this finishes.`,
+    ready: () => `✅ Preview is up to date with commit \`${sha}\`.`,
+    failed: () =>
+      `❌ Deploying commit \`${sha}\` failed ([workflow run](${requireEnv('GITHUB_SERVER_URL')}/${requireEnv('GITHUB_REPOSITORY')}/actions/runs/${requireEnv('GITHUB_RUN_ID')})) — the preview below may be stale or unavailable.`,
+  }
+  const heading = headings[state]?.()
   if (!heading) throw new Error(`Unknown status ${state}`)
   return `${marker}\n${heading}\n\nPreview: ${url}\n\n${access}`
 }
