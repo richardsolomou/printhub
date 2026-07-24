@@ -72,6 +72,20 @@ describe('DrizzleRepository contract', () => {
     expect(repository.getRequest(id)?.counts).toEqual({ todo: 1, up_next: 0, in_progress: 2, post_processing: 0, done: 0 })
   })
 
+  it('compare-and-swaps a request asset path', () => {
+    const id = repository.createRequest({
+      name: 'Bracket',
+      fileName: 'bracket.stl',
+      filePath: 'todo/bracket.stl',
+      quantity: 1,
+      ownerUserId: 'maker',
+    })
+
+    expect(repository.updateRequestFilePath(id, 'done/bracket.stl', 'models/bracket.stl')).toBe(false)
+    expect(repository.updateRequestFilePath(id, 'todo/bracket.stl', 'models/bracket.stl')).toBe(true)
+    expect(repository.getRequest(id)?.filePath).toBe('models/bracket.stl')
+  })
+
   it('tracks thumbnail and preview generation as durable stages', () => {
     const id = repository.createRequest({
       name: 'Stages',
@@ -334,6 +348,18 @@ describe('DrizzleRepository contract', () => {
     expect(repository.getSetting('storage')).toEqual({ adapter: 'local', root: '/prints' })
     repository.setSetting('storage', { adapter: 's3', bucket: 'prints' })
     expect(repository.getSetting('storage')).toEqual({ adapter: 's3', bucket: 'prints' })
+  })
+
+  it('journals asset migrations per workspace', () => {
+    const primary = repository.scoped('test-workspace')
+    const secondaryWorkspace = repository.createWorkspace({ id: 'owner' }, 'Second farm')
+    const secondary = repository.scoped(secondaryWorkspace.id)
+
+    primary.recordAssetMigration('0001_stable_model_paths')
+    primary.recordAssetMigration('0001_stable_model_paths')
+
+    expect(primary.listAssetMigrations()).toEqual(['0001_stable_model_paths'])
+    expect(secondary.listAssetMigrations()).toEqual([])
   })
 
   it('maintains integrity, exposes database information, and installs the auth limiter table', () => {
@@ -670,7 +696,7 @@ describe('DrizzleRepository contract', () => {
     const database = new Database(':memory:')
     const migrated = new DrizzleRepository(createDatabase(database))
 
-    expect(database.prepare('SELECT count(*) count FROM __drizzle_migrations').get()).toEqual({ count: 11 })
+    expect(database.prepare('SELECT count(*) count FROM __drizzle_migrations').get()).toEqual({ count: 12 })
     migrated.close()
   })
 

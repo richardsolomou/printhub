@@ -54,6 +54,10 @@ pnpm db:check
 
 Commit the generated files under `drizzle/`. Never edit a migration that may already have been applied.
 
+## Asset migrations
+
+Changes to stored model paths or provider folders use the append-only registry in `src/server/assetMigrations/`. Add a numbered migration and append it to the registry; never edit, reorder, rename, or remove a released migration. Each workspace journals completed migration IDs only after the filesystem operation and database checkpoint succeed, so upgrades run every missing migration in order even when releases are skipped.
+
 ## Layout
 
 - `src/core` — isomorphic domain code: types, the request service, workflow, asset keys, access roles, and pure mesh code (`mesh/`: STL codec, software rasterizer) shared by server and browser. No IO, no framework imports.

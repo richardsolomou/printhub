@@ -4,8 +4,7 @@ import crypto from 'node:crypto'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { AssetStore } from '../core/types'
-import { createAssetKey, destinationKey, previewKey, trashKey } from '../core/assetKeys'
-import { workflow } from '../core/workflow'
+import { createAssetKey, previewKey, trashKey } from '../core/assetKeys'
 
 export class LocalAssetStore implements AssetStore {
   readonly root: string
@@ -16,7 +15,7 @@ export class LocalAssetStore implements AssetStore {
 
   async initialize() {
     await Promise.all([
-      ...workflow.statuses.map((status) => fs.promises.mkdir(path.join(this.root, status.folder), { recursive: true })),
+      fs.promises.mkdir(path.join(this.root, 'models'), { recursive: true }),
       fs.promises.mkdir(path.join(this.root, '.stlquest', 'previews'), { recursive: true }),
       fs.promises.mkdir(path.join(this.root, '.stlquest', 'thumbnails'), { recursive: true }),
       fs.promises.mkdir(path.join(this.root, '.stlquest', 'trash'), { recursive: true }),
@@ -29,8 +28,8 @@ export class LocalAssetStore implements AssetStore {
     return resolved
   }
 
-  createPath(originalFileName: string) {
-    return createAssetKey(originalFileName)
+  createPath(requestId: string, originalFileName: string) {
+    return createAssetKey(requestId, originalFileName)
   }
 
   previewPath(originalRelativePath: string) {
@@ -141,16 +140,6 @@ export class LocalAssetStore implements AssetStore {
     }
   }
 
-  async move(relativePath: string, statusId: string) {
-    const next = this.destinationPath(relativePath, statusId)
-    await this.ensureMoved(relativePath, next)
-    return next
-  }
-
-  destinationPath(relativePath: string, statusId: string) {
-    return destinationKey(relativePath, statusId)
-  }
-
   async ensureMoved(sourcePath: string, destinationPath: string) {
     const from = this.absolute(sourcePath)
     const to = this.absolute(destinationPath)
@@ -177,6 +166,18 @@ export class LocalAssetStore implements AssetStore {
 
   async remove(relativePath: string) {
     await fs.promises.rm(this.absolute(relativePath), { force: true })
+  }
+
+  async removeEmptyDirectory(relativePath: string) {
+    try {
+      await fs.promises.rmdir(this.absolute(relativePath))
+      return true
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (code === 'ENOENT') return true
+      if (code === 'ENOTEMPTY' || code === 'EEXIST') return false
+      throw error
+    }
   }
 
   async trash(relativePath: string) {
