@@ -350,6 +350,18 @@ describe('DrizzleRepository contract', () => {
     expect(repository.getSetting('storage')).toEqual({ adapter: 's3', bucket: 'prints' })
   })
 
+  it('journals asset migrations per workspace', () => {
+    const primary = repository.scoped('test-workspace')
+    const secondaryWorkspace = repository.createWorkspace({ id: 'owner' }, 'Second farm')
+    const secondary = repository.scoped(secondaryWorkspace.id)
+
+    primary.recordAssetMigration('0001_stable_model_paths')
+    primary.recordAssetMigration('0001_stable_model_paths')
+
+    expect(primary.listAssetMigrations()).toEqual(['0001_stable_model_paths'])
+    expect(secondary.listAssetMigrations()).toEqual([])
+  })
+
   it('maintains integrity, exposes database information, and installs the auth limiter table', () => {
     const maintenance = repository.maintain()
     expect(maintenance.integrity).toBe('ok')
@@ -684,7 +696,7 @@ describe('DrizzleRepository contract', () => {
     const database = new Database(':memory:')
     const migrated = new DrizzleRepository(createDatabase(database))
 
-    expect(database.prepare('SELECT count(*) count FROM __drizzle_migrations').get()).toEqual({ count: 11 })
+    expect(database.prepare('SELECT count(*) count FROM __drizzle_migrations').get()).toEqual({ count: 12 })
     migrated.close()
   })
 

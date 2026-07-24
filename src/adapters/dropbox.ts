@@ -126,8 +126,16 @@ export class DropboxAssetStore implements AssetStore {
     }
   }
 
-  async removeDirectory(relativePath: string) {
-    await this.remove(relativePath)
+  async removeEmptyDirectory(relativePath: string) {
+    try {
+      const result = await this.rpc<{ entries: DropboxMetadata[] }>('/files/list_folder', { path: this.path(relativePath), limit: 1 })
+      if (result.entries.length > 0) return false
+      await this.remove(relativePath)
+      return true
+    } catch (error) {
+      if (isDropboxNotFound(error)) return true
+      throw error
+    }
   }
 
   async trash(relativePath: string) {

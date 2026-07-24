@@ -130,18 +130,14 @@ export class S3AssetStore implements AssetStore {
     await retryS3(() => this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: this.key(relativePath) })))
   }
 
-  async removeDirectory(relativePath: string) {
+  async removeEmptyDirectory(relativePath: string) {
     const prefix = `${this.key(relativePath)}/`
-    let token: string | undefined
-    do {
-      const page = await retryS3(() =>
-        this.client.send(new ListObjectsV2Command({ Bucket: this.bucket, Prefix: prefix, ContinuationToken: token })),
-      )
-      for (const object of page.Contents ?? []) {
-        if (object.Key) await retryS3(() => this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: object.Key })))
-      }
-      token = page.IsTruncated ? page.NextContinuationToken : undefined
-    } while (token)
+    const page = await retryS3(() => this.client.send(new ListObjectsV2Command({ Bucket: this.bucket, Prefix: prefix, MaxKeys: 2 })))
+    const contents = page.Contents ?? []
+    if (contents.some((object) => object.Key !== prefix)) return false
+    if (contents.some((object) => object.Key === prefix))
+      await retryS3(() => this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: prefix })))
+    return true
   }
 
   async trash(relativePath: string) {

@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { LocalAssetStore } from '../adapters/filesystem'
 import { createAssetKey } from '../core/assetKeys'
 import type { PrintRequest } from '../core/types'
-import { ASSET_LAYOUT_SETTING, ASSET_LAYOUT_VERSION, migrateAssetLayout } from './assetLayoutMigration'
+import { assetMigrations, runAssetMigrations } from './assetMigrations'
+import type { AssetMigration } from './assetMigrations/types'
 
 const requestId = '00000000-0000-4000-8000-000000000001'
 
@@ -26,13 +27,13 @@ describe('stable asset layout migration', () => {
     await assets.write(legacyPath, new TextEncoder().encode('mesh'))
     const repository = migrationRepository(legacyPath)
 
-    await migrateAssetLayout(repository, assets)
+    await runAssetMigrations(repository, assets)
 
     const destination = createAssetKey(requestId, 'Original Model.stl')
     expect(await assets.exists(legacyPath)).toBe(false)
     expect(await assets.exists(destination)).toBe(true)
     expect(repository.getRequest(requestId)?.filePath).toBe(destination)
-    expect(repository.getSetting(ASSET_LAYOUT_SETTING)).toBe(ASSET_LAYOUT_VERSION)
+    expect(repository.listAssetMigrations()).toEqual(['0001_stable_model_paths'])
     await expect(fs.promises.stat(path.join(root, 'in-progress'))).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
@@ -43,17 +44,17 @@ describe('stable asset layout migration', () => {
     await assets.ensureMoved(legacyPath, destination)
     const repository = migrationRepository(legacyPath)
 
-    await migrateAssetLayout(repository, assets)
+    await runAssetMigrations(repository, assets)
 
     expect(repository.getRequest(requestId)?.filePath).toBe(destination)
-    expect(repository.getSetting(ASSET_LAYOUT_SETTING)).toBe(ASSET_LAYOUT_VERSION)
+    expect(repository.listAssetMigrations()).toEqual(['0001_stable_model_paths'])
   })
 
   it('does not rerun a completed migration', async () => {
     const repository = migrationRepository('todo/missing.stl')
-    repository.setSetting(ASSET_LAYOUT_SETTING, ASSET_LAYOUT_VERSION)
+    repository.recordAssetMigration('0001_stable_model_paths')
 
-    await migrateAssetLayout(repository, assets)
+    await runAssetMigrations(repository, assets)
 
     expect(repository.getRequest(requestId)?.filePath).toBe('todo/missing.stl')
   })
@@ -65,13 +66,57 @@ describe('stable asset layout migration', () => {
     await assets.write(destination, new TextEncoder().encode('different mesh'))
     const repository = migrationRepository(legacyPath)
 
-    await expect(migrateAssetLayout(repository, assets)).rejects.toThrow('destination already exists')
+    await expect(runAssetMigrations(repository, assets)).rejects.toThrow('destination already exists')
 
     expect(repository.getRequest(requestId)?.filePath).toBe(legacyPath)
-    expect(repository.getSetting(ASSET_LAYOUT_SETTING)).toBeUndefined()
+    expect(repository.listAssetMigrations()).toEqual([])
     await expect(fs.promises.stat(path.join(root, 'todo'))).resolves.toBeDefined()
   })
+
+  it('preserves unknown files in legacy directories', async () => {
+    await assets.write('todo/legacy-model.stl', new TextEncoder().encode('mesh'))
+    await assets.write('todo/untracked.stl', new TextEncoder().encode('unknown'))
+    const repository = migrationRepository('todo/legacy-model.stl')
+
+    await runAssetMigrations(repository, assets)
+
+    expect(await assets.exists('todo/untracked.stl')).toBe(true)
+    expect(repository.listAssetMigrations()).toEqual(['0001_stable_model_paths'])
+  })
+
+  it('runs every missing migration in order after skipped releases', async () => {
+    const repository = migrationRepository('models/current.stl')
+    const calls: string[] = []
+    const migrations: AssetMigration[] = [migration('0001_first', calls), migration('0002_second', calls), migration('0003_third', calls)]
+    repository.recordAssetMigration('0001_first')
+
+    await runAssetMigrations(repository, assets, migrations)
+
+    expect(calls).toEqual(['0002_second', '0003_third'])
+    expect(repository.listAssetMigrations()).toEqual(['0001_first', '0002_second', '0003_third'])
+  })
+
+  it('keeps the journal at the last successful migration', async () => {
+    const repository = migrationRepository('models/current.stl')
+    const migrations: AssetMigration[] = [
+      { id: '0001_first', run: async () => undefined },
+      { id: '0002_fails', run: async () => Promise.reject(new Error('migration failed')) },
+      { id: '0003_never_runs', run: async () => undefined },
+    ]
+
+    await expect(runAssetMigrations(repository, assets, migrations)).rejects.toThrow('migration failed')
+
+    expect(repository.listAssetMigrations()).toEqual(['0001_first'])
+  })
+
+  it('keeps the released migration id append-only', () => {
+    expect(assetMigrations.map((entry) => entry.id)).toEqual(['0001_stable_model_paths'])
+  })
 })
+
+function migration(id: string, calls: string[]): AssetMigration {
+  return { id, run: async () => void calls.push(id) }
+}
 
 function migrationRepository(filePath: string) {
   let request = {
@@ -80,12 +125,12 @@ function migrationRepository(filePath: string) {
     fileName: 'Original Model.stl',
     filePath,
   } as PrintRequest
-  const settings = new Map<string, unknown>()
+  const appliedMigrations = new Set<string>()
   return {
     getRequest: (id: string) => (id === request.id ? request : undefined),
-    getSetting: <T>(key: string) => settings.get(key) as T | undefined,
+    listAssetMigrations: () => [...appliedMigrations].sort(),
     listRequests: () => [request],
-    setSetting: (key: string, value: unknown) => settings.set(key, value),
+    recordAssetMigration: (id: string) => appliedMigrations.add(id),
     updateRequestFilePath: (id: string, previousPath: string, nextPath: string) => {
       if (id !== request.id || previousPath !== request.filePath) return false
       request = { ...request, filePath: nextPath }

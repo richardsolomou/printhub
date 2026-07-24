@@ -276,6 +276,8 @@ export interface Repository {
   completeInvite(id: string, userId: string): void
   deleteInvite(id: string): void
   getSetting<T>(key: string): T | undefined
+  listAssetMigrations(): string[]
+  recordAssetMigration(id: string): void
   setSetting(key: string, value: unknown): void
   setSettings(values: Record<string, unknown>): void
   deleteSetting(key: string): void
@@ -311,7 +313,7 @@ export interface AssetStore {
   read(relativePath: string): Promise<{ stream: ReadableStream; size: number }>
   stat(relativePath: string): Promise<{ size: number } | undefined>
   remove(relativePath: string): Promise<void>
-  removeDirectory(relativePath: string): Promise<void>
+  removeEmptyDirectory(relativePath: string): Promise<boolean>
   trash(relativePath: string): Promise<string | undefined>
   purgeTrash(trashPath: string): Promise<void>
   ensureMoved(sourcePath: string, destinationPath: string): Promise<void>

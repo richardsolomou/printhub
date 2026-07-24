@@ -151,9 +151,12 @@ export class GoogleDriveAssetStore implements AssetStore {
     if (file) await this.deleteFile(file.id)
   }
 
-  async removeDirectory(relativePath: string) {
+  async removeEmptyDirectory(relativePath: string) {
     const folder = await this.folder(relativePath)
-    if (folder) await this.deleteFile(folder.id)
+    if (!folder) return true
+    if ((await this.list(`'${folder.id}' in parents and trashed=false`)).length > 0) return false
+    await this.deleteFile(folder.id)
+    return true
   }
 
   async trash(relativePath: string) {

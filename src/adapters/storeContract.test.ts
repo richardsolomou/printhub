@@ -134,11 +134,13 @@ function contractSuite(name: string, harness: () => Promise<Harness>, enabled: b
       expect(await store.exists(trashPath)).toBe(false)
     })
 
-    it('removes legacy directories recursively and idempotently', async () => {
+    it('removes only empty legacy directories and does so idempotently', async () => {
       await store.write('todo/orphaned.stl', new TextEncoder().encode('bytes'))
-      await store.removeDirectory('todo')
-      await store.removeDirectory('todo')
-      expect(await store.exists('todo/orphaned.stl')).toBe(false)
+      expect(await store.removeEmptyDirectory('todo')).toBe(false)
+      expect(await store.exists('todo/orphaned.stl')).toBe(true)
+      await store.remove('todo/orphaned.stl')
+      expect(await store.removeEmptyDirectory('todo')).toBe(true)
+      expect(await store.removeEmptyDirectory('todo')).toBe(true)
     })
 
     it('rejects traversal in keys and passes the writable probe', async () => {

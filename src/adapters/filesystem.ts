@@ -168,8 +168,16 @@ export class LocalAssetStore implements AssetStore {
     await fs.promises.rm(this.absolute(relativePath), { force: true })
   }
 
-  async removeDirectory(relativePath: string) {
-    await fs.promises.rm(this.absolute(relativePath), { recursive: true, force: true })
+  async removeEmptyDirectory(relativePath: string) {
+    try {
+      await fs.promises.rmdir(this.absolute(relativePath))
+      return true
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (code === 'ENOENT') return true
+      if (code === 'ENOTEMPTY' || code === 'EEXIST') return false
+      throw error
+    }
   }
 
   async trash(relativePath: string) {

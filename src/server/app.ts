@@ -37,7 +37,7 @@ import { acquireDataDirectoryLease, networkFilesystem } from './dataSafety'
 import { LEGACY_STORAGE_NAMESPACE_SETTING, STORAGE_MIGRATION_SETTING, StorageMigrationCoordinator } from './storageMigration'
 import { organization } from '../db/schema'
 import { currentRequest } from './requestContext'
-import { ASSET_LAYOUT_SETTING, ASSET_LAYOUT_VERSION, migrateAssetLayout } from './assetLayoutMigration'
+import { pendingAssetMigrations, runAssetMigrations } from './assetMigrations'
 
 const workflowVersion = workflow.statuses.map((status) => status.id).join(':')
 const singleton = globalThis as typeof globalThis & {
@@ -236,14 +236,14 @@ async function createApp() {
     for (const workspace of repository.listWorkspaces()) {
       const scopedRepository = repository.scoped(workspace.id)
       if (
-        scopedRepository.getSetting(ASSET_LAYOUT_SETTING) === ASSET_LAYOUT_VERSION ||
+        !pendingAssetMigrations(scopedRepository) ||
         scopedRepository.listRequests().length > 0 ||
         scopedRepository.listOperations().length > 0
       )
         continue
       const storage = resolveStorageConfig(scopedRepository)
       const assets = buildAssetStore(storage, scopedRepository, workspace.id)
-      await migrateAssetLayout(scopedRepository, assets).catch((error) => {
+      await runAssetMigrations(scopedRepository, assets).catch((error) => {
         logger.warn({ err: error, workspaceId: workspace.id }, 'empty workspace asset layout cleanup failed')
       })
     }
@@ -428,7 +428,7 @@ async function createWorkspaceRuntime(
         await assets.initialize()
         await service.recoverOperations()
         const migration = repository.getSetting<StorageMigration>(STORAGE_MIGRATION_SETTING)
-        if (migration?.state !== 'running') await migrateAssetLayout(repository, assets)
+        if (migration?.state !== 'running') await runAssetMigrations(repository, assets)
         await assets.sweepTrash()
         storageReady = true
         assetQueue?.backfill()

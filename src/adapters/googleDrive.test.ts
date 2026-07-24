@@ -134,7 +134,7 @@ describe('GoogleDriveAssetStore', () => {
       await store.ensureMoved('todo/replayed.stl', 'done/replayed.stl')
       expect(await store.exists('todo/replayed.stl')).toBe(false)
       await store.remove('done/replayed.stl')
-      await store.removeDirectory('todo')
+      await store.removeEmptyDirectory('todo')
       expect([...api.files.values()].some((file) => file.name === 'todo' && file.mimeType === folderMime)).toBe(false)
       await expect(store.ensureMoved('todo/missing.stl', 'done/missing.stl')).rejects.toMatchObject({ code: 'ENOENT' })
       const operationId = '11111111-1111-4111-8111-111111111111'

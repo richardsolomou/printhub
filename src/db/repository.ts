@@ -20,6 +20,7 @@ import { migrateDatabase } from './migrations'
 import { databasePath } from './paths'
 import {
   assetGenerationJobs,
+  assetMigrations,
   deploymentSettings,
   invites,
   member,
@@ -765,6 +766,20 @@ export class DrizzleRepository implements Repository {
 
   getSetting<T>(key: string): T | undefined {
     return this.getSettingFrom<T>(this.database, key)
+  }
+
+  listAssetMigrations() {
+    return this.database
+      .select({ id: assetMigrations.id })
+      .from(assetMigrations)
+      .where(eq(assetMigrations.workspaceId, this.workspace()))
+      .orderBy(assetMigrations.id)
+      .all()
+      .map(({ id }) => id)
+  }
+
+  recordAssetMigration(id: string) {
+    this.database.insert(assetMigrations).values({ workspaceId: this.workspace(), id, appliedAt: Date.now() }).onConflictDoNothing().run()
   }
 
   setSetting(key: string, value: unknown) {

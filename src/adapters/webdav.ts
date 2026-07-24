@@ -112,8 +112,16 @@ export class WebDAVAssetStore implements AssetStore {
     }
   }
 
-  async removeDirectory(relativePath: string) {
-    await this.remove(relativePath)
+  async removeEmptyDirectory(relativePath: string) {
+    try {
+      const contents = await this.client.getDirectoryContents(this.remotePath(relativePath), { deep: false })
+      if (!Array.isArray(contents) || contents.length > 0) return false
+      await this.remove(relativePath)
+      return true
+    } catch (error) {
+      if (isNotFound(error)) return true
+      throw error
+    }
   }
 
   async trash(relativePath: string) {

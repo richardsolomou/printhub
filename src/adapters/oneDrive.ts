@@ -124,12 +124,19 @@ export class OneDriveAssetStore implements AssetStore {
     if (item) await this.deleteItem(item.id)
   }
 
-  async removeDirectory(relativePath: string) {
+  async removeEmptyDirectory(relativePath: string) {
     const folder = await this.folderItem(relativePath, false).catch((error: NodeJS.ErrnoException) => {
       if (error.code === 'ENOENT') return undefined
       throw error
     })
-    if (folder) await this.deleteItem(folder.id)
+    if (!folder) return true
+    const response = await this.request(`${GRAPH}/me/drive/items/${encodeURIComponent(folder.id)}/children?$top=1`, {
+      method: 'GET',
+      headers: {},
+    })
+    if (((await response.json()) as { value?: DriveItem[] }).value?.length) return false
+    await this.deleteItem(folder.id)
+    return true
   }
 
   async trash(relativePath: string) {

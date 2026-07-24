@@ -110,7 +110,7 @@ The command does not copy model storage. If `INTEGRATIONS_ENCRYPTION_KEY` suppli
 
 ## Upgrading
 
-Pull the new image and recreate the container. Database migrations run automatically before the server accepts requests. Back up `/data` and the active model store together before upgrading so they can be restored to the same recovery point if a rollback is needed.
+Pull the new image and recreate the container. Database migrations run automatically before the server accepts requests. Numbered asset migrations then run every missing step in order for each workspace and journal completion in the database, including when releases were skipped. Back up `/data` and the active model store together before upgrading so they can be restored to the same recovery point if a rollback is needed.
 
 The default Compose host directory is `./stlquest-data`; set `DATA_HOST_DIR` to use a different location.
 
